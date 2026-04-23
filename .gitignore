@@ -1,0 +1,22 @@
+# Python caches and build outputs
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Local environments
+.venv/
+venv/
+.env
+
+# Local run outputs
+outputs/
+
+# Local-only data and third-party cloned tools
+data/
+tools/
+
+# Editor / OS noise
+.vscode/
+.DS_Store

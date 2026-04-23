@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subcellspace"
+version = "0.1.0"
+description = "A modular subcellular spatial transcriptomics analysis platform"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "anndata>=0.12",
+  "numpy>=2.0",
+  "pandas>=2.2",
+  "scanpy>=1.11",
+  "scikit-learn>=1.5",
+  "scipy>=1.13",
+  "squidpy>=1.7",
+]
+
+[project.scripts]
+subcellspace = "src.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
