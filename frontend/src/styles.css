@@ -863,6 +863,47 @@ select {
 }
 
 /* ===== Responsive ===== */
+/* Transcript scatter (real data) */
+.transcript-scatter-real {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transcript-meta {
+  font-size: 13px;
+  color: #5c7886;
+}
+
+.transcript-svg {
+  border: 1px solid rgba(22, 50, 63, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.transcript-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+}
+
+.transcript-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.transcript-legend-item i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 @media (max-width: 980px) {
 	.page-hero,
 	.hero-panel,

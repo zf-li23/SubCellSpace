@@ -226,6 +226,35 @@ export async function loadPlotData(reportPath?: string | null, outputDir?: strin
   return await fetchJson<PlotData>(`/api/plots${suffix}`)
 }
 
+export type CellTranscripts = {
+  cell_id: string
+  n_transcripts: number
+  genes: string[]
+  points: Array<{
+    x: number
+    y: number
+    color: string
+    gene: string
+    fov: number
+  }>
+}
+
+export async function loadCellTranscripts(
+  cellId: string,
+  runName?: string,
+  geneFilter?: string | null,
+): Promise<CellTranscripts | null> {
+  const params = new URLSearchParams()
+  if (runName) {
+    params.set('run_name', runName)
+  }
+  if (geneFilter) {
+    params.set('gene_filter', geneFilter)
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : ''
+  return await fetchJson<CellTranscripts>(`/api/cells/${cellId}/transcripts${suffix}`)
+}
+
 export async function runCosmxPipeline(
   backendConfig: BackendConfig,
   options: CosmxRunOptions = {},

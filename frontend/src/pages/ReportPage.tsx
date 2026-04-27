@@ -4,6 +4,8 @@ import {
   loadPipelineReport,
   loadPlotData,
   runCosmxPipeline,
+  loadCellTranscripts,
+  type CellTranscripts,
   type PlotData,
   type PipelineReport,
   type LayerEvaluation,
@@ -145,7 +147,6 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
                 <h4>Transcripts in cell <code>{selectedCell}</code> (colored by gene)</h4>
                 <TranscriptScatter
                   cellId={selectedCell}
-                  report={report}
                 />
                 <p className="step-hint" style={{ marginTop: 8 }}>
                   Each dot = one transcript. Color encodes gene target.
@@ -407,19 +408,124 @@ function ClusterDonut({ report }: { report: PipelineReport }) {
   return <DonutChart data={clusterDistribution} maxSlices={6} size={200} title="Cluster distribution" />
 }
 
-/** Placeholder transcript scatter — renders a static SVG representation */
-function TranscriptScatter({ cellId }: { cellId: string; report: PipelineReport }) {
+const TRANSCRIPT_PALETTE = [
+  '#0b4c6e', '#11698a', '#1f8a70', '#d99b2b', '#c8553d',
+  '#7d5ba6', '#4c8d9d', '#335c67', '#f25f5c', '#70c1b3',
+  '#e76f51', '#2a9d8f', '#e9c46a', '#264653', '#a8dadc',
+]
+
+/** Real transcript-level scatter — fetches per-cell coordinates from backend */
+function TranscriptScatter({ cellId }: { cellId: string }) {
+  const [data, setData] = useState<CellTranscripts | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [hoveredGene, setHoveredGene] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setData(null)
+    loadCellTranscripts(cellId)
+      .then((value) => {
+        if (!cancelled) {
+          setData(value)
+          setLoading(false)
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(String(err))
+          setLoading(false)
+        }
+      })
+    return () => { cancelled = true }
+  }, [cellId])
+
+  if (loading) {
+    return (
+      <div className="transcript-view-placeholder">
+        <SkeletonCard />
+      </div>
+    )
+  }
+
+  if (error || !data || data.points.length === 0) {
+    return (
+      <div className="transcript-view-placeholder">
+        <p className="empty-state">
+          {error ? `Error: ${error}` : `No transcript data for cell ${cellId}`}
+        </p>
+      </div>
+    )
+  }
+
+  const W = 600
+  const H = 400
+  const PAD = 24
+  const xs = data.points.map((p) => p.x)
+  const ys = data.points.map((p) => p.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const xSpan = Math.max(maxX - minX, 1e-6)
+  const ySpan = Math.max(maxY - minY, 1e-6)
+
+  const toSvg = (px: number, py: number) => ({
+    x: PAD + ((px - minX) / xSpan) * (W - PAD * 2),
+    y: H - PAD - ((py - minY) / ySpan) * (H - PAD * 2),
+  })
+
+  const geneList = [...new Set(data.points.map((p) => p.gene))]
+
+  const radius = hoveredGene ? 3.0 : 1.8
+  const baseOpacity = hoveredGene ? 0.25 : 0.75
+
   return (
-    <div className="transcript-view-placeholder">
-      <svg width="100%" height="200" viewBox="0 0 600 200" className="transcript-demo-svg">
-        <rect width="600" height="200" fill="rgba(247,251,253,0.6)" rx={8} />
-        <text x={300} y={100} textAnchor="middle" fill="#4c6774" fontSize={14}>
-          Transcripts for cell {cellId} would render here
-        </text>
-        <text x={300} y={128} textAnchor="middle" fill="#7b949f" fontSize={12}>
-          (Requires backend endpoint returning transcript-level coordinates per cell)
-        </text>
+    <div className="transcript-scatter-real">
+      <div className="transcript-meta">
+        <span>{data.n_transcripts} transcripts · {geneList.length} genes</span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="transcript-svg">
+        <rect x={0} y={0} width={W} height={H} fill="rgba(247,251,253,0.5)" rx={8} />
+        {data.points.map((pt, idx) => {
+          const svg = toSvg(pt.x, pt.y)
+          const isHovered = hoveredGene === pt.gene
+          const colorIdx = geneList.indexOf(pt.gene)
+          const fill = TRANSCRIPT_PALETTE[colorIdx % TRANSCRIPT_PALETTE.length]
+          return (
+            <circle
+              key={idx}
+              cx={svg.x}
+              cy={svg.y}
+              r={isHovered ? radius * 2.5 : radius}
+              fill={fill}
+              opacity={isHovered ? 1 : baseOpacity}
+              stroke={isHovered ? '#fff' : 'none'}
+              strokeWidth={isHovered ? 0.5 : 0}
+              style={{ cursor: 'pointer', transition: 'r 0.1s, opacity 0.1s' }}
+              onMouseEnter={() => setHoveredGene(pt.gene)}
+              onMouseLeave={() => setHoveredGene(null)}
+            />
+          )
+        })}
       </svg>
+      <div className="transcript-legend">
+        {geneList.slice(0, 10).map((gene, i) => (
+          <span
+            key={gene}
+            className="transcript-legend-item"
+            style={{ opacity: hoveredGene && hoveredGene !== gene ? 0.4 : 1 }}
+            onMouseEnter={() => setHoveredGene(gene)}
+            onMouseLeave={() => setHoveredGene(null)}
+          >
+            <i style={{ backgroundColor: TRANSCRIPT_PALETTE[i % TRANSCRIPT_PALETTE.length] }} />
+            {gene}
+          </span>
+        ))}
+        {geneList.length > 10 && <span className="transcript-legend-item">+{geneList.length - 10} more</span>}
+      </div>
     </div>
   )
 }
