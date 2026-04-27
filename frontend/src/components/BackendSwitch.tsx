@@ -25,6 +25,7 @@ export default function BackendSwitch({ value, onChange }: BackendSwitchProps){
         <select value={value.denoise} onChange={(event) => update('denoise', event.target.value)}>
           <option value="intracellular">intracellular</option>
           <option value="none">none</option>
+          <option value="nuclear_only">nuclear_only</option>
         </select>
       </label>
       <label>

@@ -1,11 +1,120 @@
+export type IngestionMetrics = {
+  n_transcripts?: number
+  n_cells_raw?: number
+  n_genes_raw?: number
+  n_fovs?: number
+  cellcomp_distribution?: Record<string, number>
+  missing_cell_ratio?: number
+}
+
+export type DenoiseMetrics = {
+  n_transcripts_before?: number
+  n_transcripts_after?: number
+  retained_ratio?: number
+  cellcomp_distribution_after?: Record<string, number>
+}
+
+export type SegmentationMetrics = {
+  n_transcripts_assigned?: number
+  n_cells_assigned?: number
+  assignment_ratio?: number
+  mean_transcripts_per_cell?: number
+  median_transcripts_per_cell?: number
+}
+
+export type ExpressionMetrics = {
+  n_cells_after_qc?: number
+  n_genes_after_hvg?: number
+  qc_pass_ratio_vs_segmented?: number
+  median_total_counts?: number
+  median_n_genes_by_counts?: number
+}
+
+export type ClusteringMetrics = {
+  n_clusters?: number
+  largest_cluster_fraction?: number
+  silhouette_pca?: number
+}
+
+export type AnnotationMetrics = {
+  n_cell_types?: number
+  largest_cell_type_fraction?: number
+}
+
+export type SpatialDomainMetrics = {
+  n_spatial_domains?: number
+  largest_spatial_domain_fraction?: number
+  domain_cluster_ari?: number
+}
+
+export type SpatialGraphMetrics = {
+  graph_available?: boolean
+  n_nodes?: number
+  n_edges?: number
+  avg_degree?: number
+  median_degree?: number
+  connected_components?: number
+}
+
+export type LayerEvaluation = {
+  ingestion?: IngestionMetrics
+  denoise?: DenoiseMetrics
+  segmentation?: SegmentationMetrics
+  expression?: ExpressionMetrics
+  clustering?: ClusteringMetrics
+  annotation?: AnnotationMetrics
+  spatial_domain?: SpatialDomainMetrics
+  spatial?: SpatialGraphMetrics
+}
+
+export type DenoiseStepSummary = {
+  denoise_backend?: string
+  before_transcripts?: number
+  after_transcripts?: number
+  dropped_transcripts?: number
+  drop_ratio?: number
+}
+
+export type SegmentationStepSummary = {
+  segmentation_backend?: string
+  n_transcripts_assigned?: number
+  n_cells_assigned?: number
+}
+
+export type AnalysisStepSummary = {
+  n_obs_before_qc?: number
+  n_obs_after_qc?: number
+  n_vars_after_hvg?: number
+  clustering_backend_requested?: string
+  clustering_backend_used?: string
+  leiden_resolution?: number
+}
+
+export type SpatialDomainStepSummary = {
+  spatial_domain_backend_requested?: string
+  spatial_domain_backend_used?: string
+  domain_resolution?: number
+  n_spatial_domains_requested?: number | null
+  n_spatial_domains?: number
+  spatial_domain_distribution?: Record<string, number>
+}
+
+export type StepSummary = {
+  denoise?: DenoiseStepSummary
+  segmentation?: SegmentationStepSummary
+  analysis?: AnalysisStepSummary
+  annotation?: Record<string, unknown>
+  spatial_domain?: SpatialDomainStepSummary
+}
+
 export type PipelineReport = {
   input_csv?: string
   n_obs?: number
   n_vars?: number
   clusters?: Record<string, number>
   summary?: Record<string, unknown>
-  step_summary?: Record<string, unknown>
-  layer_evaluation?: Record<string, unknown>
+  step_summary?: StepSummary
+  layer_evaluation?: LayerEvaluation
   outputs?: Record<string, unknown>
 }
 

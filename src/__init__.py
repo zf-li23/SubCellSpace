@@ -1,5 +1,11 @@
-"""SubCellSpace package."""
+"""SubCellSpace — A modular spatial transcriptomics analysis framework."""
 
-from .pipeline import run_cosmx_minimal
+import warnings
 
-__all__ = ["run_cosmx_minimal"]
+# Python 3.13: upstream spatialdata emits import-time FutureWarnings for
+# functools.partial usage. These do not affect any computations.
+warnings.filterwarnings(
+    "ignore",
+    message=r"functools\.partial will be a method descriptor in future Python versions.*",
+    category=FutureWarning,
+)

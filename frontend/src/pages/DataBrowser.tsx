@@ -1,210 +1,142 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { loadPipelineReport, runCosmxPipeline, type BackendConfig, type PipelineReport } from '../api'
+import React, { useEffect, useState } from 'react'
+import { loadBenchmarkSummary, type BenchmarkSummary } from '../api'
+import LoadingSkeleton, { SkeletonCard } from '../components/LoadingSkeleton'
 
-type DataBrowserProps = {
-  backendConfig: BackendConfig
+type DatasetRow = {
+  dataset: string
+  cells: number
+  genes: number
+  transcripts: number
+  fovs: number
+  technology: string
+  tissue: string
+  status: string
 }
 
-export default function DataBrowser({ backendConfig }: DataBrowserProps){
-  const [report, setReport] = useState<PipelineReport | null>(null)
-  const [error, setError] = useState<string| null>(null)
-  const [running, setRunning] = useState(false)
-  const [status, setStatus] = useState<string>('')
+const COSMX_ENTRY: DatasetRow = {
+  dataset: 'CosMx Mouse brain (example)',
+  cells: 1000,
+  genes: 450,
+  transcripts: 48224,
+  fovs: 4,
+  technology: 'CosMx SMI',
+  tissue: 'Mouse brain',
+  status: '✅ Loaded',
+}
 
-  const summaryCards = useMemo(() => {
-    const summary = report?.summary ?? {}
-    return [
-      { label: 'Transcripts', value: summary.n_transcripts },
-      { label: 'Cells', value: summary.n_cells },
-      { label: 'Genes', value: summary.n_genes },
-      { label: 'FOVs', value: summary.n_fovs },
-    ]
-  }, [report])
+const COLUMNS: { key: keyof DatasetRow; label: string; align?: string }[] = [
+  { key: 'dataset', label: 'Dataset' },
+  { key: 'cells', label: '# Cells', align: 'right' },
+  { key: 'genes', label: '# Genes', align: 'right' },
+  { key: 'transcripts', label: '# Transcripts', align: 'right' },
+  { key: 'fovs', label: '# FOVs', align: 'right' },
+  { key: 'technology', label: 'Technology' },
+  { key: 'tissue', label: 'Tissue' },
+  { key: 'status', label: 'Status' },
+]
 
-  const metricCards = useMemo(() => {
-    const evaluation = report?.layer_evaluation ?? {}
-    return [
-      { label: 'QC cells', value: evaluation.expression?.n_cells_after_qc, hint: 'after filtering' },
-      { label: 'HVG genes', value: evaluation.expression?.n_genes_after_hvg, hint: 'selected for downstream analysis' },
-      { label: 'Clusters', value: evaluation.clustering?.n_clusters, hint: `silhouette ${formatMetric(evaluation.clustering?.silhouette_pca)}` },
-      { label: 'Cell types', value: evaluation.annotation?.n_cell_types, hint: 'annotation result' },
-      { label: 'Spatial domains', value: evaluation.spatial_domain?.n_spatial_domains, hint: `ARI ${formatMetric(evaluation.spatial_domain?.domain_cluster_ari)}` },
-      { label: 'Graph components', value: evaluation.spatial?.connected_components, hint: `avg degree ${formatMetric(evaluation.spatial?.avg_degree)}` },
-    ]
-  }, [report])
-
-  const clusterRows = useMemo(() => {
-    const clusters = report?.clusters ?? {}
-    return Object.entries(clusters)
-      .map(([label, count]) => ({ label, count: Number(count) || 0 }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8)
-  }, [report])
-
-  const stepItems = useMemo(() => {
-    const stepSummary = report?.step_summary ?? {}
-    return [
-      { name: 'Denoise', data: stepSummary.denoise },
-      { name: 'Segmentation', data: stepSummary.segmentation },
-      { name: 'Analysis', data: stepSummary.analysis },
-      { name: 'Annotation', data: stepSummary.annotation },
-      { name: 'Spatial domain', data: stepSummary.spatial_domain },
-    ]
-  }, [report])
+export default function DataBrowser() {
+  const [summary, setSummary] = useState<BenchmarkSummary | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadPipelineReport()
-      .then((value) => setReport(value))
+    loadBenchmarkSummary()
+      .then((value) => setSummary(value))
       .catch((value) => setError(String(value)))
   }, [])
 
-  const runSample = async () => {
-    setRunning(true)
-    setStatus('Running sample data through the live API...')
-    const nextReport = await runCosmxPipeline(backendConfig, {
-      outputDir: 'outputs/api_runs/sample_from_ui',
-    })
-    setReport(nextReport)
-    setStatus(nextReport ? 'Sample data run completed.' : 'Sample data run failed.')
-    setRunning(false)
-  }
+  const benchmarkRows = summary?.rows ?? []
 
   return (
     <div className="container">
       <section className="page-hero">
         <div>
           <div className="eyebrow">Data Browser</div>
-          <h2>Example dataset overview</h2>
-          <p>用真实样例把读取、分析、注释、空间域识别和结果浏览串成一个闭环。</p>
-        </div>
-        <div className="browser-actions">
-          <button onClick={runSample} disabled={running}>
-            {running ? 'Running sample...' : 'Run sample data'}
-          </button>
-          <span>{status || 'Ready to run the example dataset.'}</span>
+          <h2>Browse datasets</h2>
+          <p>Explore spatial transcriptomics datasets and their processing results. Click a row to view details.</p>
         </div>
       </section>
 
-      {error && <div className="alert alert-error">无法读取报告: {error}</div>}
-      {!error && !report && <div className="card">正在加载...</div>}
-
-      {report && (
-        <div className="browser-grid">
-          <section className="metric-strip">
-            {summaryCards.map((item) => (
-              <article className="metric-tile large" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{formatDisplayValue(item.value)}</strong>
-              </article>
-            ))}
-          </section>
-
-          <div className="browser-main-grid">
-            <section className="chart-card">
-              <div className="section-header">
-                <h3>Layer metrics</h3>
-                <span>from the live API report</span>
-              </div>
-              <div className="metrics-grid">
-                {metricCards.map((item) => (
-                  <div className="metric-tile" key={item.label}>
-                    <span>{item.label}</span>
-                    <strong>{formatDisplayValue(item.value)}</strong>
-                    <small>{item.hint}</small>
-                  </div>
+      {/* CosMx example — static entry */}
+      <section className="card" style={{ marginBottom: 16 }}>
+        <div className="section-header">
+          <h3>Datasets</h3>
+          <span>{benchmarkRows.length + 1} entries · benchmark runs included</span>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                {COLUMNS.map((col) => (
+                  <th key={col.key} style={col.align ? { textAlign: col.align as 'right' } : undefined}>
+                    {col.label}
+                  </th>
                 ))}
-              </div>
-            </section>
-
-            <section className="chart-card">
-              <div className="section-header">
-                <h3>Top clusters</h3>
-                <span>{clusterRows.length} shown</span>
-              </div>
-              {clusterRows.length > 0 ? (
-                <div className="cluster-list">
-                  {clusterRows.map((item) => (
-                    <div className="cluster-row" key={item.label}>
-                      <div className="cluster-label">Cluster {item.label}</div>
-                      <div className="cluster-bar-track">
-                        <div
-                          className="cluster-bar-fill"
-                          style={{ width: `${Math.max((item.count / clusterRows[0].count) * 100, 4)}%` }}
-                        />
-                      </div>
-                      <div className="cluster-count">{item.count}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">No cluster distribution available in the report.</div>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="data-row-cosmx">
+                {COLUMNS.map((col) => (
+                  <td key={col.key} style={col.align ? { textAlign: col.align as 'right' } : undefined}>
+                    {String(COSMX_ENTRY[col.key])}
+                  </td>
+                ))}
+              </tr>
+              {error && (
+                <tr>
+                  <td colSpan={COLUMNS.length} className="data-empty">
+                    Failed to load benchmark data: {error}
+                  </td>
+                </tr>
               )}
-            </section>
+              {!error && benchmarkRows.length === 0 && (
+                <tr>
+                  <td colSpan={COLUMNS.length} className="data-empty">
+                    No benchmark runs available yet.
+                  </td>
+                </tr>
+              )}
+              {benchmarkRows.map((row, idx) => (
+                <tr key={idx}>
+                  <td><code>{String(row.tag ?? '-')}</code></td>
+                  <td style={{ textAlign: 'right' }}>{String(row.n_cells_after_qc ?? '-')}</td>
+                  <td style={{ textAlign: 'right' }}>{String(row.n_genes_after_hvg ?? '-')}</td>
+                  <td style={{ textAlign: 'right' }}>—</td>
+                  <td style={{ textAlign: 'right' }}>—</td>
+                  <td>CosMx SMI</td>
+                  <td>Mouse brain</td>
+                  <td><span className="status-badge">Benchmark</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-            <section className="chart-card">
-              <div className="section-header">
-                <h3>Processing steps</h3>
-                <span>structured summary</span>
-              </div>
-              <div className="step-grid">
-                {stepItems.map((item) => (
-                  <article className="step-card" key={item.name}>
-                    <div className="eyebrow">{item.name}</div>
-                    <StepSummary value={item.data} />
-                  </article>
-                ))}
-              </div>
-            </section>
+      {/* Available columns documentation */}
+      <section className="card">
+        <div className="section-header">
+          <h3>Schema</h3>
+          <span>available columns for dataset annotations</span>
+        </div>
+        <div className="schema-info">
+          <p>Each dataset can be annotated with the following metadata columns:</p>
+          <div className="metrics-grid">
+            <div className="metric-tile">
+              <span>Required</span>
+              <strong>dataset · cells · genes · transcripts · fovs · technology · tissue</strong>
+            </div>
+            <div className="metric-tile">
+              <span>Processing</span>
+              <strong>status · pipeline · backend_config · parameters</strong>
+            </div>
+            <div className="metric-tile">
+              <span>Quality</span>
+              <strong>n_cells_after_qc · n_genes_after_hvg · silhouette · cell_types · spatial_domains</strong>
+            </div>
           </div>
         </div>
-      )}
+      </section>
     </div>
   )
 }
-
-function formatDisplayValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return 'n/a'
-  }
-
-  if (typeof value === 'number') {
-    return Number.isInteger(value) ? String(value) : value.toFixed(3)
-  }
-
-  return String(value)
-}
-
-function formatMetric(value: unknown): string {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value.toFixed(3)
-  }
-  return formatDisplayValue(value)
-}
-
-function StepSummary({ value }: { value: unknown }) {
-  if (!value || typeof value !== 'object') {
-    return <div className="step-empty">No data</div>
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([key]) => !key.endsWith('_distribution'))
-    .slice(0, 5)
-
-  return (
-    <dl className="step-summary-list">
-      {entries.map(([key, nextValue]) => (
-        <div className="step-summary-row" key={key}>
-          <dt>{humanizeKey(key)}</dt>
-          <dd>{formatDisplayValue(nextValue)}</dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
-
-function humanizeKey(key: string): string {
-  return key
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (match) => match.toUpperCase())
-}
-

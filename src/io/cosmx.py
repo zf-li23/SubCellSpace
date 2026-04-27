@@ -1,19 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-import warnings
 
 import anndata as ad
 import numpy as np
 import pandas as pd
 
-# Upstream spatialdata currently emits import-time FutureWarnings on Python 3.13.
-# They don't affect computations and can drown actionable logs.
-warnings.filterwarnings(
-    "ignore",
-    message=r"functools\.partial will be a method descriptor in future Python versions.*",
-    category=FutureWarning,
-)
 from spatialdata import SpatialData, sanitize_table
 from spatialdata.models import PointsModel
 
