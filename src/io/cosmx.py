@@ -73,10 +73,22 @@ def build_cell_level_adata(df: pd.DataFrame) -> ad.AnnData:
 
 
 def build_spatialdata(adata: ad.AnnData) -> SpatialData:
+    # Use spatial coordinates from obsm["spatial"] as primary source;
+    # fall back to x_global_px / y_global_px in obs for CosMx data.
+    if "spatial" in adata.obsm:
+        coords = adata.obsm["spatial"]
+        x = coords[:, 0]
+        y = coords[:, 1]
+    elif "x_global_px" in adata.obs and "y_global_px" in adata.obs:
+        x = adata.obs["x_global_px"].to_numpy()
+        y = adata.obs["y_global_px"].to_numpy()
+    else:
+        raise KeyError("No spatial coordinates found in adata.obsm['spatial'] or adata.obs['x_global_px']")
+
     points_frame = pd.DataFrame(
         {
-            "x": adata.obs["x_global_px"].to_numpy(),
-            "y": adata.obs["y_global_px"].to_numpy(),
+            "x": x,
+            "y": y,
             "cell": adata.obs_names.to_numpy(),
         },
         index=adata.obs_names,
