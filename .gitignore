@@ -9,6 +9,7 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.*
 
 # Local run outputs
 outputs/
@@ -16,6 +17,11 @@ outputs/
 # Local-only data and third-party cloned tools
 data/
 tools/
+
+# Frontend local artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
 # Editor / OS noise
 .vscode/

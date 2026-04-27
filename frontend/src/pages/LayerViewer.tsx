@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { loadPipelineReport, runCosmxPipeline, type BackendConfig, type PipelineReport } from '../api'
+import { loadPipelineReport, loadPlotData, runCosmxPipeline, type BackendConfig, type PlotData, type PipelineReport } from '../api'
 
 type LayerViewerProps = {
   backendConfig: BackendConfig
@@ -7,11 +7,18 @@ type LayerViewerProps = {
 
 export default function LayerViewer({ backendConfig }: LayerViewerProps){
   const [report, setReport] = useState<PipelineReport | null>(null)
+  const [plotData, setPlotData] = useState<PlotData | null>(null)
   const [running, setRunning] = useState(false)
   const [status, setStatus] = useState<string>('')
 
   useEffect(() => {
-    loadPipelineReport().then((value) => setReport(value))
+    loadPipelineReport()
+      .then((value) => {
+        setReport(value)
+        return value?.outputs?.report ?? null
+      })
+      .then((reportPath) => loadPlotData(reportPath))
+      .then((value) => setPlotData(value))
   }, [])
 
   const layerCards = useMemo(() => {
@@ -75,6 +82,8 @@ export default function LayerViewer({ backendConfig }: LayerViewerProps){
     setStatus('Running pipeline with selected backends...')
     const nextReport = await runCosmxPipeline(backendConfig)
     setReport(nextReport)
+    const nextPlotData = await loadPlotData(nextReport?.outputs?.report ?? null)
+    setPlotData(nextPlotData)
     setStatus(nextReport ? 'Pipeline run completed.' : 'Pipeline run failed.')
     setRunning(false)
   }
@@ -132,6 +141,30 @@ export default function LayerViewer({ backendConfig }: LayerViewerProps){
             <div className="two-column-grid">
               <section className="chart-card">
                 <div className="section-header">
+                  <h3>UMAP</h3>
+                  <span>{plotData?.points?.umap?.stats.count ?? 0} cells</span>
+                </div>
+                {plotData?.points?.umap ? (
+                  <ScatterPlot series={plotData.points.umap} />
+                ) : (
+                  <div className="empty-state">No UMAP data available.</div>
+                )}
+              </section>
+
+              <section className="chart-card">
+                <div className="section-header">
+                  <h3>Spatial points</h3>
+                  <span>{plotData?.points?.spatial?.stats.count ?? 0} cells</span>
+                </div>
+                {plotData?.points?.spatial ? (
+                  <ScatterPlot series={plotData.points.spatial} />
+                ) : (
+                  <div className="empty-state">No spatial plot data available.</div>
+                )}
+              </section>
+
+              <section className="chart-card">
+                <div className="section-header">
                   <h3>Cluster distribution</h3>
                   <span>{clusterDistribution.length} clusters</span>
                 </div>
@@ -172,6 +205,59 @@ export default function LayerViewer({ backendConfig }: LayerViewerProps){
       </div>
     </div>
   )
+}
+
+function ScatterPlot({ series }: { series: NonNullable<PlotData['points']> extends infer P ? P extends { spatial?: infer S; umap?: infer U } ? S | U : never : never }) {
+  const width = 640
+  const height = 420
+  const padding = 28
+
+  const xs = series.points.map((point) => point.x)
+  const ys = series.points.map((point) => point.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const xSpan = Math.max(maxX - minX, 1e-6)
+  const ySpan = Math.max(maxY - minY, 1e-6)
+  const palette = buildPalette(series.points.map((point) => point.color))
+
+  return (
+    <div>
+      <div className="plot-meta">
+        <span>color by {series.color_key}</span>
+        <span>{series.stats.unique_colors} groups</span>
+      </div>
+      <svg className="scatter-plot" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${series.embedding_key} scatter plot`}>
+        <rect x="0" y="0" width={width} height={height} rx="18" className="scatter-background" />
+        <g>
+          {series.points.map((point) => {
+            const x = padding + ((point.x - minX) / xSpan) * (width - padding * 2)
+            const y = height - padding - ((point.y - minY) / ySpan) * (height - padding * 2)
+            return (
+              <circle key={point.cell_id} cx={x} cy={y} r="2.1" fill={palette.get(point.color) ?? '#0b4c6e'} opacity="0.85">
+                <title>{`${point.cell_id} · ${point.color}`}</title>
+              </circle>
+            )
+          })}
+        </g>
+      </svg>
+      <div className="plot-legend">
+        {Array.from(palette.entries()).slice(0, 8).map(([label, color]) => (
+          <span key={label} className="legend-item">
+            <i style={{ backgroundColor: color }} />
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function buildPalette(labels: string[]): Map<string, string> {
+  const colors = ['#0b4c6e', '#11698a', '#1f8a70', '#d99b2b', '#c8553d', '#7d5ba6', '#4c8d9d', '#335c67', '#f25f5c', '#70c1b3']
+  const uniqueLabels = Array.from(new Set(labels))
+  return new Map(uniqueLabels.map((label, index) => [label, colors[index % colors.length]]))
 }
 
 type BarChartPoint = {

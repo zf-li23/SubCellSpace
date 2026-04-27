@@ -3,7 +3,7 @@
 This is a minimal frontend skeleton for SubCellSpace providing:
 
 - Data Browser (reads report JSON)
-- Layer Viewer (placeholder for per-layer visualization)
+- Layer Viewer (renders real UMAP and spatial scatter plots)
 - Benchmark Dashboard (reads benchmark JSON)
 - Backend switch controls and a parameterized rerun button for CosMx.
 
@@ -28,5 +28,5 @@ The `npm run dev` command now auto-starts the backend if port 8000 is free, then
 
 Notes:
 - The app uses `/api` for live data. Vite proxies those requests to `http://127.0.0.1:8000`.
-- The pages now render structured cards and tables instead of raw JSON dumps.
-- Next steps: add richer plot rendering for UMAP / spatial overlays, and persist run metadata.
+- The pages now render structured cards/tables and plot layers instead of raw JSON dumps.
+- `npm run dev` will auto-start backend via `frontend/scripts/dev.mjs` when port 8000 is free.

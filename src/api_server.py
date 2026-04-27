@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
+import anndata as ad
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -21,12 +23,19 @@ DEFAULT_INPUT_CSV = Path("data/test/Mouse_brain_CosMX_1000cells.csv")
 DEFAULT_OUTPUT_DIR = Path("outputs/api_runs")
 DEFAULT_REPORT_RUN = "cosmx_try_again_round"
 DEFAULT_BENCHMARK_RUN = "cosmx_benchmark_round"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+OUTPUTS_ROOT = (REPO_ROOT / "outputs").resolve()
+
+
+def _parse_allowed_origins() -> list[str]:
+    raw = os.getenv("SUBCELLSPACE_ALLOWED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173")
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 app = FastAPI(title="SubCellSpace API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_parse_allowed_origins(),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -53,6 +62,27 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _resolve_under_repo(path_like: str | Path) -> Path:
+    path = Path(path_like)
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    resolved = path.resolve()
+    if REPO_ROOT not in resolved.parents and resolved != REPO_ROOT:
+        raise HTTPException(status_code=400, detail="Path must be under repository root")
+    return resolved
+
+
+def _ensure_under_outputs(path: Path) -> Path:
+    resolved = path.resolve()
+    if OUTPUTS_ROOT not in resolved.parents and resolved != OUTPUTS_ROOT:
+        raise HTTPException(status_code=400, detail="Path must be under outputs/")
+    return resolved
+
+
+def _resolve_report_path(run_name: str) -> Path:
+    return _ensure_under_outputs(OUTPUTS_ROOT / run_name / "cosmx_minimal_report.json")
+
+
 def _validate_backend(name: str, value: str, allowed: list[str]) -> None:
     if value not in allowed:
         raise HTTPException(status_code=400, detail=f"Unsupported {name}: {value}. Allowed: {allowed}")
@@ -60,7 +90,8 @@ def _validate_backend(name: str, value: str, allowed: list[str]) -> None:
 
 def _resolve_output_dir(request: CosmxRunRequest) -> Path:
     if request.output_dir:
-        return Path(request.output_dir)
+        requested = _resolve_under_repo(request.output_dir)
+        return _ensure_under_outputs(requested)
 
     token = hashlib.sha1(
         "|".join(
@@ -79,7 +110,7 @@ def _resolve_output_dir(request: CosmxRunRequest) -> Path:
             ]
         ).encode("utf-8")
     ).hexdigest()[:12]
-    return DEFAULT_OUTPUT_DIR / token
+    return _ensure_under_outputs((REPO_ROOT / DEFAULT_OUTPUT_DIR / token).resolve())
 
 
 def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
@@ -89,8 +120,12 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
     _validate_backend("annotation_backend", request.annotation_backend, AVAILABLE_ANNOTATION_BACKENDS)
     _validate_backend("spatial_domain_backend", request.spatial_domain_backend, AVAILABLE_SPATIAL_DOMAIN_BACKENDS)
 
+    input_csv_path = _resolve_under_repo(request.input_csv)
+    if not input_csv_path.exists():
+        raise HTTPException(status_code=404, detail=f"Input file not found: {input_csv_path}")
+
     result = run_cosmx_minimal(
-        input_csv=request.input_csv,
+        input_csv=str(input_csv_path),
         output_dir=_resolve_output_dir(request),
         min_transcripts=request.min_transcripts,
         min_genes=request.min_genes,
@@ -131,8 +166,30 @@ def backends() -> dict[str, list[str]]:
 
 @app.get("/api/reports/{run_name}")
 def get_report(run_name: str) -> dict[str, Any]:
-    report_path = Path("outputs") / run_name / "cosmx_minimal_report.json"
-    return _load_json(report_path)
+    return _load_json(_resolve_report_path(run_name))
+
+
+@app.get("/api/plots/{run_name}")
+def get_plots(run_name: str) -> dict[str, Any]:
+    return _get_plot_payload(run_name=run_name)
+
+
+@app.get("/api/plots")
+def get_plots_by_report(
+    report_path: str | None = Query(default=None),
+    output_dir: str | None = Query(default=None),
+) -> dict[str, Any]:
+    if report_path:
+        report_path_obj = _resolve_under_repo(report_path)
+        report = _load_json(report_path_obj)
+        return _plot_payload_from_report(report, fallback_label=report_path_obj.parent.name)
+
+    if output_dir:
+        output_dir_obj = _ensure_under_outputs(_resolve_under_repo(output_dir))
+        report = _load_json(output_dir_obj / "cosmx_minimal_report.json")
+        return _plot_payload_from_report(report, fallback_label=output_dir_obj.name)
+
+    return _get_plot_payload(run_name=DEFAULT_REPORT_RUN)
 
 
 @app.get("/api/benchmarks/{run_name}")
@@ -205,3 +262,61 @@ def main() -> None:
     import uvicorn
 
     uvicorn.run("src.api_server:app", host="0.0.0.0", port=8000, reload=False)
+
+
+def _adata_points_payload(adata: ad.AnnData, embedding_key: str, color_key: str) -> dict[str, Any]:
+    if embedding_key not in adata.obsm:
+        raise HTTPException(status_code=404, detail=f"Embedding not found: {embedding_key}")
+
+    coords = adata.obsm[embedding_key]
+    xs = [float(value) for value in coords[:, 0]]
+    ys = [float(value) for value in coords[:, 1]]
+    colors = [str(value) for value in adata.obs.get(color_key, ["unknown"] * adata.n_obs)]
+
+    return {
+        "embedding_key": embedding_key,
+        "color_key": color_key,
+        "points": [
+            {
+                "x": x,
+                "y": y,
+                "color": color,
+                "cell_id": str(adata.obs_names[idx]),
+            }
+            for idx, (x, y, color) in enumerate(zip(xs, ys, colors, strict=False))
+        ],
+        "stats": {
+            "count": int(adata.n_obs),
+            "min_x": min(xs),
+            "max_x": max(xs),
+            "min_y": min(ys),
+            "max_y": max(ys),
+            "unique_colors": len(set(colors)),
+        },
+    }
+
+
+def _get_plot_payload(run_name: str) -> dict[str, Any]:
+    report = _load_json(_resolve_report_path(run_name))
+    return _plot_payload_from_report(report, fallback_label=run_name)
+
+
+def _plot_payload_from_report(report: dict[str, Any], fallback_label: str) -> dict[str, Any]:
+    adata_path = report.get("outputs", {}).get("adata")
+    if not adata_path:
+        raise HTTPException(status_code=404, detail=f"Missing adata path for run: {fallback_label}")
+
+    path = _resolve_under_repo(adata_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+    adata = ad.read_h5ad(path)
+    return {
+        "run_name": fallback_label,
+        "report_path": report.get("outputs", {}).get("report"),
+        "adata_path": str(path),
+        "points": {
+            "spatial": _adata_points_payload(adata, embedding_key="spatial", color_key="spatial_domain"),
+            "umap": _adata_points_payload(adata, embedding_key="X_umap", color_key="cluster"),
+        },
+    }

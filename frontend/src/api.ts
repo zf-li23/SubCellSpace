@@ -32,6 +32,37 @@ export type CosmxRunOptions = {
   nSpatialDomains?: number | null
 }
 
+export type PointDatum = {
+  x: number
+  y: number
+  color: string
+  cell_id: string
+}
+
+export type PlotSeries = {
+  embedding_key: string
+  color_key: string
+  points: PointDatum[]
+  stats: {
+    count: number
+    min_x: number
+    max_x: number
+    min_y: number
+    max_y: number
+    unique_colors: number
+  }
+}
+
+export type PlotData = {
+  run_name?: string
+  report_path?: string
+  adata_path?: string
+  points?: {
+    spatial?: PlotSeries
+    umap?: PlotSeries
+  }
+}
+
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
     const response = await fetch(url)
@@ -72,6 +103,18 @@ export async function loadBenchmarkSummary(): Promise<BenchmarkSummary | null> {
     (await fetchJson<BenchmarkSummary>('/api/benchmarks/cosmx_benchmark_round')) ||
     (await fetchJson<BenchmarkSummary>('/outputs/cosmx_benchmark_round/benchmark_summary.json'))
   )
+}
+
+export async function loadPlotData(reportPath?: string | null, outputDir?: string | null): Promise<PlotData | null> {
+  const searchParams = new URLSearchParams()
+  if (reportPath) {
+    searchParams.set('report_path', reportPath)
+  } else if (outputDir) {
+    searchParams.set('output_dir', outputDir)
+  }
+
+  const suffix = searchParams.toString() ? `?${searchParams.toString()}` : ''
+  return await fetchJson<PlotData>(`/api/plots${suffix}`)
 }
 
 export async function runCosmxPipeline(

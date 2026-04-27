@@ -19,11 +19,19 @@ subcellspace-api
 
 默认地址：`http://127.0.0.1:8000`
 
+默认 CORS 允许来源：
+
+- `http://127.0.0.1:5173`
+- `http://localhost:5173`
+
+可通过环境变量 `SUBCELLSPACE_ALLOWED_ORIGINS` 覆盖（逗号分隔）。
+
 ## 通用约定
 
 - 报告数据会写到 `outputs/`。
 - 前端开发环境通过 Vite proxy 把 `/api` 转发到后端。
 - CosMx 示例数据默认使用 `data/test/Mouse_brain_CosMX_1000cells.csv`。
+- 路径安全约束：路径参数必须在仓库目录内，且输出目录必须位于 `outputs/` 下。
 
 ## 健康检查
 
@@ -65,6 +73,33 @@ curl http://127.0.0.1:8000/api/meta/backends
 
 ```bash
 curl http://127.0.0.1:8000/api/reports/cosmx_try_again_round
+```
+
+## 绘图数据
+
+### `GET /api/plots/{run_name}`
+
+按 run 名读取报告并返回 UMAP 与空间点图数据。
+
+示例：
+
+```bash
+curl http://127.0.0.1:8000/api/plots/cosmx_try_again_round
+```
+
+### `GET /api/plots`
+
+按查询参数读取绘图数据：
+
+- `report_path`：指定报告 JSON 路径
+- `output_dir`：指定输出目录（会自动读取其中的 `cosmx_minimal_report.json`）
+
+未提供参数时默认读取 `cosmx_try_again_round`。
+
+示例：
+
+```bash
+curl "http://127.0.0.1:8000/api/plots?report_path=outputs/cosmx_try_again_round/cosmx_minimal_report.json"
 ```
 
 ## 参数化 CosMx 运行
