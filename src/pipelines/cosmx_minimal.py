@@ -6,7 +6,13 @@ from pathlib import Path
 from ..evaluation import build_layer_evaluation
 from ..io.cosmx import build_cell_level_adata, build_spatialdata, load_cosmx_transcripts, summarize_cosmx_transcripts
 from ..models import PipelineResult
-from ..steps import apply_transcript_denoise, assign_cells, run_expression_and_spatial_analysis
+from ..steps import (
+    apply_transcript_denoise,
+    assign_cells,
+    run_cell_type_annotation,
+    run_expression_and_spatial_analysis,
+    run_spatial_domain_identification,
+)
 
 
 def run_cosmx_minimal(
@@ -18,6 +24,10 @@ def run_cosmx_minimal(
     segmentation_backend: str = "provided_cells",
     clustering_backend: str = "leiden",
     leiden_resolution: float = 1.0,
+    annotation_backend: str = "rank_marker",
+    spatial_domain_backend: str = "spatial_leiden",
+    spatial_domain_resolution: float = 1.0,
+    n_spatial_domains: int | None = None,
 ) -> PipelineResult:
     input_csv = Path(input_csv)
     output_dir = Path(output_dir)
@@ -36,6 +46,13 @@ def run_cosmx_minimal(
         min_genes=min_genes,
         clustering_backend=clustering_backend,
         leiden_resolution=leiden_resolution,
+    )
+    adata, annotation_summary = run_cell_type_annotation(adata, backend=annotation_backend)
+    adata, spatial_domain_summary = run_spatial_domain_identification(
+        adata,
+        backend=spatial_domain_backend,
+        domain_resolution=spatial_domain_resolution,
+        n_spatial_domains=n_spatial_domains,
     )
     sdata = build_spatialdata(adata)
     layer_evaluation = build_layer_evaluation(
@@ -65,6 +82,8 @@ def run_cosmx_minimal(
             "denoise": denoise_summary,
             "segmentation": segmentation_summary,
             "analysis": analysis_summary,
+            "annotation": annotation_summary,
+            "spatial_domain": spatial_domain_summary,
         },
         "layer_evaluation": layer_evaluation,
         "outputs": {

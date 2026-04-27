@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
+from sklearn.metrics import adjusted_rand_score
 from sklearn.metrics import silhouette_score
 
 
@@ -76,6 +77,18 @@ def build_layer_evaluation(
 ) -> dict[str, Any]:
     transcripts_per_cell = segmented_df.groupby("cell")["target"].size() if len(segmented_df) else pd.Series(dtype=float)
     n_clusters = int(adata.obs["cluster"].nunique()) if "cluster" in adata.obs else 0
+    n_cell_types = int(adata.obs["cell_type"].nunique()) if "cell_type" in adata.obs else 0
+    n_domains = int(adata.obs["spatial_domain"].nunique()) if "spatial_domain" in adata.obs else 0
+
+    if "cluster" in adata.obs and "spatial_domain" in adata.obs:
+        try:
+            domain_cluster_ari: float | None = float(
+                adjusted_rand_score(adata.obs["cluster"].astype(str), adata.obs["spatial_domain"].astype(str))
+            )
+        except Exception:
+            domain_cluster_ari = None
+    else:
+        domain_cluster_ari = None
 
     evaluation = {
         "ingestion": {
@@ -113,6 +126,21 @@ def build_layer_evaluation(
                 float(adata.n_obs),
             ),
             "silhouette_pca": _silhouette_from_pca(adata),
+        },
+        "annotation": {
+            "n_cell_types": n_cell_types,
+            "largest_cell_type_fraction": _safe_ratio(
+                float(adata.obs["cell_type"].astype(str).value_counts().max()) if n_cell_types else 0.0,
+                float(adata.n_obs),
+            ),
+        },
+        "spatial_domain": {
+            "n_spatial_domains": n_domains,
+            "largest_spatial_domain_fraction": _safe_ratio(
+                float(adata.obs["spatial_domain"].astype(str).value_counts().max()) if n_domains else 0.0,
+                float(adata.n_obs),
+            ),
+            "domain_cluster_ari": domain_cluster_ari,
         },
         "spatial": _spatial_graph_metrics(adata),
     }

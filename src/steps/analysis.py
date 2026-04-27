@@ -18,13 +18,24 @@ def _cluster(adata: sc.AnnData, backend: str, resolution: float) -> str:
         return "kmeans"
 
     try:
-        sc.tl.leiden(adata, resolution=resolution, key_added="cluster")
-        return "leiden"
+        sc.tl.leiden(
+            adata,
+            resolution=resolution,
+            key_added="cluster",
+            flavor="igraph",
+            directed=False,
+            n_iterations=2,
+        )
+        return "leiden_igraph"
     except Exception:
-        n_clusters = min(8, max(2, adata.n_obs))
-        labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(adata.obsm["X_pca"])
-        adata.obs["cluster"] = labels.astype(str)
-        return "kmeans_fallback"
+        try:
+            sc.tl.leiden(adata, resolution=resolution, key_added="cluster")
+            return "leiden_legacy"
+        except Exception:
+            n_clusters = min(8, max(2, adata.n_obs))
+            labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(adata.obsm["X_pca"])
+            adata.obs["cluster"] = labels.astype(str)
+            return "kmeans_fallback"
 
 
 def run_expression_and_spatial_analysis(
@@ -42,6 +53,7 @@ def run_expression_and_spatial_analysis(
 
     sc.pp.normalize_total(adata, target_sum=1e4)
     sc.pp.log1p(adata)
+    adata.layers["lognorm"] = adata.X.copy()
     sc.pp.highly_variable_genes(adata, flavor="cell_ranger", n_top_genes=min(2000, adata.n_vars))
     if "highly_variable" in adata.var:
         adata = adata[:, adata.var["highly_variable"]].copy()

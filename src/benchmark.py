@@ -7,9 +7,11 @@ from pathlib import Path
 import pandas as pd
 
 from .pipeline import run_cosmx_minimal
+from .steps.annotation import AVAILABLE_ANNOTATION_BACKENDS
 from .steps.analysis import AVAILABLE_CLUSTERING_BACKENDS
 from .steps.denoise import AVAILABLE_DENOISE_BACKENDS
 from .steps.segmentation import AVAILABLE_SEGMENTATION_BACKENDS
+from .steps.spatial_domain import AVAILABLE_SPATIAL_DOMAIN_BACKENDS
 
 
 def run_cosmx_backend_benchmark(
@@ -18,6 +20,8 @@ def run_cosmx_backend_benchmark(
     min_transcripts: int = 10,
     min_genes: int = 10,
     leiden_resolution: float = 1.0,
+    spatial_domain_resolution: float = 1.0,
+    n_spatial_domains: int | None = None,
 ) -> dict:
     input_csv = Path(input_csv)
     output_dir = Path(output_dir)
@@ -30,10 +34,15 @@ def run_cosmx_backend_benchmark(
         AVAILABLE_DENOISE_BACKENDS,
         AVAILABLE_SEGMENTATION_BACKENDS,
         AVAILABLE_CLUSTERING_BACKENDS,
+        AVAILABLE_ANNOTATION_BACKENDS,
+        AVAILABLE_SPATIAL_DOMAIN_BACKENDS,
     )
 
-    for denoise_backend, segmentation_backend, clustering_backend in combinations:
-        tag = f"denoise-{denoise_backend}__seg-{segmentation_backend}__cluster-{clustering_backend}"
+    for denoise_backend, segmentation_backend, clustering_backend, annotation_backend, spatial_domain_backend in combinations:
+        tag = (
+            f"denoise-{denoise_backend}__seg-{segmentation_backend}__cluster-{clustering_backend}"
+            f"__anno-{annotation_backend}__domain-{spatial_domain_backend}"
+        )
         combo_output = output_dir / tag
 
         result = run_cosmx_minimal(
@@ -45,6 +54,10 @@ def run_cosmx_backend_benchmark(
             segmentation_backend=segmentation_backend,
             clustering_backend=clustering_backend,
             leiden_resolution=leiden_resolution,
+            annotation_backend=annotation_backend,
+            spatial_domain_backend=spatial_domain_backend,
+            spatial_domain_resolution=spatial_domain_resolution,
+            n_spatial_domains=n_spatial_domains,
         )
 
         report = json.loads(result.report_path.read_text(encoding="utf-8"))
@@ -55,9 +68,14 @@ def run_cosmx_backend_benchmark(
             "denoise_backend": denoise_backend,
             "segmentation_backend": segmentation_backend,
             "clustering_backend": clustering_backend,
+            "annotation_backend": annotation_backend,
+            "spatial_domain_backend": spatial_domain_backend,
             "n_cells_after_qc": report["layer_evaluation"]["expression"]["n_cells_after_qc"],
             "n_genes_after_hvg": report["layer_evaluation"]["expression"]["n_genes_after_hvg"],
             "n_clusters": report["layer_evaluation"]["clustering"]["n_clusters"],
+            "n_cell_types": report["layer_evaluation"]["annotation"]["n_cell_types"],
+            "n_spatial_domains": report["layer_evaluation"]["spatial_domain"]["n_spatial_domains"],
+            "domain_cluster_ari": report["layer_evaluation"]["spatial_domain"]["domain_cluster_ari"],
             "silhouette_pca": report["layer_evaluation"]["clustering"]["silhouette_pca"],
             "avg_spatial_degree": report["layer_evaluation"]["spatial"].get("avg_degree"),
             "connected_components": report["layer_evaluation"]["spatial"].get("connected_components"),
