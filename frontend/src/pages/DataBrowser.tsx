@@ -1,19 +1,15 @@
 import React, { useEffect, useState } from 'react'
-import { loadPipelineReport, type BackendConfig, type PipelineReport } from '../api'
+import { loadPipelineReport, type PipelineReport } from '../api'
 
-type DataBrowserProps = {
-  backendConfig: BackendConfig
-}
-
-export default function DataBrowser({ backendConfig }: DataBrowserProps){
+export default function DataBrowser(){
   const [report, setReport] = useState<PipelineReport | null>(null)
   const [error, setError] = useState<string| null>(null)
 
   useEffect(() => {
-    loadPipelineReport(backendConfig)
+    loadPipelineReport()
       .then((value) => setReport(value))
       .catch((value) => setError(String(value)))
-  }, [backendConfig])
+  }, [])
 
   return (
     <div className="container">

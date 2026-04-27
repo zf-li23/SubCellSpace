@@ -25,7 +25,7 @@ export default function App() {
         <BackendSwitch value={backendConfig} onChange={setBackendConfig} />
       </header>
       <main>
-        {route === 'browser' && <DataBrowser backendConfig={backendConfig} />}
+        {route === 'browser' && <DataBrowser />}
         {route === 'layer' && <LayerViewer backendConfig={backendConfig} />}
         {route === 'benchmark' && <BenchmarkDashboard />}
       </main>

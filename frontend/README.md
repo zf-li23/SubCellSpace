@@ -5,6 +5,7 @@ This is a minimal frontend skeleton for SubCellSpace providing:
 - Data Browser (reads report JSON)
 - Layer Viewer (placeholder for per-layer visualization)
 - Benchmark Dashboard (reads benchmark JSON)
+- Backend switch controls and a parameterized rerun button for CosMx.
 
 Quick start:
 
@@ -23,6 +24,13 @@ npm install
 npm run dev
 ```
 
+3. In another terminal, start the API server from the repository root:
+
+```bash
+subcellspace-api
+```
+
 Notes:
-- The app fetches `/outputs/...` paths; ensure `frontend/public/outputs` points to repository `outputs/` or copy the outputs into `frontend/public/outputs` for development.
-- This skeleton is intentionally minimal; next steps: add visualization libs (Deck.gl / regl / plotly), implement backend RPC endpoints, and authentication if needed.
+- The app uses `/api` for live data. Vite proxies those requests to `http://127.0.0.1:8000`.
+- The app also falls back to `outputs/...` for previously generated reports when the API is unavailable.
+- Next steps: add visualization libs (Deck.gl / regl / plotly), refine backend RPC endpoints, and persist run metadata.

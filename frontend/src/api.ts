@@ -63,3 +63,30 @@ export async function loadBenchmarkSummary(): Promise<BenchmarkSummary | null> {
     (await fetchJson<BenchmarkSummary>('/outputs/cosmx_benchmark_round/benchmark_summary.json'))
   )
 }
+
+export async function runCosmxPipeline(backendConfig: BackendConfig): Promise<PipelineReport | null> {
+  try {
+    const response = await fetch('/api/cosmx/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input_csv: 'data/test/Mouse_brain_CosMX_1000cells.csv',
+        denoise_backend: backendConfig.denoise,
+        segmentation_backend: backendConfig.segmentation,
+        clustering_backend: backendConfig.clustering,
+        annotation_backend: backendConfig.annotation,
+        spatial_domain_backend: backendConfig.spatialDomain,
+      }),
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    return (await response.json()) as PipelineReport
+  } catch {
+    return null
+  }
+}

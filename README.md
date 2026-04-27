@@ -88,6 +88,14 @@ pip install -e .
 subcellspace run-cosmx data/test/Mouse_brain_CosMX_1000cells.csv --output-dir outputs/cosmx_demo
 ```
 
+如果你要启动真实 API 服务，用下面的命令：
+
+```bash
+subcellspace-api
+```
+
+默认会监听 `http://127.0.0.1:8000`，前端开发服务器会通过 Vite proxy 转发 `/api` 请求到这个地址。
+
 可选后端参数：
 
 ```bash
@@ -116,6 +124,8 @@ subcellspace run-cosmx data/test/Mouse_brain_CosMX_1000cells.csv \
 subcellspace benchmark-cosmx data/test/Mouse_brain_CosMX_1000cells.csv \
 	--output-dir outputs/cosmx_benchmark
 ```
+
+API 说明见 [API.md](API.md)。
 
 运行完成后，你会得到一个 cell-level 的 AnnData 对象、分层评估报告（ingestion/denoise/segmentation/expression/clustering/spatial）和可继续扩展的空间分析中间结果。
 运行完成后，你会得到一个 cell-level 的 AnnData 对象、分层评估报告（ingestion/denoise/segmentation/expression/clustering/annotation/spatial_domain/spatial）和可继续扩展的空间分析中间结果。
