@@ -24,13 +24,9 @@ npm install
 npm run dev
 ```
 
-3. In another terminal, start the API server from the repository root:
-
-```bash
-subcellspace-api
-```
+The `npm run dev` command now auto-starts the backend if port 8000 is free, then launches Vite. If the backend is already running, it reuses the existing service.
 
 Notes:
 - The app uses `/api` for live data. Vite proxies those requests to `http://127.0.0.1:8000`.
-- The app also falls back to `outputs/...` for previously generated reports when the API is unavailable.
-- Next steps: add visualization libs (Deck.gl / regl / plotly), refine backend RPC endpoints, and persist run metadata.
+- The pages now render structured cards and tables instead of raw JSON dumps.
+- Next steps: add richer plot rendering for UMAP / spatial overlays, and persist run metadata.
