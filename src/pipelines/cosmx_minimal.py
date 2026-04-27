@@ -64,7 +64,9 @@ def run_cosmx_minimal(
 
     adata_path = output_dir / "cosmx_minimal.h5ad"
     report_path = output_dir / "cosmx_minimal_report.json"
+    transcripts_path = output_dir / "cosmx_minimal_transcripts.parquet"
     adata.write_h5ad(adata_path)
+    segmented.to_parquet(transcripts_path)
 
     report = {
         "input_csv": str(input_csv),
@@ -89,6 +91,7 @@ def run_cosmx_minimal(
         "outputs": {
             "adata": str(adata_path),
             "report": str(report_path),
+            "transcripts": str(transcripts_path),
             "spatialdata_points": list(sdata.points.keys()),
             "spatialdata_tables": list(sdata.tables.keys()),
         },

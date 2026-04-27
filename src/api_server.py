@@ -296,6 +296,49 @@ def _adata_points_payload(adata: ad.AnnData, embedding_key: str, color_key: str)
     }
 
 
+@app.get("/api/cells/{cell_id}/transcripts")
+def get_cell_transcripts(
+    cell_id: str,
+    run_name: str = Query(default=DEFAULT_REPORT_RUN),
+    gene_filter: str | None = None,
+) -> dict[str, Any]:
+    report = _load_json(_resolve_report_path(run_name))
+    transcripts_path = report.get("outputs", {}).get("transcripts")
+    if not transcripts_path:
+        raise HTTPException(status_code=404, detail=f"No transcripts file for run: {run_name}")
+
+    path = _resolve_under_repo(transcripts_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Transcripts file not found: {path}")
+
+    import pandas as pd
+
+    df = pd.read_parquet(path)
+    cell_mask = df["cell"] == str(cell_id)
+    cell_df = df[cell_mask].copy()
+
+    if gene_filter:
+        gene_mask = cell_df["target"].astype(str) == str(gene_filter)
+        cell_df = cell_df[gene_mask]
+
+    points = []
+    for _, row in cell_df.iterrows():
+        points.append({
+            "x": float(row["x_global_px"]),
+            "y": float(row["y_global_px"]),
+            "color": str(row.get("target", "unknown")),
+            "gene": str(row.get("target", "unknown")),
+            "fov": int(row.get("fov", -1)),
+        })
+
+    return {
+        "cell_id": cell_id,
+        "n_transcripts": len(points),
+        "genes": sorted(cell_df["target"].astype(str).unique().tolist()),
+        "points": points,
+    }
+
+
 def _get_plot_payload(run_name: str) -> dict[str, Any]:
     report = _load_json(_resolve_report_path(run_name))
     return _plot_payload_from_report(report, fallback_label=run_name)
