@@ -4,19 +4,13 @@ import scanpy as sc
 import squidpy as sq
 from sklearn.cluster import KMeans
 
-AVAILABLE_CLUSTERING_BACKENDS = ("leiden", "kmeans")
+from ..models import StepResult
+from ..registry import register_backend
+
+# ── Backend implementations ────────────────────────────────────────────────
 
 
-def _cluster(adata: sc.AnnData, backend: str, resolution: float) -> str:
-    if backend not in AVAILABLE_CLUSTERING_BACKENDS:
-        raise ValueError(f"Unknown clustering backend: {backend}")
-
-    if backend == "kmeans":
-        n_clusters = min(8, max(2, adata.n_obs))
-        labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(adata.obsm["X_pca"])
-        adata.obs["cluster"] = labels.astype(str)
-        return "kmeans"
-
+def _cluster_leiden(adata: sc.AnnData, resolution: float) -> str:
     try:
         sc.tl.leiden(
             adata,
@@ -38,16 +32,39 @@ def _cluster(adata: sc.AnnData, backend: str, resolution: float) -> str:
             return "kmeans_fallback"
 
 
+def _cluster_kmeans(adata: sc.AnnData, resolution: float) -> str:  # noqa: ARGS001
+    n_clusters = min(8, max(2, adata.n_obs))
+    labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(adata.obsm["X_pca"])
+    adata.obs["cluster"] = labels.astype(str)
+    return "kmeans"
+
+
+# Register backends
+register_backend("analysis", "leiden")(_cluster_leiden)
+register_backend("analysis", "kmeans")(_cluster_kmeans)
+
+# Dispatch table
+_CLUSTER_FUNCS = {
+    "leiden": _cluster_leiden,
+    "kmeans": _cluster_kmeans,
+}
+
+
+# ── Main entry point ──────────────────────────────────────────────────────
+
+
 def run_expression_and_spatial_analysis(
     adata: sc.AnnData,
     min_transcripts: int,
     min_genes: int,
     clustering_backend: str,
     leiden_resolution: float,
-) -> tuple[sc.AnnData, dict[str, int | float | str]]:
-    # Validate backend early, before any expensive computation
-    if clustering_backend not in AVAILABLE_CLUSTERING_BACKENDS:
-        raise ValueError(f"Unknown clustering backend: {clustering_backend}")
+) -> StepResult:
+    if clustering_backend not in _CLUSTER_FUNCS:
+        raise ValueError(
+            f"Unknown clustering backend: {clustering_backend}. "
+            f"Available: {list(_CLUSTER_FUNCS)}"
+        )
 
     n_obs_before = adata.n_obs
 
@@ -65,7 +82,7 @@ def run_expression_and_spatial_analysis(
             "clustering_backend_used": "none",
             "leiden_resolution": float(leiden_resolution),
         }
-        return adata, summary
+        return StepResult(output=adata, summary=summary, backend_used="none")
 
     sc.pp.normalize_total(adata, target_sum=1e4)
     sc.pp.log1p(adata)
@@ -75,8 +92,6 @@ def run_expression_and_spatial_analysis(
         if "highly_variable" in adata.var and adata.var["highly_variable"].any():
             adata = adata[:, adata.var["highly_variable"]].copy()
     except (IndexError, ValueError):
-        # Very small datasets may cause scanpy's hvg to fail (all-NaN dispersions etc.)
-        # Keep all genes in that case.
         pass
 
     n_comps = min(50, adata.n_obs - 1, adata.n_vars - 1)
@@ -84,7 +99,7 @@ def run_expression_and_spatial_analysis(
     sc.pp.scale(adata, max_value=10)
     sc.tl.pca(adata, n_comps=n_comps, svd_solver="randomized")
     sc.pp.neighbors(adata, n_neighbors=min(15, max(2, adata.n_obs - 1)), n_pcs=min(30, n_comps))
-    cluster_backend_used = _cluster(adata, backend=clustering_backend, resolution=leiden_resolution)
+    cluster_backend_used = _CLUSTER_FUNCS[clustering_backend](adata, resolution=leiden_resolution)
     sc.tl.umap(adata)
 
     sq.gr.spatial_neighbors(adata, spatial_key="spatial", coord_type="generic")
@@ -97,4 +112,4 @@ def run_expression_and_spatial_analysis(
         "clustering_backend_used": cluster_backend_used,
         "leiden_resolution": float(leiden_resolution),
     }
-    return adata, summary
+    return StepResult(output=adata, summary=summary, backend_used=cluster_backend_used)

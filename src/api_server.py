@@ -14,12 +14,7 @@ from pydantic import BaseModel, Field
 
 from .benchmark import run_cosmx_backend_benchmark
 from .pipeline import run_cosmx_minimal
-from .steps.annotation import AVAILABLE_ANNOTATION_BACKENDS
-from .steps.analysis import AVAILABLE_CLUSTERING_BACKENDS
-from .steps.denoise import AVAILABLE_DENOISE_BACKENDS
-from .steps.segmentation import AVAILABLE_SEGMENTATION_BACKENDS
-from .steps.spatial_domain import AVAILABLE_SPATIAL_DOMAIN_BACKENDS
-from .steps.subcellular_spatial_domain import AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS
+from .registry import get_available_backends
 
 # ── Configurable defaults (all overridable via environment variables) ──────
 DEFAULT_INPUT_CSV = Path(
@@ -114,11 +109,11 @@ def _resolve_report_path(run_name: str) -> Path:
     return _ensure_under_outputs(OUTPUTS_ROOT / run_name / "cosmx_minimal_report.json")
 
 
-def _validate_backend(name: str, value: str, allowed: list[str]) -> None:
-    if value not in allowed:
+def _validate_backend(name: str, value: str, all_backends: list[str]) -> None:
+    if value not in all_backends:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported {name}: {value}. Allowed: {allowed}",
+            detail=f"Unsupported {name}: {value}. Allowed: {all_backends}",
         )
 
 
@@ -150,15 +145,15 @@ def _resolve_output_dir(request: CosmxRunRequest) -> Path:
 
 
 def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
-    _validate_backend("denoise_backend", request.denoise_backend, AVAILABLE_DENOISE_BACKENDS)
-    _validate_backend("segmentation_backend", request.segmentation_backend, AVAILABLE_SEGMENTATION_BACKENDS)
-    _validate_backend("clustering_backend", request.clustering_backend, AVAILABLE_CLUSTERING_BACKENDS)
-    _validate_backend("annotation_backend", request.annotation_backend, AVAILABLE_ANNOTATION_BACKENDS)
-    _validate_backend("spatial_domain_backend", request.spatial_domain_backend, AVAILABLE_SPATIAL_DOMAIN_BACKENDS)
+    _validate_backend("denoise_backend", request.denoise_backend, get_available_backends("denoise"))
+    _validate_backend("segmentation_backend", request.segmentation_backend, get_available_backends("segmentation"))
+    _validate_backend("clustering_backend", request.clustering_backend, get_available_backends("analysis"))
+    _validate_backend("annotation_backend", request.annotation_backend, get_available_backends("annotation"))
+    _validate_backend("spatial_domain_backend", request.spatial_domain_backend, get_available_backends("spatial_domain"))
     _validate_backend(
         "subcellular_domain_backend",
         request.subcellular_domain_backend,
-        AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS,
+        get_available_backends("subcellular_spatial_domain"),
     )
 
     input_csv_path = _resolve_under_repo(request.input_csv)
@@ -200,12 +195,12 @@ def health() -> dict[str, str]:
 @app.get("/api/meta/backends")
 def backends() -> dict[str, list[str]]:
     return {
-        "denoise": list(AVAILABLE_DENOISE_BACKENDS),
-        "segmentation": list(AVAILABLE_SEGMENTATION_BACKENDS),
-        "clustering": list(AVAILABLE_CLUSTERING_BACKENDS),
-        "annotation": list(AVAILABLE_ANNOTATION_BACKENDS),
-        "spatial_domain": list(AVAILABLE_SPATIAL_DOMAIN_BACKENDS),
-        "subcellular_spatial_domain": list(AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS),
+        "denoise": get_available_backends("denoise"),
+        "segmentation": get_available_backends("segmentation"),
+        "clustering": get_available_backends("analysis"),
+        "annotation": get_available_backends("annotation"),
+        "spatial_domain": get_available_backends("spatial_domain"),
+        "subcellular_spatial_domain": get_available_backends("subcellular_spatial_domain"),
     }
 
 

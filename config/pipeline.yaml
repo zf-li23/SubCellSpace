@@ -1,0 +1,53 @@
+# ─────────────────────────────────────────────────────────────────────
+# SubCellSpace Pipeline Configuration
+# Defines the pipeline step order and available backends.
+# Each step can have multiple backend implementations.
+# ─────────────────────────────────────────────────────────────────────
+
+pipeline:
+  name: "cosmx_minimal"
+  description: "Minimal CosMx spatial transcriptomics analysis pipeline"
+  version: "0.1.0"
+
+  # Step execution order — each entry references a step name.
+  # The pipeline runner will execute steps in this order.
+  steps:
+    - denoise
+    - segmentation
+    - spatial_domain          # ← cell-level spatial domain (before clustering)
+    - subcellular_spatial_domain  # ← subcellular domain grouping
+    - analysis                 # ← clustering & expression
+    - annotation               # ← cell-type annotation
+
+  # Step definitions
+  # Each step specifies its module and default backend.
+  steps_config:
+    denoise:
+      module: "src.steps.denoise"
+      default_backend: "intracellular"
+      description: "Filter transcripts based on cell compartment"
+
+    segmentation:
+      module: "src.steps.segmentation"
+      default_backend: "provided_cells"
+      description: "Assign transcripts to cells"
+
+    spatial_domain:
+      module: "src.steps.spatial_domain"
+      default_backend: "spatial_leiden"
+      description: "Identify tissue-level spatial domains"
+
+    subcellular_spatial_domain:
+      module: "src.steps.subcellular_spatial_domain"
+      default_backend: "hdbscan"
+      description: "Identify subcellular spatial domains within each cell"
+
+    analysis:
+      module: "src.steps.analysis"
+      default_backend: "leiden"
+      description: "Clustering & expression analysis"
+
+    annotation:
+      module: "src.steps.annotation"
+      default_backend: "rank_marker"
+      description: "Cell-type annotation"

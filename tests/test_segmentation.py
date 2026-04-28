@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import pytest
 import pandas as pd
-from src.steps.segmentation import assign_cells, AVAILABLE_SEGMENTATION_BACKENDS
+from src.steps.segmentation import assign_cells
+from src.registry import get_available_backends
 
 
 class TestAssignCells:
     def test_backend_provided_cells(self, sample_transcripts_df):
-        assigned, summary = assign_cells(sample_transcripts_df, "provided_cells")
+        result = assign_cells(sample_transcripts_df, "provided_cells")
+        assigned = result.output
+        summary = result.summary
         assert len(assigned) > 0
         assert summary["segmentation_backend"] == "provided_cells"
         assert summary["n_transcripts_assigned"] == len(assigned)
@@ -16,7 +19,9 @@ class TestAssignCells:
     def test_backend_fov_cell_id(self, sample_transcripts_df):
         # Create df without a cell column to test fov_cell_id backend
         df_no_cell = sample_transcripts_df.drop(columns=["cell"])
-        assigned, summary = assign_cells(df_no_cell, "fov_cell_id")
+        result = assign_cells(df_no_cell, "fov_cell_id")
+        assigned = result.output
+        summary = result.summary
         assert summary["segmentation_backend"] == "fov_cell_id"
         assert "cell" in assigned.columns
         expected_cell = f"{df_no_cell['fov'].iloc[0]}_{df_no_cell['cell_ID'].iloc[0]}"
@@ -41,6 +46,7 @@ class TestAssignCells:
                 "cell": ["1_1", "", None],
             }
         )
-        assigned, summary = assign_cells(df, "provided_cells")
+        result = assign_cells(df, "provided_cells")
+        assigned = result.output
         assert len(assigned) == 1
         assert assigned["cell"].iloc[0] == "1_1"

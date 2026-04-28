@@ -5,7 +5,10 @@ import scanpy as sc
 import squidpy as sq
 from sklearn.cluster import KMeans
 
-AVAILABLE_SPATIAL_DOMAIN_BACKENDS = ("spatial_leiden", "spatial_kmeans")
+from ..models import StepResult
+from ..registry import register_backend
+
+# ── Backend implementations ────────────────────────────────────────────────
 
 
 def _ensure_spatial_neighbors(adata: sc.AnnData) -> None:
@@ -14,7 +17,7 @@ def _ensure_spatial_neighbors(adata: sc.AnnData) -> None:
         sq.gr.spatial_neighbors(adata, spatial_key="spatial", coord_type="generic")
 
 
-def _spatial_leiden(adata: sc.AnnData, domain_resolution: float) -> str:
+def _domain_spatial_leiden(adata: sc.AnnData, domain_resolution: float, n_spatial_domains: int | None = None) -> str:
     _ensure_spatial_neighbors(adata)
 
     try:
@@ -53,7 +56,7 @@ def _spatial_leiden(adata: sc.AnnData, domain_resolution: float) -> str:
     return "spatial_leiden_fallback_kmeans"
 
 
-def _spatial_kmeans(adata: sc.AnnData, n_spatial_domains: int | None) -> str:
+def _domain_spatial_kmeans(adata: sc.AnnData, domain_resolution: float = 1.0, n_spatial_domains: int | None = None) -> str:
     if "spatial" not in adata.obsm:
         raise ValueError("`spatial` not found in adata.obsm.")
 
@@ -67,19 +70,33 @@ def _spatial_kmeans(adata: sc.AnnData, n_spatial_domains: int | None) -> str:
     return "spatial_kmeans"
 
 
+# Register backends
+register_backend("spatial_domain", "spatial_leiden")(_domain_spatial_leiden)
+register_backend("spatial_domain", "spatial_kmeans")(_domain_spatial_kmeans)
+
+# Dispatch table
+_SPATIAL_DOMAIN_FUNCS = {
+    "spatial_leiden": _domain_spatial_leiden,
+    "spatial_kmeans": _domain_spatial_kmeans,
+}
+
+
+# ── Main entry point ──────────────────────────────────────────────────────
+
+
 def run_spatial_domain_identification(
     adata: sc.AnnData,
     backend: str,
     domain_resolution: float,
     n_spatial_domains: int | None,
-) -> tuple[sc.AnnData, dict[str, int | float | str | dict[str, int]]]:
-    if backend not in AVAILABLE_SPATIAL_DOMAIN_BACKENDS:
-        raise ValueError(f"Unknown spatial domain backend: {backend}")
+) -> StepResult:
+    if backend not in _SPATIAL_DOMAIN_FUNCS:
+        raise ValueError(
+            f"Unknown spatial domain backend: {backend}. "
+            f"Available: {list(_SPATIAL_DOMAIN_FUNCS)}"
+        )
 
-    if backend == "spatial_leiden":
-        backend_used = _spatial_leiden(adata, domain_resolution=domain_resolution)
-    else:
-        backend_used = _spatial_kmeans(adata, n_spatial_domains=n_spatial_domains)
+    backend_used = _SPATIAL_DOMAIN_FUNCS[backend](adata, domain_resolution, n_spatial_domains)
 
     distribution = adata.obs["spatial_domain"].astype(str).value_counts().to_dict()
     summary = {
@@ -90,4 +107,4 @@ def run_spatial_domain_identification(
         "n_spatial_domains": int(adata.obs["spatial_domain"].nunique()),
         "spatial_domain_distribution": {str(k): int(v) for k, v in distribution.items()},
     }
-    return adata, summary
+    return StepResult(output=adata, summary=summary, backend_used=backend_used)

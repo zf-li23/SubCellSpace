@@ -31,6 +31,25 @@ class DatasetSummary:
 
 
 @dataclass(slots=True)
+class StepResult:
+    """Standardised return value for every pipeline step.
+
+    Attributes
+    ----------
+    output : Any
+        The primary output of the step (e.g. filtered DataFrame, modified AnnData).
+    summary : dict[str, Any]
+        A dictionary of summary statistics for this step.
+    backend_used : str
+        The actual backend name that was used (may differ from requested due to fallback).
+    """
+
+    output: Any
+    summary: dict[str, Any]
+    backend_used: str
+
+
+@dataclass(slots=True)
 class PipelineResult:
     adata: ad.AnnData
     summary: DatasetSummary

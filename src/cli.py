@@ -5,12 +5,7 @@ from pathlib import Path
 
 from .benchmark import run_cosmx_backend_benchmark
 from .pipeline import run_cosmx_minimal
-from .steps.annotation import AVAILABLE_ANNOTATION_BACKENDS
-from .steps.analysis import AVAILABLE_CLUSTERING_BACKENDS
-from .steps.denoise import AVAILABLE_DENOISE_BACKENDS
-from .steps.segmentation import AVAILABLE_SEGMENTATION_BACKENDS
-from .steps.spatial_domain import AVAILABLE_SPATIAL_DOMAIN_BACKENDS
-from .steps.subcellular_spatial_domain import AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS
+from .registry import get_available_backends
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -22,17 +17,17 @@ def build_parser() -> argparse.ArgumentParser:
     cosmx.add_argument("--output-dir", type=Path, default=Path("outputs/cosmx_demo"))
     cosmx.add_argument("--min-transcripts", type=int, default=10)
     cosmx.add_argument("--min-genes", type=int, default=10)
-    cosmx.add_argument("--denoise-backend", choices=AVAILABLE_DENOISE_BACKENDS, default="intracellular")
-    cosmx.add_argument("--segmentation-backend", choices=AVAILABLE_SEGMENTATION_BACKENDS, default="provided_cells")
-    cosmx.add_argument("--clustering-backend", choices=AVAILABLE_CLUSTERING_BACKENDS, default="leiden")
+    cosmx.add_argument("--denoise-backend", choices=get_available_backends("denoise"), default="intracellular")
+    cosmx.add_argument("--segmentation-backend", choices=get_available_backends("segmentation"), default="provided_cells")
+    cosmx.add_argument("--clustering-backend", choices=get_available_backends("analysis"), default="leiden")
     cosmx.add_argument("--leiden-resolution", type=float, default=1.0)
-    cosmx.add_argument("--annotation-backend", choices=AVAILABLE_ANNOTATION_BACKENDS, default="rank_marker")
-    cosmx.add_argument("--spatial-domain-backend", choices=AVAILABLE_SPATIAL_DOMAIN_BACKENDS, default="spatial_leiden")
+    cosmx.add_argument("--annotation-backend", choices=get_available_backends("annotation"), default="rank_marker")
+    cosmx.add_argument("--spatial-domain-backend", choices=get_available_backends("spatial_domain"), default="spatial_leiden")
     cosmx.add_argument("--spatial-domain-resolution", type=float, default=1.0)
     cosmx.add_argument("--n-spatial-domains", type=int, default=None)
     cosmx.add_argument(
         "--subcellular-domain-backend",
-        choices=AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS,
+        choices=get_available_backends("subcellular_spatial_domain"),
         default="hdbscan",
     )
 

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import scanpy as sc
-from src.steps.annotation import run_cell_type_annotation, AVAILABLE_ANNOTATION_BACKENDS
+from src.steps.annotation import run_cell_type_annotation
+from src.registry import get_available_backends
 
 
 class TestRunCellTypeAnnotation:
     def test_cluster_label_backend(self, sample_anndata):
         sample_anndata.obs["cluster"] = [str(i % 3) for i in range(sample_anndata.n_obs)]
-        result_adata, summary = run_cell_type_annotation(sample_anndata.copy(), "cluster_label")
+        result = run_cell_type_annotation(sample_anndata.copy(), "cluster_label")
+        result_adata = result.output
+        summary = result.summary
         assert "cell_type" in result_adata.obs
         assert result_adata.obs["cell_type"].notna().all()
         assert summary["annotation_backend_used"] == "cluster_label"
@@ -18,7 +21,9 @@ class TestRunCellTypeAnnotation:
         sample_anndata.obs["cluster"] = [str(i % 3) for i in range(sample_anndata.n_obs)]
         # rank_marker expects lognorm layer
         sample_anndata.layers["lognorm"] = sample_anndata.X.copy()
-        result_adata, summary = run_cell_type_annotation(sample_anndata.copy(), "rank_marker")
+        result = run_cell_type_annotation(sample_anndata.copy(), "rank_marker")
+        result_adata = result.output
+        summary = result.summary
         assert "cell_type" in result_adata.obs
         assert result_adata.obs["cell_type"].notna().all()
         assert summary["annotation_backend_used"] == "rank_marker"
@@ -38,5 +43,6 @@ class TestRunCellTypeAnnotation:
             run_cell_type_annotation(sample_anndata.copy(), "bad_backend")
 
     def test_available_backends(self):
-        assert "cluster_label" in AVAILABLE_ANNOTATION_BACKENDS
-        assert "rank_marker" in AVAILABLE_ANNOTATION_BACKENDS
+        backends = get_available_backends("annotation")
+        assert "cluster_label" in backends
+        assert "rank_marker" in backends

@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import scanpy as sc
 
-AVAILABLE_ANNOTATION_BACKENDS = ("cluster_label", "rank_marker")
+from ..models import StepResult
+from ..registry import register_backend
+
+# ── Backend implementations ────────────────────────────────────────────────
 
 
-def _cluster_label_annotation(adata: sc.AnnData) -> str:
+def _anno_cluster_label(adata: sc.AnnData) -> str:
     if "cluster" not in adata.obs:
         raise ValueError("`cluster` not found in adata.obs. Run clustering before annotation.")
     adata.obs["cell_type"] = adata.obs["cluster"].astype(str).map(lambda x: f"Cluster_{x}")
     return "cluster_label"
 
 
-def _rank_marker_annotation(adata: sc.AnnData) -> str:
+def _anno_rank_marker(adata: sc.AnnData) -> str:
     if "cluster" not in adata.obs:
         raise ValueError("`cluster` not found in adata.obs. Run clustering before annotation.")
 
@@ -36,17 +39,31 @@ def _rank_marker_annotation(adata: sc.AnnData) -> str:
     return "rank_marker"
 
 
+# Register backends
+register_backend("annotation", "cluster_label")(_anno_cluster_label)
+register_backend("annotation", "rank_marker")(_anno_rank_marker)
+
+# Dispatch table
+_ANNOTATION_FUNCS = {
+    "cluster_label": _anno_cluster_label,
+    "rank_marker": _anno_rank_marker,
+}
+
+
+# ── Main entry point ──────────────────────────────────────────────────────
+
+
 def run_cell_type_annotation(
     adata: sc.AnnData,
     backend: str,
-) -> tuple[sc.AnnData, dict[str, int | str | dict[str, int]]]:
-    if backend not in AVAILABLE_ANNOTATION_BACKENDS:
-        raise ValueError(f"Unknown annotation backend: {backend}")
+) -> StepResult:
+    if backend not in _ANNOTATION_FUNCS:
+        raise ValueError(
+            f"Unknown annotation backend: {backend}. "
+            f"Available: {list(_ANNOTATION_FUNCS)}"
+        )
 
-    if backend == "cluster_label":
-        backend_used = _cluster_label_annotation(adata)
-    else:
-        backend_used = _rank_marker_annotation(adata)
+    backend_used = _ANNOTATION_FUNCS[backend](adata)
 
     distribution = adata.obs["cell_type"].astype(str).value_counts().to_dict()
     summary = {
@@ -55,4 +72,4 @@ def run_cell_type_annotation(
         "n_cell_types": int(adata.obs["cell_type"].nunique()),
         "cell_type_distribution": {str(k): int(v) for k, v in distribution.items()},
     }
-    return adata, summary
+    return StepResult(output=adata, summary=summary, backend_used=backend_used)

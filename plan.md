@@ -1,186 +1,169 @@
-# SubCellSpace 项目全面分析报告
+## 全面审查结果
 
-## 一、项目当前阶段
-
-**当前阶段：Phase 1（核心功能构建）末期 → 即将进入 Phase 2（增强与优化）**
-
-根据 README.md 中的路线图：
-
-| Phase | 目标 | 状态 |
-|-------|------|------|
-| **Phase 0** | 基础架构（CLI、API、前端框架） | ✅ 已完成 |
-| **Phase 1** | 核心分析管线（CosMx 全流程） | ✅ 基本完成 |
-| **Phase 2** | 增强功能（多平台支持、评估收敛、生产安全） | 🔄 即将开始 |
-| **Phase 3** | 高级分析（SCRIN 模块、RNA 共定位） | 📅 远期规划 |
-
-### 已实现的核心能力
-
-1. **完整的数据管线**：从 CosMx CSV 输入 → 去噪 → 分割 → 表达分析 → 聚类 → 注释 → 空间域 → 亚细胞空间域
-2. **模块化后端系统**：每个步骤支持多种算法实现，可通过 CLI/API 灵活切换
-3. **评估框架**：9 层评估指标，覆盖管线每个环节
-4. **基准测试**：支持 32 种后端组合的网格搜索
-5. **FastAPI 服务**：完整的 REST API，支持异步管线执行
-6. **React 前端**：管线可视化（ReportPage）和基准对比（DataBrowser）
-7. **亚细胞空间域分析**：HDBSCAN/DBSCAN/Leiden 三种算法，这是最新添加的高级功能
+在继续之前，我发现当前代码库存在以下**必须修复的问题**（按优先级排列）：
 
 ---
 
-## 二、当前阶段的隐患与风险
+### 🔴 必须修复的问题（阻碍插件化重构）
 
-### 🚨 高风险
+#### 1. 后端注册机制缺失（核心问题）
+当前每个步骤的后端列表是**硬编码的元组**（如 `AVAILABLE_DENOISE_BACKENDS = ("none", "intracellular", "nuclear_only")`），新增后端需要修改步骤文件本身。这完全违背了"插件式替换"的目标。
 
-#### 1. **依赖管理脆弱性 — igraph 回退机制可能导致静默降级**
-- `src/steps/analysis.py` 和 `src/steps/spatial_domain.py` 中，当 `leiden` 算法因 igraph 不可用而失败时，会静默回退到 kmeans
-- **风险**：用户可能不知道分析实际使用了不同的算法，导致结果不可复现
-- **建议**：至少记录 warning 日志，或在报告中明确标注使用的算法
+#### 2. 步骤间耦合严重
+- `cosmx_minimal.py` 硬编码了步骤执行顺序和参数传递
+- 每个步骤函数签名不一致（有的返回 `(df, dict)`，有的返回 `(adata, dict)`，有的返回 `(df, adata, dict)`）
+- 无法在不修改管线代码的情况下插入/移除/重排步骤
 
-#### 2. **缺少数据验证与错误处理**
-- `src/io/cosmx.py` 的 `load_cosmx_transcripts` 仅检查必需列是否存在，没有对数据类型、值范围、缺失值进行验证
-- 管线中任何步骤失败都会抛出未处理的异常，前端可能收到 500 错误
-- **风险**：生产环境中遇到异常数据时，整个管线崩溃，用户体验极差
+#### 3. 缺少抽象基类/接口
+- 没有 `BaseStep` 或 `BaseBackend` 抽象类
+- 没有统一的步骤注册机制
+- 没有步骤元数据（名称、描述、依赖关系、输入输出类型）
 
-#### 3. **安全性问题 — API 路径校验不完善**
-- `src/api_server.py` 中 `_resolve_under_repo` 使用 `os.path.abspath` 后检查 `startswith`，但未处理符号链接（symlink）绕过
-- `_ensure_under_outputs` 同样存在路径穿越风险
-- **风险**：恶意请求可能读取 repo 外的文件
+#### 4. 配置管理混乱
+- 参数散落在 `api_server.py`、`cli.py`、`cosmx_minimal.py` 中
+- 没有统一的配置模型
+- 环境变量命名不一致（`SUBCELLSPACE_*` 前缀但未集中管理）
 
-#### 4. **前端硬编码 API 地址**
-- `frontend/src/api.ts` 中 API 地址硬编码为 `http://localhost:8000`
-- **风险**：部署到非本地环境时需要手动修改代码
+#### 5. 数据流不透明
+- `PipelineResult` 只包含最终结果，没有中间步骤数据
+- 无法追踪每个步骤的输入/输出
+- 没有步骤执行日志
 
-### ⚠️ 中风险
-
-#### 5. **测试覆盖率不足**
-- 仅有 6 个测试文件，且测试数据是合成的小数据集
-- 缺少集成测试（端到端管线测试）、性能测试、边界条件测试
-- `tests/test_pipeline.py` 中的阈值（如 `n_cells > 5`）过于宽松
-
-#### 6. **前端状态管理薄弱**
-- 使用简单的 React state（`useState`），没有全局状态管理
-- `ReportPage.tsx`（727 行）和 `DataBrowser.tsx`（903 行）过于庞大，职责不单一
-- 没有错误边界和加载状态的统一处理
-
-#### 7. **文档缺失**
-- `API.md` 可能不完整，缺少 API 使用示例
-- 缺少开发者贡献指南（CONTRIBUTING.md）
-- 缺少部署文档（Docker 部署、生产环境配置）
-
-### 🔸 低风险
-
-#### 8. **代码质量问题**
-- `src/steps/subcellular_spatial_domain.py`（280 行）过于复杂，可拆分为多个函数
-- 部分函数缺少类型注解
-- 硬编码的字符串常量（如后端名称）散落在各处，未集中管理
-
-#### 9. **依赖锁定**
-- 使用 `uv.lock` 锁定依赖，但 `pyproject.toml` 中依赖版本范围过宽（如 `scanpy>=1.10`）
-- 未来版本更新可能导致不兼容
+#### 6. 测试覆盖不足
+- 缺少后端注册测试
+- 缺少插件加载测试
+- 缺少步骤接口契约测试
 
 ---
 
-## 三、下一阶段方向建议
+### 🟢 可以继续开发的方向（插件化架构）
 
-### 短期目标（1-2 个月）
-
-#### 1. 🛡️ **加固生产安全性**
-   - 修复路径穿越漏洞（使用 `os.path.realpath` 替代 `os.path.abspath`）
-   - 添加请求速率限制
-   - 添加 API 认证（至少基础认证或 API Key）
-   - 添加输入数据验证（Pydantic 模型增强）
-
-#### 2. 📊 **完善评估与报告系统**
-   - 在报告中明确记录每个步骤实际使用的算法和后端
-   - 添加 igraph/kmeans 回退的日志和报告标注
-   - 添加可视化报告（PDF/HTML 导出）
-   - 添加管线执行时间追踪
-
-#### 3. 🧪 **大幅提升测试覆盖率**
-   - 添加集成测试（完整管线端到端测试）
-   - 添加异常数据测试（缺失值、异常值、空数据）
-   - 添加 API 测试（使用 TestClient）
-   - 添加前端组件测试
-
-#### 4. 🔧 **代码重构**
-   - 拆分过大的组件（ReportPage、DataBrowser）
-   - 统一后端名称管理（使用 Enum 或常量类）
-   - 添加全局错误处理中间件
-   - 前端 API 地址改为可配置（环境变量）
-
-### 中期目标（3-6 个月）
-
-#### 5. 🌐 **多平台支持**
-   - 添加 Xenium（10x）数据支持
-   - 添加 MERFISH（Vizgen）数据支持
-   - 添加 Stereo-seq 数据支持
-   - 抽象数据加载接口（`BaseDataLoader`）
-
-#### 6. 🎨 **前端增强**
-   - 添加全局状态管理（Zustand 或 Jotai）
-   - 添加实时管线执行进度显示（WebSocket）
-   - 添加交互式空间数据浏览器（基于 Deck.gl 或 kepler.gl）
-   - 添加报告导出功能（PDF/PNG）
-
-#### 7. 📈 **评估收敛**
-   - 实现 README 中提到的评估收敛策略
-   - 添加自动最优后端选择
-   - 添加基准测试结果的可视化对比
-
-### 长期目标（6-12 个月）
-
-#### 8. 🧬 **SCRIN 模块（RNA 共定位分析）**
-   - 实现 RNA 共定位分析
-   - 亚细胞分辨率下的空间表达模式识别
-   - 与现有亚细胞空间域分析集成
-
-#### 9. 🚀 **生产化部署**
-   - Docker 容器化
-   - Kubernetes 部署配置
-   - CI/CD 流水线
-   - 监控与日志系统
-
-#### 10. 📚 **社区建设**
-   - 完善文档（用户指南、API 文档、开发者指南）
-   - 添加示例数据集和教程
-   - 添加贡献指南
-   - 发布到 PyPI
+基于以上分析，我制定了一个**分阶段的重构计划**，目标是让每个步骤工具都能像插件一样注册、发现、替换。
 
 ---
 
-## 四、优先级建议
+## 完整重构计划
+
+### ✅ Phase 0：基础设施重构（已完成）
+
+**目标**：建立插件化架构的基础设施，不破坏现有功能
+
+#### ✅ Step 1: 中央后端注册机制
+- 创建 `src/registry.py`，实现 `_BackendRegistry` 单例：
+  - `register_backend(step_name, backend_name)` — 装饰器注册
+  - `get_available_backends(step_name)` — 获取可用后端列表
+  - `get_backend_func(step_name, backend_name)` — 获取后端函数
+  - `get_default_backend(step_name)` — 获取默认后端
+  - `get_step_order()` / `get_step_config(step_name)` — 配置相关
+  - `load_backends()` — 自动发现已注册后端
+- 模块级便利别名：`register_backend`, `get_available_backends`, `get_backend_func`
+
+#### ✅ Step 2: 统一步骤返回值
+- 创建 `StepResult` 数据类（在 `src/models.py` 中）：
+  ```python
+  @dataclass
+  class StepResult:
+      output: Any          # 步骤输出数据
+      summary: dict        # 步骤摘要信息
+      backend_used: str    # 实际使用的后端名称
+  ```
+- 所有 6 个步骤函数改为返回 `StepResult`：
+  - `denoise` → `StepResult(output=filtered_df, summary=..., backend_used=...)`
+  - `segmentation` → `StepResult(output=segmented_df, summary=..., backend_used=...)`
+  - `spatial_domain` → `StepResult(output=adata, summary=..., backend_used=...)`
+  - `subcellular_spatial_domain` → `StepResult(output=(segmented_df, adata), summary=..., backend_used=...)`
+  - `analysis` → `StepResult(output=adata, summary=..., backend_used=...)`
+  - `annotation` → `StepResult(output=adata, summary=..., backend_used=...)`
+
+#### ✅ Step 3: 所有步骤改用装饰器注册后端
+- 移除所有 `AVAILABLE_XXX_BACKENDS` 硬编码元组
+- 每个后端函数通过 `@register_backend(step_name, backend_name)` 注册
+- 内部 dispatch 使用私有字典（`_CLUSTER_FUNCS`, `_SPATIAL_DOMAIN_FUNCS` 等）
+
+#### ✅ Step 4: 更新管线编排
+- `src/pipelines/cosmx_minimal.py` 改为使用 `StepResult.output` / `.summary` 模式
+- 函数签名不变（向后兼容），仍返回 `PipelineResult`
+
+#### ✅ Step 5: 更新 API/CLI/Benchmark
+- `api_server.py`：移除 `AVAILABLE_*` 导入，改用 `get_available_backends(step_name)`
+- `cli.py`：同上
+- `benchmark.py`：同上
+- `src/__main__.py`：清理未使用的 `import os`
+
+#### ✅ Step 6: 更新测试
+- 所有步骤测试文件更新为 `StepResult` 模式
+- 使用 `get_available_backends()` 替代 `AVAILABLE_*` 常量
+- 所有 78 个测试通过
+
+---
+
+### Phase 1：功能增强（短期 1-2 周）
+
+#### Step 7: 配置管理系统
+- 创建 `src/config.py`，集中管理所有配置
+- 支持 YAML/环境变量/CLI 参数三层覆盖
+- 定义 `PipelineConfig` 数据类
+- 创建 `config/pipeline.yaml` 定义步骤顺序和默认后端
+- 注册表集成 YAML 配置（`get_step_order()`, `get_step_config()`）
+
+#### Step 8: 添加数据验证层
+- 创建 `src/validation.py`，使用 Pydantic 模型验证输入数据
+- 添加管线步骤的输入/输出 schema 验证
+
+#### Step 9: 完善日志和可观测性
+- 添加结构化日志（structlog）
+- 每个步骤记录执行时间、参数、状态
+- 报告系统增强（包含实际使用的算法、回退信息）
+
+#### Step 10: 提升测试覆盖率
+- 添加步骤接口契约测试
+- 添加后端注册/发现测试
+- 添加插件加载测试
+- 添加端到端管线测试
+
+---
+
+### Phase 2：多平台支持（中期 1-2 个月）
+
+#### Step 11: 抽象数据加载接口
+- 创建 `src/io/base.py`，定义 `BaseDataLoader`
+- 现有 `cosmx.py` 改为 `CosMxDataLoader`
+- 添加 Xenium、MERFISH、Stereo-seq 的 stub
+
+#### Step 12: 前端插件化
+- 前端 API 地址改为环境变量
+- 后端列表动态获取（已有 `/api/meta/backends`）
+- 添加步骤配置 UI
+
+---
+
+## 文件结构变更预览（Phase 0 后）
 
 ```
-紧急且重要（立即处理）：
-  ├── 修复路径穿越安全漏洞
-  ├── 添加 igraph 回退的日志记录
-  └── 前端 API 地址可配置化
-
-重要但不紧急（短期计划）：
-  ├── 提升测试覆盖率
-  ├── 代码重构（拆分大组件、统一常量管理）
-  ├── 添加输入数据验证
-  └── 完善报告系统
-
-不重要但紧急（可快速修复）：
-  ├── 添加错误边界和加载状态
-  └── 补充缺失的类型注解
-
-不重要不紧急（长期规划）：
-  ├── 多平台支持
-  ├── SCRIN 模块
-  ├── 生产化部署
-  └── 社区建设
+src/
+├── __init__.py
+├── __main__.py
+├── api_server.py              # [REFACTOR] 使用注册表
+├── benchmark.py               # [REFACTOR] 使用注册表
+├── cli.py                     # [REFACTOR] 使用注册表
+├── models.py                  # [REFACTOR] 添加 StepResult
+├── pipeline.py                # 转发层，未变
+├── registry.py                # [NEW] 中央后端注册机制
+├── evaluation/
+│   ├── __init__.py
+│   └── metrics.py
+├── io/
+│   ├── __init__.py
+│   └── cosmx.py
+├── pipelines/
+│   ├── __init__.py
+│   └── cosmx_minimal.py      # [REFACTOR] StepResult 模式
+└── steps/
+    ├── __init__.py            # [CLEAN] 简化导出
+    ├── analysis.py            # [REFACTOR] 装饰器注册 + StepResult
+    ├── annotation.py          # [REFACTOR] 装饰器注册 + StepResult
+    ├── denoise.py             # [REFACTOR] 装饰器注册 + StepResult
+    ├── segmentation.py        # [REFACTOR] 装饰器注册 + StepResult
+    ├── spatial_domain.py      # [REFACTOR] 装饰器注册 + StepResult
+    └── subcellular_spatial_domain.py  # [REFACTOR] 装饰器注册 + StepResult
 ```
-
----
-
-## 五、总结
-
-SubCellSpace 是一个**架构设计优秀**的项目，模块化管线、可替换后端、分层评估等设计理念非常清晰。当前处于 **Phase 1 收尾阶段**，核心功能已经完备。
-
-**最大的隐忧**是安全性和健壮性——路径穿越漏洞和静默算法回退是需要在进入生产环境前必须解决的问题。其次是测试覆盖率和代码质量，这些会随着项目规模增长而变得越来越重要。
-
-**建议的下一步**：先花 1-2 周时间修复安全漏洞、添加关键日志、提升测试覆盖率，然后再进入 Phase 2 的功能增强阶段。
-
----
-
-请问您对这个分析有什么看法？是否需要我进一步深入某个具体方面，或者您希望切换到 ACT MODE 开始实施某些改进？

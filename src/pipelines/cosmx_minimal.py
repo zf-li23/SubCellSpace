@@ -38,32 +38,42 @@ def run_cosmx_minimal(
     transcripts = load_cosmx_transcripts(input_csv)
     summary = summarize_cosmx_transcripts(transcripts, input_csv)
 
-    denoised, denoise_summary = apply_transcript_denoise(transcripts, backend=denoise_backend)
-    segmented, segmentation_summary = assign_cells(denoised, backend=segmentation_backend)
+    # Step 1: Denoise
+    denoise_result = apply_transcript_denoise(transcripts, backend=denoise_backend)
+    denoised = denoise_result.output
+
+    # Step 2: Segmentation
+    seg_result = assign_cells(denoised, backend=segmentation_backend)
+    segmented = seg_result.output
     adata = build_cell_level_adata(segmented)
 
     # Step 3: Spatial Domain Identification (cell-level + subcellular-level)
-    adata, spatial_domain_summary = run_spatial_domain_identification(
+    domain_result = run_spatial_domain_identification(
         adata,
         backend=spatial_domain_backend,
         domain_resolution=spatial_domain_resolution,
         n_spatial_domains=n_spatial_domains,
     )
-    segmented, adata, subcellular_summary = run_subcellular_spatial_domain(
+    adata = domain_result.output
+
+    subcellular_result = run_subcellular_spatial_domain(
         segmented, adata, backend=subcellular_domain_backend
     )
+    segmented, adata = subcellular_result.output
 
     # Step 4: Clustering & Expression Analysis
-    adata, analysis_summary = run_expression_and_spatial_analysis(
+    analysis_result = run_expression_and_spatial_analysis(
         adata,
         min_transcripts=min_transcripts,
         min_genes=min_genes,
         clustering_backend=clustering_backend,
         leiden_resolution=leiden_resolution,
     )
+    adata = analysis_result.output
 
     # Step 5: Cell-type Annotation
-    adata, annotation_summary = run_cell_type_annotation(adata, backend=annotation_backend)
+    annotation_result = run_cell_type_annotation(adata, backend=annotation_backend)
+    adata = annotation_result.output
 
     sdata = build_spatialdata(adata)
     layer_evaluation = build_layer_evaluation(
@@ -92,12 +102,12 @@ def run_cosmx_minimal(
             **summary.extra,
         },
         "step_summary": {
-            "denoise": denoise_summary,
-            "segmentation": segmentation_summary,
-            "spatial_domain": spatial_domain_summary,
-            "subcellular_spatial_domain": subcellular_summary,
-            "analysis": analysis_summary,
-            "annotation": annotation_summary,
+            "denoise": denoise_result.summary,
+            "segmentation": seg_result.summary,
+            "spatial_domain": domain_result.summary,
+            "subcellular_spatial_domain": subcellular_result.summary,
+            "analysis": analysis_result.summary,
+            "annotation": annotation_result.summary,
         },
         "layer_evaluation": layer_evaluation,
         "outputs": {

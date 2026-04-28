@@ -6,12 +6,8 @@ import anndata as ad
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import kneighbors_graph
 
-AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS = (
-    "hdbscan",
-    "dbscan",
-    "leiden_spatial",
-    "none",
-)
+from ..models import StepResult
+from ..registry import register_backend
 
 
 # ── per-backend clustering functions ──────────────────────────────────────
@@ -128,12 +124,25 @@ def _leiden_spatial_subcellular_domains(
     return pd.Series(domain_labels, index=cell_df.index)
 
 
-# ── dispatch table ────────────────────────────────────────────────────────
+def _none_subcellular_domains(
+    cell_df: pd.DataFrame,
+) -> pd.Series:
+    """No-op backend: assigns \"0\" to all transcripts (skip clustering)."""
+    return pd.Series(["0"] * len(cell_df), index=cell_df.index)
 
+
+# Register backends (order: (step_name, backend_name))
+register_backend("subcellular_spatial_domain", "hdbscan")(_hdbscan_subcellular_domains)
+register_backend("subcellular_spatial_domain", "dbscan")(_dbscan_subcellular_domains)
+register_backend("subcellular_spatial_domain", "leiden_spatial")(_leiden_spatial_subcellular_domains)
+register_backend("subcellular_spatial_domain", "none")(_none_subcellular_domains)
+
+# Dispatch table
 _CLUSTER_FUNCS = {
     "hdbscan": _hdbscan_subcellular_domains,
     "dbscan": _dbscan_subcellular_domains,
     "leiden_spatial": _leiden_spatial_subcellular_domains,
+    "none": _none_subcellular_domains,
 }
 
 
@@ -152,7 +161,7 @@ def run_subcellular_spatial_domain(
     # leiden_spatial params
     leiden_n_neighbors: int = 25,
     leiden_resolution: float = 0.5,
-) -> tuple[pd.DataFrame, ad.AnnData, dict]:
+) -> StepResult:
     """Assign subcellular spatial domain labels to each transcript within each cell.
 
     Parameters
@@ -168,18 +177,15 @@ def run_subcellular_spatial_domain(
 
     Returns
     -------
-    segmented_df : pd.DataFrame
-        Same DataFrame with added "subcellular_domain" column.
-    adata : ad.AnnData
-        AnnData with added obs columns: n_subcellular_domains,
-        subcellular_domain_distribution.
-    summary : dict
-        Summary statistics.
+    StepResult
+        ``.output`` is ``(segmented_df, adata)`` tuple.
+        ``.summary`` contains summary statistics.
+        ``.backend_used`` is the backend name.
     """
-    if backend not in AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS:
+    if backend not in _CLUSTER_FUNCS and backend != "none":
         raise ValueError(
             f"Unknown subcellular spatial domain backend: {backend}. "
-            f"Choose from {AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS}"
+            f"Choose from {list(_CLUSTER_FUNCS) + ['none']}"
         )
 
     if backend == "none":
@@ -195,7 +201,11 @@ def run_subcellular_spatial_domain(
             "mean_domains_per_cell": 1.0,
             "total_noise_transcripts": 0,
         }
-        return segmented_df, adata, summary
+        return StepResult(
+            output=(segmented_df, adata),
+            summary=summary,
+            backend_used="none",
+        )
 
     # Build kwargs for the chosen backend
     cluster_kwargs: dict
@@ -277,4 +287,8 @@ def run_subcellular_spatial_domain(
     # Attach backend-specific params to summary
     summary.update(cluster_kwargs)
 
-    return segmented_df, adata, summary
+    return StepResult(
+        output=(segmented_df, adata),
+        summary=summary,
+        backend_used=backend,
+    )

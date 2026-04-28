@@ -3,10 +3,7 @@ from .analysis import run_expression_and_spatial_analysis
 from .denoise import apply_transcript_denoise
 from .segmentation import assign_cells
 from .spatial_domain import run_spatial_domain_identification
-from .subcellular_spatial_domain import (
-    AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS,
-    run_subcellular_spatial_domain,
-)
+from .subcellular_spatial_domain import run_subcellular_spatial_domain
 
 __all__ = [
     "apply_transcript_denoise",
@@ -15,5 +12,4 @@ __all__ = [
     "run_cell_type_annotation",
     "run_spatial_domain_identification",
     "run_subcellular_spatial_domain",
-    "AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS",
 ]
