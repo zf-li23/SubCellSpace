@@ -489,6 +489,18 @@ function TranscriptScatter({ cellId }: { cellId: string }) {
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="transcript-svg">
         <rect x={0} y={0} width={W} height={H} fill="rgba(247,251,253,0.5)" rx={8} />
+        {data.hull && data.hull.length >= 3 && (
+          <polygon
+            points={data.hull.map((h) => {
+              const s = toSvg(h.x, h.y)
+              return `${s.x},${s.y}`
+            }).join(' ')}
+            fill="rgba(22,50,63,0.06)"
+            stroke="rgba(22,50,63,0.30)"
+            strokeWidth={1.2}
+            strokeDasharray="4 2"
+          />
+        )}
         {data.points.map((pt, idx) => {
           const svg = toSvg(pt.x, pt.y)
           const isHovered = hoveredGene === pt.gene

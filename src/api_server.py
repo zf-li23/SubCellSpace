@@ -258,6 +258,49 @@ def cosmx_benchmark(
     )
 
 
+def _compute_convex_hull(xs: list[float], ys: list[float]) -> list[dict[str, float]]:
+    """Compute the 2D convex hull of points using Andrew's monotone chain algorithm.
+    
+    Returns a list of {x, y} dicts in counter-clockwise order forming the hull polygon.
+    """
+    if len(xs) < 3:
+        return [{"x": x, "y": y} for x, y in zip(xs, ys)]
+
+    points = list(zip(xs, ys))
+    # Remove duplicates and sort by x then y
+    points = sorted(set(points))
+
+    # Build lower hull
+    lower: list[tuple[float, float]] = []
+    for p in points:
+        while len(lower) >= 2:
+            x1, y1 = lower[-2]
+            x2, y2 = lower[-1]
+            px, py = p
+            if (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1) <= 0:
+                lower.pop()
+            else:
+                break
+        lower.append(p)
+
+    # Build upper hull
+    upper: list[tuple[float, float]] = []
+    for p in reversed(points):
+        while len(upper) >= 2:
+            x1, y1 = upper[-2]
+            x2, y2 = upper[-1]
+            px, py = p
+            if (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1) <= 0:
+                upper.pop()
+            else:
+                break
+        upper.append(p)
+
+    # Remove last point of each half because it's duplicated
+    hull_points = lower[:-1] + upper[:-1]
+    return [{"x": x, "y": y} for x, y in hull_points]
+
+
 def main() -> None:
     import uvicorn
 
@@ -322,20 +365,35 @@ def get_cell_transcripts(
         cell_df = cell_df[gene_mask]
 
     points = []
+    hull_x_vals = []
+    hull_y_vals = []
     for _, row in cell_df.iterrows():
+        x = float(row["x_global_px"])
+        y = float(row["y_global_px"])
         points.append({
-            "x": float(row["x_global_px"]),
-            "y": float(row["y_global_px"]),
+            "x": x,
+            "y": y,
             "color": str(row.get("target", "unknown")),
             "gene": str(row.get("target", "unknown")),
             "fov": int(row.get("fov", -1)),
         })
+        hull_x_vals.append(x)
+        hull_y_vals.append(y)
+
+    hull = _compute_convex_hull(hull_x_vals, hull_y_vals)
 
     return {
         "cell_id": cell_id,
         "n_transcripts": len(points),
         "genes": sorted(cell_df["target"].astype(str).unique().tolist()),
         "points": points,
+        "hull": hull,
+        "bounds": {
+            "min_x": min(hull_x_vals) if hull_x_vals else 0,
+            "max_x": max(hull_x_vals) if hull_x_vals else 0,
+            "min_y": min(hull_y_vals) if hull_y_vals else 0,
+            "max_y": max(hull_y_vals) if hull_y_vals else 0,
+        },
     }
 
 

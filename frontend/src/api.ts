@@ -237,6 +237,16 @@ export type CellTranscripts = {
     gene: string
     fov: number
   }>
+  hull?: Array<{
+    x: number
+    y: number
+  }>
+  bounds?: {
+    min_x: number
+    max_x: number
+    min_y: number
+    max_y: number
+  }
 }
 
 export async function loadCellTranscripts(

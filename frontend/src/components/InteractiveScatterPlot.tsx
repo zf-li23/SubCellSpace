@@ -85,8 +85,9 @@ export default function InteractiveScatterPlot({
       if (!svgRef.current) return
 
       const rect = svgRef.current.getBoundingClientRect()
-      const mouseX = event.clientX - rect.left
-      const mouseY = event.clientY - rect.top
+      // Convert CSS-pixel mouse position to viewBox coordinates
+      const mouseX = ((event.clientX - rect.left) / rect.width) * width
+      const mouseY = ((event.clientY - rect.top) / rect.height) * height
 
       // Find closest point within a threshold
       let closest: { point: ScatterPoint; dist: number } | null = null
@@ -112,7 +113,7 @@ export default function InteractiveScatterPlot({
           : null,
       )
     },
-    [series.points, toSvg],
+    [series.points, toSvg, width, height],
   )
 
   const handleMouseLeave = useCallback(() => {
@@ -124,8 +125,9 @@ export default function InteractiveScatterPlot({
       if (!svgRef.current || !onCellClick) return
 
       const rect = svgRef.current.getBoundingClientRect()
-      const mouseX = event.clientX - rect.left
-      const mouseY = event.clientY - rect.top
+      // Convert CSS-pixel mouse position to viewBox coordinates
+      const mouseX = ((event.clientX - rect.left) / rect.width) * width
+      const mouseY = ((event.clientY - rect.top) / rect.height) * height
 
       let closest: { point: ScatterPoint; dist: number } | null = null
       const threshold = 12
@@ -144,7 +146,7 @@ export default function InteractiveScatterPlot({
         onCellClick(closest.point.cell_id)
       }
     },
-    [series.points, toSvg, onCellClick],
+    [series.points, toSvg, onCellClick, width, height],
   )
 
   return (
