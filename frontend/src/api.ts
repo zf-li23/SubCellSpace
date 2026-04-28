@@ -138,8 +138,20 @@ export type PipelineReport = {
   outputs?: Record<string, unknown>
 }
 
+export type BenchmarkRow = {
+  tag?: string
+  input_csv?: string
+  n_obs?: number
+  n_vars?: number
+  clusters?: Record<string, number>
+  summary?: Record<string, unknown>
+  step_summary?: StepSummary
+  layer_evaluation?: LayerEvaluation
+  outputs?: Record<string, unknown>
+}
+
 export type BenchmarkSummary = {
-  rows?: Array<Record<string, unknown>>
+  rows?: BenchmarkRow[]
   summary?: Record<string, unknown>
 }
 
