@@ -121,6 +121,7 @@ subcellspace run-cosmx data/test/Mouse_brain_CosMX_1000cells.csv \
 - 聚类：`leiden`、`kmeans`
 - 细胞类型注释：`cluster_label`、`rank_marker`
 - 空间域识别：`spatial_leiden`、`spatial_kmeans`
+- 亚细胞空间域：`hdbscan`、`dbscan`、`leiden_spatial`、`none`
 
 批量后端对比（自动汇总各层指标）：
 

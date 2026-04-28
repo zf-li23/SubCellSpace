@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   loadBenchmarkSummary,
+  loadRuns,
   type BenchmarkRow,
   type PipelineReport,
+  type RunListItem,
 } from '../api'
 import LoadingSkeleton from '../components/LoadingSkeleton'
 
@@ -54,6 +56,19 @@ const DL_COLUMNS: { key: keyof DatasetRow; label: string; align?: string }[] = [
   { key: 'tissue', label: 'Tissue' },
   { key: 'status', label: 'Status' },
 ]
+
+function runLabel(run: RunListItem): string {
+  const parts: string[] = [run.run_name]
+  const backends = [
+    run.denoise_backend,
+    run.segmentation_backend,
+    run.clustering_backend,
+    run.annotation_backend,
+    run.spatial_domain_backend,
+  ].filter(Boolean)
+  if (backends.length) parts.push(backends.join(' · '))
+  return parts.join(': ')
+}
 
 const ALL_VALUE = '__ALL__'
 
@@ -444,6 +459,7 @@ function BenchmarkChart({ rows }: { rows: ChartRow[] }) {
 
 export default function DataBrowser() {
   const [summary, setSummary] = useState<BenchmarkRow[] | null>(null)
+  const [runs, setRuns] = useState<RunListItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -457,26 +473,59 @@ export default function DataBrowser() {
     clustering: ALL_VALUE,
   })
 
-  /* Load benchmark data */
+  /* Load data: runs + benchmark */
   useEffect(() => {
     setLoading(true)
-    loadBenchmarkSummary()
-      .then((value) => {
-        // API may return {rows: [...]} or a plain array
-        const raw = value as unknown
-        if (Array.isArray(raw)) {
-          setSummary(raw as BenchmarkRow[])
-        } else if (raw && typeof raw === 'object' && 'rows' in raw) {
-          setSummary(
-            ((raw as { rows: unknown[] }).rows ?? []) as BenchmarkRow[],
-          )
-        } else {
-          setSummary([])
-        }
+    Promise.all([
+      loadRuns().catch(() => [] as RunListItem[]),
+      loadBenchmarkSummary()
+        .then((value) => {
+          const raw = value as unknown
+          if (Array.isArray(raw)) {
+            return raw as BenchmarkRow[]
+          } else if (raw && typeof raw === 'object' && 'rows' in raw) {
+            return ((raw as { rows: unknown[] }).rows ?? []) as BenchmarkRow[]
+          }
+          return [] as BenchmarkRow[]
+        })
+        .catch(() => [] as BenchmarkRow[]),
+    ])
+      .then(([loadedRuns, loadedSummary]) => {
+        setRuns(loadedRuns)
+        setSummary(loadedSummary)
       })
       .catch((err) => setError(String(err)))
       .finally(() => setLoading(false))
   }, [])
+
+  /* Compose dataset rows from API runs */
+  const runRows: DatasetRow[] = useMemo(() => {
+    return runs.map((run) => {
+      const backends = [
+        run.denoise_backend,
+        run.segmentation_backend,
+        run.clustering_backend,
+        run.annotation_backend,
+        run.spatial_domain_backend,
+      ].filter(Boolean)
+      return {
+        dataset: `${run.run_name}: ${backends.length ? backends.join(' · ') : 'pipeline run'}`,
+        cells: run.n_cells,
+        genes: run.n_genes,
+        transcripts: 0,
+        fovs: 0,
+        technology: 'CosMx SMI',
+        tissue: 'Mouse brain',
+        status: '📦 Run',
+        report: {
+          input_csv: run.input_csv ?? undefined,
+          n_obs: run.n_cells,
+          n_vars: run.n_genes,
+          outputs: { report: run.report_path },
+        },
+      }
+    })
+  }, [runs])
 
   /* Compose dataset rows */
   const benchmarkRows: DatasetRow[] = useMemo(() => {
@@ -698,7 +747,7 @@ export default function DataBrowser() {
               </tr>
             </thead>
             <tbody>
-              {/* Always show CosMx static entry */}
+              {/* Static CosMx example entry */}
               <tr
                 className="data-row-clickable"
                 onClick={() =>
@@ -730,6 +779,37 @@ export default function DataBrowser() {
                   </td>
                 ))}
               </tr>
+
+              {/* Dynamic runs from API */}
+              {runRows.map((dr, idx) => (
+                <tr
+                  key={`run-${idx}`}
+                  className="data-row-clickable"
+                  onClick={() => dr.report && setModalRow(dr.report)}
+                >
+                  {DL_COLUMNS.map((col) => (
+                    <td
+                      key={col.key}
+                      style={
+                        col.align
+                          ? { textAlign: col.align as 'right' }
+                          : undefined
+                      }
+                    >
+                      {col.key === 'transcripts'
+                        ? dr.transcripts.toLocaleString()
+                        : String(dr[col.key])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {runRows.length === 0 && !error && (
+                <tr>
+                  <td colSpan={DL_COLUMNS.length} className="data-empty">
+                    No pipeline runs found under outputs/.
+                  </td>
+                </tr>
+              )}
 
               {error && (
                 <tr>

@@ -55,6 +55,7 @@ class CosmxRunRequest(BaseModel):
     spatial_domain_backend: str = "spatial_leiden"
     spatial_domain_resolution: float = 1.0
     n_spatial_domains: int | None = None
+    subcellular_domain_backend: str = "hdbscan"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -103,6 +104,7 @@ def _resolve_output_dir(request: CosmxRunRequest) -> Path:
                 request.clustering_backend,
                 request.annotation_backend,
                 request.spatial_domain_backend,
+                request.subcellular_domain_backend,
                 str(request.min_transcripts),
                 str(request.min_genes),
                 str(request.leiden_resolution),
@@ -120,6 +122,7 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
     _validate_backend("clustering_backend", request.clustering_backend, AVAILABLE_CLUSTERING_BACKENDS)
     _validate_backend("annotation_backend", request.annotation_backend, AVAILABLE_ANNOTATION_BACKENDS)
     _validate_backend("spatial_domain_backend", request.spatial_domain_backend, AVAILABLE_SPATIAL_DOMAIN_BACKENDS)
+    _validate_backend("subcellular_domain_backend", request.subcellular_domain_backend, AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS)
 
     input_csv_path = _resolve_under_repo(request.input_csv)
     if not input_csv_path.exists():
@@ -138,6 +141,7 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
         spatial_domain_backend=request.spatial_domain_backend,
         spatial_domain_resolution=request.spatial_domain_resolution,
         n_spatial_domains=request.n_spatial_domains,
+        subcellular_domain_backend=request.subcellular_domain_backend,
     )
 
     report = json.loads(result.report_path.read_text(encoding="utf-8"))
@@ -147,6 +151,45 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
         "parameters": request.model_dump(),
     }
     return report
+
+
+@app.get("/api/runs")
+def list_runs() -> list[dict[str, Any]]:
+    """List all available runs under outputs/ with parsed report metadata."""
+    runs: list[dict[str, Any]] = []
+    if not OUTPUTS_ROOT.exists():
+        return runs
+
+    for child in sorted(OUTPUTS_ROOT.iterdir()):
+        if not child.is_dir():
+            continue
+        report_path = child / "cosmx_minimal_report.json"
+        if not report_path.is_file():
+            continue
+
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        params = report.get("parameters", {})
+        analysis = report.get("analysis_summary", {}) or report.get("metadata", {}) or {}
+
+        runs.append({
+            "run_name": child.name,
+            "report_path": str(report_path.resolve()),
+            "created_at": params.get("created_at") or params.get("timestamp"),
+            "n_cells": analysis.get("n_cells") or report.get("n_cells") or 0,
+            "n_genes": analysis.get("n_genes") or report.get("n_genes") or 0,
+            "denoise_backend": params.get("denoise_backend"),
+            "segmentation_backend": params.get("segmentation_backend"),
+            "clustering_backend": params.get("clustering_backend"),
+            "annotation_backend": params.get("annotation_backend"),
+            "spatial_domain_backend": params.get("spatial_domain_backend"),
+            "input_csv": params.get("input_csv"),
+        })
+
+    return runs
 
 
 @app.get("/api/health")
@@ -216,6 +259,7 @@ def cosmx_report(
     spatial_domain_backend: str = Query(default="spatial_leiden"),
     spatial_domain_resolution: float = Query(default=1.0, gt=0),
     n_spatial_domains: int | None = Query(default=None, ge=1),
+    subcellular_domain_backend: str = Query(default="hdbscan"),
 ) -> dict[str, Any]:
     request = CosmxRunRequest(
         input_csv=input_csv,
@@ -230,6 +274,7 @@ def cosmx_report(
         spatial_domain_backend=spatial_domain_backend,
         spatial_domain_resolution=spatial_domain_resolution,
         n_spatial_domains=n_spatial_domains,
+        subcellular_domain_backend=subcellular_domain_backend,
     )
     return _run_cosmx(request)
 

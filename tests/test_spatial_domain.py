@@ -29,17 +29,20 @@ class TestRunSpatialDomainIdentification:
         assert summary["spatial_domain_backend_used"] == "spatial_kmeans"
         assert summary["n_spatial_domains"] > 0
 
-    def test_missing_connectivities_raises(self, sample_anndata):
+    def test_missing_connectivities_auto_computed(self, sample_anndata):
+        """When spatial_connectivities is missing, _ensure_spatial_neighbors auto-computes it."""
         adata = sample_anndata.copy()
         if "spatial_connectivities" in adata.obsp:
             del adata.obsp["spatial_connectivities"]
-        with __import__("pytest").raises(ValueError, match="spatial_connectivities"):
-            run_spatial_domain_identification(
-                adata,
-                backend="spatial_leiden",
-                domain_resolution=1.0,
-                n_spatial_domains=None,
-            )
+        # Should NOT raise -- the function auto-computes spatial neighbors
+        result_adata, summary = run_spatial_domain_identification(
+            adata,
+            backend="spatial_leiden",
+            domain_resolution=1.0,
+            n_spatial_domains=None,
+        )
+        assert "spatial_domain" in result_adata.obs
+        assert "spatial_connectivities" in result_adata.obsp
 
     def test_unknown_backend_raises(self, sample_anndata):
         with __import__("pytest").raises(ValueError, match="Unknown spatial domain backend"):

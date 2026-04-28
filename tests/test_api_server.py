@@ -26,6 +26,7 @@ class TestHealthAndMeta:
         assert "clustering" in data
         assert "annotation" in data
         assert "spatial_domain" in data
+        assert "subcellular_spatial_domain" in data
         for key in data:
             assert isinstance(data[key], list)
             assert len(data[key]) > 0

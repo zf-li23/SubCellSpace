@@ -239,6 +239,24 @@ export async function loadPipelineReport(backendConfig?: BackendConfig): Promise
   )
 }
 
+export type RunListItem = {
+  run_name: string
+  report_path: string
+  created_at?: string | null
+  n_cells: number
+  n_genes: number
+  denoise_backend?: string | null
+  segmentation_backend?: string | null
+  clustering_backend?: string | null
+  annotation_backend?: string | null
+  spatial_domain_backend?: string | null
+  input_csv?: string | null
+}
+
+export async function loadRuns(): Promise<RunListItem[]> {
+  return (await fetchJson<RunListItem[]>('/api/runs')) ?? []
+}
+
 export async function loadBenchmarkSummary(): Promise<BenchmarkSummary | null> {
   return (
     (await fetchJson<BenchmarkSummary>('/api/benchmarks/cosmx_benchmark_round')) ||

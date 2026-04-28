@@ -122,6 +122,7 @@ curl "http://127.0.0.1:8000/api/plots?report_path=outputs/cosmx_try_again_round/
 - `spatial_domain_backend`
 - `spatial_domain_resolution`
 - `n_spatial_domains`
+- `subcellular_domain_backend`
 
 示例：
 
@@ -148,7 +149,8 @@ curl "http://127.0.0.1:8000/api/cosmx/report?input_csv=data/test/Mouse_brain_Cos
   "annotation_backend": "rank_marker",
   "spatial_domain_backend": "spatial_leiden",
   "spatial_domain_resolution": 1.0,
-  "n_spatial_domains": null
+  "n_spatial_domains": null,
+  "subcellular_domain_backend": "hdbscan"
 }
 ```
 
