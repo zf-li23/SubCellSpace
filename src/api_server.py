@@ -18,6 +18,7 @@ from .steps.analysis import AVAILABLE_CLUSTERING_BACKENDS
 from .steps.denoise import AVAILABLE_DENOISE_BACKENDS
 from .steps.segmentation import AVAILABLE_SEGMENTATION_BACKENDS
 from .steps.spatial_domain import AVAILABLE_SPATIAL_DOMAIN_BACKENDS
+from .steps.subcellular_spatial_domain import AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS
 
 DEFAULT_INPUT_CSV = Path("data/test/Mouse_brain_CosMX_1000cells.csv")
 DEFAULT_OUTPUT_DIR = Path("outputs/api_runs")
@@ -161,6 +162,7 @@ def backends() -> dict[str, list[str]]:
         "clustering": AVAILABLE_CLUSTERING_BACKENDS,
         "annotation": AVAILABLE_ANNOTATION_BACKENDS,
         "spatial_domain": AVAILABLE_SPATIAL_DOMAIN_BACKENDS,
+        "subcellular_spatial_domain": AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS,
     }
 
 
@@ -373,8 +375,9 @@ def get_cell_transcripts(
         points.append({
             "x": x,
             "y": y,
-            "color": str(row.get("target", "unknown")),
+            "subcellular_domain": str(row.get("subcellular_domain", "0")),
             "gene": str(row.get("target", "unknown")),
+            "cellcomp": str(row.get("CellComp", "unknown")),
             "fov": int(row.get("fov", -1)),
         })
         hull_x_vals.append(x)

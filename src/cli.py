@@ -10,6 +10,7 @@ from .steps.analysis import AVAILABLE_CLUSTERING_BACKENDS
 from .steps.denoise import AVAILABLE_DENOISE_BACKENDS
 from .steps.segmentation import AVAILABLE_SEGMENTATION_BACKENDS
 from .steps.spatial_domain import AVAILABLE_SPATIAL_DOMAIN_BACKENDS
+from .steps.subcellular_spatial_domain import AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,6 +30,11 @@ def build_parser() -> argparse.ArgumentParser:
     cosmx.add_argument("--spatial-domain-backend", choices=AVAILABLE_SPATIAL_DOMAIN_BACKENDS, default="spatial_leiden")
     cosmx.add_argument("--spatial-domain-resolution", type=float, default=1.0)
     cosmx.add_argument("--n-spatial-domains", type=int, default=None)
+    cosmx.add_argument(
+        "--subcellular-domain-backend",
+        choices=AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS,
+        default="hdbscan",
+    )
 
     benchmark = subparsers.add_parser("benchmark-cosmx", help="Run backend benchmark grid on CosMx data")
     benchmark.add_argument("input_csv", type=Path)
@@ -60,6 +66,7 @@ def main() -> None:
             spatial_domain_backend=args.spatial_domain_backend,
             spatial_domain_resolution=args.spatial_domain_resolution,
             n_spatial_domains=args.n_spatial_domains,
+            subcellular_domain_backend=args.subcellular_domain_backend,
         )
         print(result.summary.to_text())
         print(f"Saved AnnData to: {result.adata_path}")

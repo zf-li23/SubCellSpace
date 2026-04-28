@@ -47,6 +47,13 @@ export type SpatialDomainMetrics = {
   domain_cluster_ari?: number
 }
 
+export type SubcellularDomainMetrics = {
+  n_cells_with_multiple_domains?: number
+  fraction_multi_domain?: number
+  mean_domains_per_cell?: number
+  n_transcripts_in_multi_domain_cells?: number
+}
+
 export type SpatialGraphMetrics = {
   graph_available?: boolean
   n_nodes?: number
@@ -64,6 +71,7 @@ export type LayerEvaluation = {
   clustering?: ClusteringMetrics
   annotation?: AnnotationMetrics
   spatial_domain?: SpatialDomainMetrics
+  subcellular_spatial_domain?: SubcellularDomainMetrics
   spatial?: SpatialGraphMetrics
 }
 
@@ -99,12 +107,24 @@ export type SpatialDomainStepSummary = {
   spatial_domain_distribution?: Record<string, number>
 }
 
+export type SubcellularStepSummary = {
+  subcellular_spatial_domain_backend?: string
+  dbscan_eps?: number
+  dbscan_min_samples?: number
+  n_cells_processed?: number
+  n_cells_with_multiple_domains?: number
+  fraction_multi_domain?: number
+  mean_domains_per_cell?: number
+  total_noise_transcripts?: number
+}
+
 export type StepSummary = {
   denoise?: DenoiseStepSummary
   segmentation?: SegmentationStepSummary
   analysis?: AnalysisStepSummary
   annotation?: Record<string, unknown>
   spatial_domain?: SpatialDomainStepSummary
+  subcellular_spatial_domain?: SubcellularStepSummary
 }
 
 export type PipelineReport = {
@@ -226,17 +246,20 @@ export async function loadPlotData(reportPath?: string | null, outputDir?: strin
   return await fetchJson<PlotData>(`/api/plots${suffix}`)
 }
 
+export type CellTranscriptPoint = {
+  x: number
+  y: number
+  subcellular_domain: string
+  gene: string
+  cellcomp: string
+  fov: number
+}
+
 export type CellTranscripts = {
   cell_id: string
   n_transcripts: number
   genes: string[]
-  points: Array<{
-    x: number
-    y: number
-    color: string
-    gene: string
-    fov: number
-  }>
+  points: CellTranscriptPoint[]
   hull?: Array<{
     x: number
     y: number

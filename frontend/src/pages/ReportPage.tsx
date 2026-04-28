@@ -6,6 +6,7 @@ import {
   runCosmxPipeline,
   loadCellTranscripts,
   type CellTranscripts,
+  type CellTranscriptPoint,
   type PlotData,
   type PipelineReport,
   type LayerEvaluation,
@@ -15,12 +16,14 @@ import {
   type ClusteringMetrics,
   type AnnotationMetrics,
   type SpatialDomainMetrics,
+  type SubcellularDomainMetrics,
   type SpatialGraphMetrics,
   type IngestionMetrics,
   type DenoiseStepSummary,
   type SegmentationStepSummary,
   type AnalysisStepSummary,
   type SpatialDomainStepSummary,
+  type SubcellularStepSummary,
 } from '../api'
 import InteractiveScatterPlot from '../components/InteractiveScatterPlot'
 import DonutChart from '../components/DonutChart'
@@ -50,6 +53,8 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
 
   const eval_ = report?.layer_evaluation
   const step_ = report?.step_summary
+  type ColorMode = 'subcellular' | 'gene' | 'cellcomp'
+  const defaultColorMode: ColorMode = 'subcellular'
 
   const rerun = async () => {
     setRunning(true)
@@ -159,9 +164,81 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           </StepSection>
 
           {/* ============================================ */}
-          {/* STEP 3: Clustering / Analysis                 */}
+          {/* STEP 3: Spatial Domain Identification        */}
           {/* ============================================ */}
-          <StepSection title="Step 3: Clustering & Expression Analysis" stepIndex={3} totalSteps={5}
+          <StepSection title="Step 3: Spatial Domain Identification" stepIndex={3} totalSteps={5}
+            substeps={[
+              { label: 'Cell-level backend', value: step_?.spatial_domain?.spatial_domain_backend_used ?? backendConfig.spatialDomain },
+              { label: '# cell domains', value: formatMetric(eval_?.spatial_domain?.n_spatial_domains) },
+              { label: 'Subcell backend', value: step_?.subcellular_spatial_domain?.subcellular_spatial_domain_backend ?? 'dbscan' },
+              { label: 'Multi-domain cells', value: formatMetric(eval_?.subcellular_spatial_domain?.n_cells_with_multiple_domains) },
+            ]}
+          >
+            {/* Subcellular domain summary */}
+            <div className="step-insight-card">
+              <h4>Subcellular spatial domain statistics</h4>
+              <StatTable rows={subcellularDomainRows(eval_?.subcellular_spatial_domain, step_?.subcellular_spatial_domain)} />
+            </div>
+
+            <div className="step-two-col" style={{ marginTop: 12 }}>
+              {/* Spatial domain distribution */}
+              <div className="step-insight-card">
+                <h4>Cell-level spatial domain distribution</h4>
+                {step_?.spatial_domain?.spatial_domain_distribution ? (
+                  <BarChart data={step_.spatial_domain.spatial_domain_distribution as Record<string, number>} />
+                ) : (
+                  <div className="empty-state">No domain distribution data.</div>
+                )}
+              </div>
+              {/* Spatial graph metrics */}
+              <div className="step-insight-card">
+                <h4>Spatial graph (cell-level)</h4>
+                <StatTable rows={spatialGraphStatRows(eval_?.spatial)} />
+              </div>
+            </div>
+
+            {/* Multi-level explanation */}
+            <div className="step-insight-card" style={{ marginTop: 12 }}>
+              <h4>Multi-level spatial domains</h4>
+              <table className="domain-level-table">
+                <thead>
+                  <tr>
+                    <th>Level</th>
+                    <th>Granularity</th>
+                    <th>Current support</th>
+                    <th>Backend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Cell-level</strong></td>
+                    <td>Groups of cells sharing spatial proximity</td>
+                    <td>
+                      <span className="status-badge status-badge--supported">Available</span>
+                    </td>
+                    <td>{step_?.spatial_domain?.spatial_domain_backend_used ?? 'spatial_leiden'}</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Subcellular-level</strong></td>
+                    <td>Transcript-level spatial domains within cells</td>
+                    <td>
+                      <span className="status-badge status-badge--supported">Available</span>
+                    </td>
+                    <td>DBSCAN (eps={step_?.subcellular_spatial_domain?.dbscan_eps ?? 40}, min_samples={step_?.subcellular_spatial_domain?.dbscan_min_samples ?? 5})</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="step-hint" style={{ marginTop: 8 }}>
+                Subcellular domains are identified by clustering transcripts within each cell using DBSCAN on spatial coordinates.
+                Click a cell in the spatial layout above to visualize its subcellular domains, genes, or CellComp regions.
+              </p>
+            </div>
+          </StepSection>
+
+          {/* ============================================ */}
+          {/* STEP 4: Clustering / Expression Analysis     */}
+          {/* ============================================ */}
+          <StepSection title="Step 4: Clustering & Expression Analysis" stepIndex={4} totalSteps={5}
             substeps={[
               { label: 'Clustering backend', value: step_?.analysis?.clustering_backend_used ?? backendConfig.clustering },
               { label: '# clusters', value: formatMetric(eval_?.clustering?.n_clusters) },
@@ -198,9 +275,9 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           </StepSection>
 
           {/* ============================================ */}
-          {/* STEP 4: Annotation                             */}
+          {/* STEP 5: Annotation                           */}
           {/* ============================================ */}
-          <StepSection title="Step 4: Cell-type Annotation" stepIndex={4} totalSteps={5}
+          <StepSection title="Step 5: Cell-type Annotation" stepIndex={5} totalSteps={5}
             substeps={[
               { label: 'Annotation backend', value: backendConfig.annotation },
             ]}
@@ -226,72 +303,6 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
                 </ul>
               </div>
             )}
-          </StepSection>
-
-          {/* ============================================ */}
-          {/* STEP 5: Spatial Domain                         */}
-          {/* ============================================ */}
-          <StepSection title="Step 5: Spatial Domain Identification" stepIndex={5} totalSteps={5}
-            substeps={[
-              { label: 'Spatial domain backend', value: step_?.spatial_domain?.spatial_domain_backend_used ?? backendConfig.spatialDomain },
-              { label: '# domains', value: formatMetric(eval_?.spatial_domain?.n_spatial_domains) },
-              { label: 'ARI vs cluster', value: formatMetric(eval_?.spatial_domain?.domain_cluster_ari) },
-            ]}
-          >
-            <div className="step-two-col">
-              {/* Spatial domain distribution */}
-              <div className="step-insight-card">
-                <h4>Spatial domain distribution</h4>
-                {step_?.spatial_domain?.spatial_domain_distribution ? (
-                  <BarChart data={step_.spatial_domain.spatial_domain_distribution as Record<string, number>} />
-                ) : (
-                  <div className="empty-state">No domain distribution data.</div>
-                )}
-              </div>
-              {/* Spatial graph metrics */}
-              <div className="step-insight-card">
-                <h4>Spatial graph (cell-level)</h4>
-                <StatTable rows={spatialGraphStatRows(eval_?.spatial)} />
-              </div>
-            </div>
-
-            {/* Dual-level explanation */}
-            <div className="step-insight-card" style={{ marginTop: 12 }}>
-              <h4>Multi-level spatial domains</h4>
-              <table className="domain-level-table">
-                <thead>
-                  <tr>
-                    <th>Level</th>
-                    <th>Granularity</th>
-                    <th>Current support</th>
-                    <th>Required tools</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><strong>Cell-level</strong></td>
-                    <td>Groups of cells sharing spatial proximity</td>
-                    <td>
-                      <span className="status-badge status-badge--supported">Available now</span>
-                    </td>
-                    <td>spatial_leiden, spatial_kmeans (squidpy + spatial graph)</td>
-                  </tr>
-                  <tr>
-                    <td><strong>Subcellular-level</strong></td>
-                    <td>Transcript-level spatial niches within cells</td>
-                    <td>
-                      <span className="status-badge status-badge--planned">Planned</span>
-                    </td>
-                    <td>Point process models, DBSCAN on transcript coordinates, BANKSY</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="step-hint" style={{ marginTop: 8 }}>
-                For subcellular spatial domains, transcripts within each cell would be clustered based on
-                spatial proximity and gene composition. This requires per-cell transcript coordinate data
-                (available in CosMx) and tools like BANKSY or spatial point pattern analysis.
-              </p>
-            </div>
           </StepSection>
         </div>
       ) : (
@@ -419,7 +430,8 @@ function TranscriptScatter({ cellId }: { cellId: string }) {
   const [data, setData] = useState<CellTranscripts | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [hoveredGene, setHoveredGene] = useState<string | null>(null)
+  const [colorMode, setColorMode] = useState<'subcellular' | 'gene' | 'cellcomp'>('subcellular')
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -477,15 +489,42 @@ function TranscriptScatter({ cellId }: { cellId: string }) {
     y: H - PAD - ((py - minY) / ySpan) * (H - PAD * 2),
   })
 
-  const geneList = [...new Set(data.points.map((p) => p.gene))]
+  type ColorKeyFn = (pt: CellTranscriptPoint) => string
+  const colorKey: ColorKeyFn =
+    colorMode === 'subcellular'
+      ? (pt) => pt.subcellular_domain
+      : colorMode === 'cellcomp'
+        ? (pt) => pt.cellcomp
+        : (pt) => pt.gene
 
-  const radius = hoveredGene ? 3.0 : 1.8
-  const baseOpacity = hoveredGene ? 0.25 : 0.75
+  const keyList = [...new Set(data.points.map(colorKey))]
+  const colorMap = new Map(keyList.map((k, i) => [k, TRANSCRIPT_PALETTE[i % TRANSCRIPT_PALETTE.length]]))
+
+  const radius = hoveredKey ? 3.0 : 1.8
+  const baseOpacity = hoveredKey ? 0.25 : 0.75
+
+  const modeLabel =
+    colorMode === 'subcellular' ? 'subcellular domain' :
+    colorMode === 'cellcomp' ? 'CellComp' : 'gene'
 
   return (
     <div className="transcript-scatter-real">
       <div className="transcript-meta">
-        <span>{data.n_transcripts} transcripts · {geneList.length} genes</span>
+        <span>{data.n_transcripts} transcripts · {keyList.length} {modeLabel}(s)</span>
+        <div className="transcript-color-mode">
+          {(['subcellular', 'gene', 'cellcomp'] as const).map((mode) => (
+            <label key={mode} className={`color-mode-option${colorMode === mode ? ' active' : ''}`}>
+              <input
+                type="radio"
+                name={`cmode-${cellId}`}
+                value={mode}
+                checked={colorMode === mode}
+                onChange={() => setColorMode(mode)}
+              />
+              {mode === 'subcellular' ? 'Domain' : mode === 'gene' ? 'Gene' : 'CellComp'}
+            </label>
+          ))}
+        </div>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="transcript-svg">
         <rect x={0} y={0} width={W} height={H} fill="rgba(247,251,253,0.5)" rx={8} />
@@ -503,9 +542,9 @@ function TranscriptScatter({ cellId }: { cellId: string }) {
         )}
         {data.points.map((pt, idx) => {
           const svg = toSvg(pt.x, pt.y)
-          const isHovered = hoveredGene === pt.gene
-          const colorIdx = geneList.indexOf(pt.gene)
-          const fill = TRANSCRIPT_PALETTE[colorIdx % TRANSCRIPT_PALETTE.length]
+          const key = colorKey(pt)
+          const isHovered = hoveredKey === key
+          const fill = colorMap.get(key) ?? '#888'
           return (
             <circle
               key={idx}
@@ -517,26 +556,26 @@ function TranscriptScatter({ cellId }: { cellId: string }) {
               stroke={isHovered ? '#fff' : 'none'}
               strokeWidth={isHovered ? 0.5 : 0}
               style={{ cursor: 'pointer', transition: 'r 0.1s, opacity 0.1s' }}
-              onMouseEnter={() => setHoveredGene(pt.gene)}
-              onMouseLeave={() => setHoveredGene(null)}
+              onMouseEnter={() => setHoveredKey(key)}
+              onMouseLeave={() => setHoveredKey(null)}
             />
           )
         })}
       </svg>
       <div className="transcript-legend">
-        {geneList.slice(0, 10).map((gene, i) => (
+        {keyList.slice(0, 12).map((key, i) => (
           <span
-            key={gene}
+            key={key}
             className="transcript-legend-item"
-            style={{ opacity: hoveredGene && hoveredGene !== gene ? 0.4 : 1 }}
-            onMouseEnter={() => setHoveredGene(gene)}
-            onMouseLeave={() => setHoveredGene(null)}
+            style={{ opacity: hoveredKey && hoveredKey !== key ? 0.4 : 1 }}
+            onMouseEnter={() => setHoveredKey(key)}
+            onMouseLeave={() => setHoveredKey(null)}
           >
-            <i style={{ backgroundColor: TRANSCRIPT_PALETTE[i % TRANSCRIPT_PALETTE.length] }} />
-            {gene}
+            <i style={{ backgroundColor: colorMap.get(key) }} />
+            {key}
           </span>
         ))}
-        {geneList.length > 10 && <span className="transcript-legend-item">+{geneList.length - 10} more</span>}
+        {keyList.length > 12 && <span className="transcript-legend-item">+{keyList.length - 12} more</span>}
       </div>
     </div>
   )
@@ -650,6 +689,28 @@ function annotationStatRows(
     ['# cell types', ann.n_cell_types],
     ['Largest cell type fraction', ann.largest_cell_type_fraction != null ? `${(ann.largest_cell_type_fraction * 100).toFixed(1)}%` : null],
   ]
+}
+
+function subcellularDomainRows(
+  sub: SubcellularDomainMetrics | undefined,
+  step: SubcellularStepSummary | undefined,
+): Array<[string, string | number | null | undefined]> {
+  if (!sub && !step) return [['No subcellular domain data', null]]
+  const rows: Array<[string, string | number | null | undefined]> = []
+  if (step) {
+    rows.push(['Backend', step.subcellular_spatial_domain_backend])
+    rows.push(['DBSCAN eps', step.dbscan_eps])
+    rows.push(['DBSCAN min_samples', step.dbscan_min_samples])
+    rows.push(['Cells processed', step.n_cells_processed])
+    rows.push(['Noise transcripts (total)', step.total_noise_transcripts])
+  }
+  if (sub) {
+    rows.push(['Cells with multiple domains', sub.n_cells_with_multiple_domains])
+    rows.push(['Fraction multi-domain', sub.fraction_multi_domain != null ? `${(sub.fraction_multi_domain * 100).toFixed(1)}%` : null])
+    rows.push(['Mean domains per cell', sub.mean_domains_per_cell != null ? sub.mean_domains_per_cell.toFixed(1) : null])
+    rows.push(['Transcripts in multi-domain cells', sub.n_transcripts_in_multi_domain_cells?.toLocaleString()])
+  }
+  return rows
 }
 
 function spatialGraphStatRows(

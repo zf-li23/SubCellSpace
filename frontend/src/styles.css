@@ -904,6 +904,47 @@ select {
   flex-shrink: 0;
 }
 
+.transcript-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.transcript-color-mode {
+  display: flex;
+  gap: 4px;
+  background: rgba(22, 50, 63, 0.06);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.color-mode-option {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #5c7886;
+  transition: background 0.15s, color 0.15s;
+  font-weight: 500;
+  user-select: none;
+}
+
+.color-mode-option input {
+  display: none;
+}
+
+.color-mode-option.active {
+  background: #0b4c6e;
+  color: #fff;
+}
+
+.color-mode-option:hover:not(.active) {
+  background: rgba(22, 50, 63, 0.1);
+  color: #16323f;
+}
+
 @media (max-width: 980px) {
 	.page-hero,
 	.hero-panel,

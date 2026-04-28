@@ -12,6 +12,7 @@ from ..steps import (
     run_cell_type_annotation,
     run_expression_and_spatial_analysis,
     run_spatial_domain_identification,
+    run_subcellular_spatial_domain,
 )
 
 
@@ -28,6 +29,7 @@ def run_cosmx_minimal(
     spatial_domain_backend: str = "spatial_leiden",
     spatial_domain_resolution: float = 1.0,
     n_spatial_domains: int | None = None,
+    subcellular_domain_backend: str = "hdbscan",
 ) -> PipelineResult:
     input_csv = Path(input_csv)
     output_dir = Path(output_dir)
@@ -40,6 +42,18 @@ def run_cosmx_minimal(
     segmented, segmentation_summary = assign_cells(denoised, backend=segmentation_backend)
     adata = build_cell_level_adata(segmented)
 
+    # Step 3: Spatial Domain Identification (cell-level + subcellular-level)
+    adata, spatial_domain_summary = run_spatial_domain_identification(
+        adata,
+        backend=spatial_domain_backend,
+        domain_resolution=spatial_domain_resolution,
+        n_spatial_domains=n_spatial_domains,
+    )
+    segmented, adata, subcellular_summary = run_subcellular_spatial_domain(
+        segmented, adata, backend=subcellular_domain_backend
+    )
+
+    # Step 4: Clustering & Expression Analysis
     adata, analysis_summary = run_expression_and_spatial_analysis(
         adata,
         min_transcripts=min_transcripts,
@@ -47,13 +61,10 @@ def run_cosmx_minimal(
         clustering_backend=clustering_backend,
         leiden_resolution=leiden_resolution,
     )
+
+    # Step 5: Cell-type Annotation
     adata, annotation_summary = run_cell_type_annotation(adata, backend=annotation_backend)
-    adata, spatial_domain_summary = run_spatial_domain_identification(
-        adata,
-        backend=spatial_domain_backend,
-        domain_resolution=spatial_domain_resolution,
-        n_spatial_domains=n_spatial_domains,
-    )
+
     sdata = build_spatialdata(adata)
     layer_evaluation = build_layer_evaluation(
         raw_df=transcripts,
@@ -83,9 +94,10 @@ def run_cosmx_minimal(
         "step_summary": {
             "denoise": denoise_summary,
             "segmentation": segmentation_summary,
+            "spatial_domain": spatial_domain_summary,
+            "subcellular_spatial_domain": subcellular_summary,
             "analysis": analysis_summary,
             "annotation": annotation_summary,
-            "spatial_domain": spatial_domain_summary,
         },
         "layer_evaluation": layer_evaluation,
         "outputs": {

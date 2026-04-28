@@ -142,6 +142,31 @@ def build_layer_evaluation(
             ),
             "domain_cluster_ari": domain_cluster_ari,
         },
+        "subcellular_spatial_domain": {
+            "n_cells_with_multiple_domains": int(
+                adata.obs["n_subcellular_domains"].gt(1).sum()
+            ) if "n_subcellular_domains" in adata.obs else 0,
+            "fraction_multi_domain": float(
+                adata.obs["n_subcellular_domains"].gt(1).mean()
+            ) if "n_subcellular_domains" in adata.obs else 0.0,
+            "mean_domains_per_cell": float(
+                adata.obs["n_subcellular_domains"].mean()
+            ) if "n_subcellular_domains" in adata.obs else 1.0,
+            "n_transcripts_in_multi_domain_cells": int(
+                segmented_df[segmented_df["cell"].isin(
+                    adata.obs_names[adata.obs["n_subcellular_domains"].gt(1)]
+                )].shape[0]
+            ) if (
+                "n_subcellular_domains" in adata.obs
+                and len(segmented_df)
+                and "subcellular_domain" in segmented_df.columns
+            ) else 0,
+        } if (adata.n_obs > 0 and "n_subcellular_domains" in adata.obs) else {
+            "n_cells_with_multiple_domains": 0,
+            "fraction_multi_domain": 0.0,
+            "mean_domains_per_cell": 1.0,
+            "n_transcripts_in_multi_domain_cells": 0,
+        },
         "spatial": _spatial_graph_metrics(adata),
     }
     return evaluation
