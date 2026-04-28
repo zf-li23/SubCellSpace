@@ -97,29 +97,29 @@
 
 ---
 
-### Phase 1：功能增强（短期 1-2 周）
+### ✅ Phase 1：功能增强（已完成）
 
-#### Step 7: 配置管理系统
+#### ✅ Step 7: 配置管理系统
 - 创建 `src/config.py`，集中管理所有配置
 - 支持 YAML/环境变量/CLI 参数三层覆盖
-- 定义 `PipelineConfig` 数据类
-- 创建 `config/pipeline.yaml` 定义步骤顺序和默认后端
-- 注册表集成 YAML 配置（`get_step_order()`, `get_step_config()`）
+- 定义 `PipelineConfig`/`StepConfig` 数据类
+- 创建 `Settings` 单例，支持 `deep_merge` 三层覆盖
+- 注册表集成 YAML 配置（通过 `settings.pipeline` 获取）
 
-#### Step 8: 添加数据验证层
-- 创建 `src/validation.py`，使用 Pydantic 模型验证输入数据
-- 添加管线步骤的输入/输出 schema 验证
+#### ✅ Step 8: 添加数据验证层
+- 创建 `src/validation.py`，使用 Pydantic 风格的数据验证
+- 添加管线步骤的输入/输出 schema 验证（validate_dataframe, validate_anndata 等）
 
-#### Step 9: 完善日志和可观测性
-- 添加结构化日志（structlog）
-- 每个步骤记录执行时间、参数、状态
-- 报告系统增强（包含实际使用的算法、回退信息）
+#### ✅ Step 9: 完善日志和可观测性
+- 创建 `src/pipeline_engine.py`，插件式管线执行引擎
+- 每个步骤记录执行时间、后端、参数
+- 报告系统增强（包含实际使用的算法、回退信息、步骤摘要）
+- 支持 `ExecutionContext` 跨步骤状态传递
 
-#### Step 10: 提升测试覆盖率
-- 添加步骤接口契约测试
-- 添加后端注册/发现测试
-- 添加插件加载测试
-- 添加端到端管线测试
+#### ✅ Step 10: 提升测试覆盖率
+- 添加 `tests/test_config.py`（20 个测试）
+- 添加 `tests/test_validation.py`（18 个测试）
+- 添加 `tests/test_pipeline_engine.py`（18 个测试）
 
 ---
 

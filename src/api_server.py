@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import hashlib
 import json
 import re
@@ -13,18 +12,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .benchmark import run_cosmx_backend_benchmark
-from .pipeline import run_cosmx_minimal
+from .config import settings as _settings
+from .pipelines.cosmx_minimal import run_cosmx_minimal
 from .registry import get_available_backends
 
-# ── Configurable defaults (all overridable via environment variables) ──────
+# ── Configurable defaults (from centralized configuration system) ─────────
 DEFAULT_INPUT_CSV = Path(
-    os.getenv("SUBCELLSPACE_DEFAULT_INPUT_CSV", "data/test/Mouse_brain_CosMX_1000cells.csv")
+    _settings.get("input_csv", "data/test/Mouse_brain_CosMX_1000cells.csv")
 )
-DEFAULT_OUTPUT_DIR = Path(os.getenv("SUBCELLSPACE_DEFAULT_OUTPUT_DIR", "outputs/api_runs"))
-DEFAULT_REPORT_RUN = os.getenv("SUBCELLSPACE_DEFAULT_REPORT_RUN", "cosmx_try_again_round")
-DEFAULT_BENCHMARK_RUN = os.getenv("SUBCELLSPACE_DEFAULT_BENCHMARK_RUN", "cosmx_benchmark_round")
-DEFAULT_API_HOST = os.getenv("SUBCELLSPACE_API_HOST", "0.0.0.0")
-DEFAULT_API_PORT = int(os.getenv("SUBCELLSPACE_API_PORT", "8000"))
+DEFAULT_OUTPUT_DIR = Path(_settings.get("output_dir", "outputs/api_runs"))
+DEFAULT_REPORT_RUN = _settings.get("report_run", "cosmx_try_again_round")
+DEFAULT_BENCHMARK_RUN = _settings.get("benchmark_run", "cosmx_benchmark_round")
+DEFAULT_API_HOST = _settings.get("api_host", "0.0.0.0")
+DEFAULT_API_PORT = int(_settings.get("api_port", "8000"))
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUTS_ROOT = (REPO_ROOT / "outputs").resolve()
@@ -46,7 +46,7 @@ def _sanitise_cell_id(cell_id: str) -> str:
 # ── CORS ──────────────────────────────────────────────────────────────────
 
 def _parse_allowed_origins() -> list[str]:
-    raw = os.getenv("SUBCELLSPACE_ALLOWED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173")
+    raw = _settings.get("allowed_origins", "http://127.0.0.1:5173,http://localhost:5173")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 

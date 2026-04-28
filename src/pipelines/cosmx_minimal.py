@@ -1,19 +1,9 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from ..evaluation import build_layer_evaluation
-from ..io.cosmx import build_cell_level_adata, build_spatialdata, load_cosmx_transcripts, summarize_cosmx_transcripts
+from ..pipeline_engine import run_pipeline
 from ..models import PipelineResult
-from ..steps import (
-    apply_transcript_denoise,
-    assign_cells,
-    run_cell_type_annotation,
-    run_expression_and_spatial_analysis,
-    run_spatial_domain_identification,
-    run_subcellular_spatial_domain,
-)
 
 
 def run_cosmx_minimal(
@@ -31,99 +21,58 @@ def run_cosmx_minimal(
     n_spatial_domains: int | None = None,
     subcellular_domain_backend: str = "hdbscan",
 ) -> PipelineResult:
-    input_csv = Path(input_csv)
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    """Run the full CosMx minimal analysis pipeline.
 
-    transcripts = load_cosmx_transcripts(input_csv)
-    summary = summarize_cosmx_transcripts(transcripts, input_csv)
+    This is a convenience wrapper that delegates to the plugin-style
+    :func:`run_pipeline` engine.  The function signature is preserved
+    for backward compatibility.
 
-    # Step 1: Denoise
-    denoise_result = apply_transcript_denoise(transcripts, backend=denoise_backend)
-    denoised = denoise_result.output
+    Parameters
+    ----------
+    input_csv : str or Path
+        Path to the input CosMx transcripts CSV file.
+    output_dir : str or Path
+        Directory where outputs (h5ad, report JSON, parquet) are written.
+    min_transcripts : int
+        Minimum number of transcripts per cell (QC filter).
+    min_genes : int
+        Minimum number of genes per cell (QC filter).
+    denoise_backend : str
+        Backend for transcript denoising.
+    segmentation_backend : str
+        Backend for cell segmentation.
+    clustering_backend : str
+        Backend for clustering (e.g. ``"leiden"``, ``"kmeans"``).
+    leiden_resolution : float
+        Resolution parameter for Leiden clustering.
+    annotation_backend : str
+        Backend for cell-type annotation.
+    spatial_domain_backend : str
+        Backend for spatial domain identification.
+    spatial_domain_resolution : float
+        Resolution for spatial domain leiden.
+    n_spatial_domains : int or None
+        Number of spatial domains (for k-means based backends).
+    subcellular_domain_backend : str
+        Backend for subcellular spatial domain identification.
 
-    # Step 2: Segmentation
-    seg_result = assign_cells(denoised, backend=segmentation_backend)
-    segmented = seg_result.output
-    adata = build_cell_level_adata(segmented)
-
-    # Step 3: Spatial Domain Identification (cell-level + subcellular-level)
-    domain_result = run_spatial_domain_identification(
-        adata,
-        backend=spatial_domain_backend,
-        domain_resolution=spatial_domain_resolution,
-        n_spatial_domains=n_spatial_domains,
-    )
-    adata = domain_result.output
-
-    subcellular_result = run_subcellular_spatial_domain(
-        segmented, adata, backend=subcellular_domain_backend
-    )
-    segmented, adata = subcellular_result.output
-
-    # Step 4: Clustering & Expression Analysis
-    analysis_result = run_expression_and_spatial_analysis(
-        adata,
+    Returns
+    -------
+    PipelineResult
+        The aggregated pipeline result.
+    """
+    return run_pipeline(
+        input_csv=str(input_csv),
+        output_dir=str(output_dir),
         min_transcripts=min_transcripts,
         min_genes=min_genes,
+        denoise_backend=denoise_backend,
+        segmentation_backend=segmentation_backend,
         clustering_backend=clustering_backend,
         leiden_resolution=leiden_resolution,
-    )
-    adata = analysis_result.output
-
-    # Step 5: Cell-type Annotation
-    annotation_result = run_cell_type_annotation(adata, backend=annotation_backend)
-    adata = annotation_result.output
-
-    sdata = build_spatialdata(adata)
-    layer_evaluation = build_layer_evaluation(
-        raw_df=transcripts,
-        denoised_df=denoised,
-        segmented_df=segmented,
-        adata=adata,
-    )
-
-    adata_path = output_dir / "cosmx_minimal.h5ad"
-    report_path = output_dir / "cosmx_minimal_report.json"
-    transcripts_path = output_dir / "cosmx_minimal_transcripts.parquet"
-    adata.write_h5ad(adata_path)
-    segmented.to_parquet(transcripts_path)
-
-    report = {
-        "input_csv": str(input_csv),
-        "n_obs": int(adata.n_obs),
-        "n_vars": int(adata.n_vars),
-        "clusters": adata.obs["cluster"].value_counts().sort_index().to_dict(),
-        "summary": {
-            "n_transcripts": summary.n_transcripts,
-            "n_cells": summary.n_cells,
-            "n_genes": summary.n_genes,
-            "n_fovs": summary.n_fovs,
-            **summary.extra,
-        },
-        "step_summary": {
-            "denoise": denoise_result.summary,
-            "segmentation": seg_result.summary,
-            "spatial_domain": domain_result.summary,
-            "subcellular_spatial_domain": subcellular_result.summary,
-            "analysis": analysis_result.summary,
-            "annotation": annotation_result.summary,
-        },
-        "layer_evaluation": layer_evaluation,
-        "outputs": {
-            "adata": str(adata_path),
-            "report": str(report_path),
-            "transcripts": str(transcripts_path),
-            "spatialdata_points": list(sdata.points.keys()),
-            "spatialdata_tables": list(sdata.tables.keys()),
-        },
-    }
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    return PipelineResult(
-        adata=adata,
-        summary=summary,
-        sdata=sdata,
-        adata_path=adata_path,
-        report_path=report_path,
+        annotation_backend=annotation_backend,
+        spatial_domain_backend=spatial_domain_backend,
+        spatial_domain_resolution=spatial_domain_resolution,
+        n_spatial_domains=n_spatial_domains,
+        subcellular_domain_backend=subcellular_domain_backend,
     )

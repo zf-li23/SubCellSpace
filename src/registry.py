@@ -104,11 +104,25 @@ class _BackendRegistry:
             if default:
                 self._defaults[step_name] = default
 
-    # ── Internal helpers ────────────────────────────────────────
+        # ── Internal helpers ────────────────────────────────────────
 
     def _ensure_config_loaded(self) -> None:
         if self._config_loaded:
             return
+        # Try using the new Settings singleton first (Phase 1)
+        try:
+            from .config import settings as _settings
+            pipeline_cfg = _settings.pipeline
+            self._config = _settings.as_dict()
+            for step in pipeline_cfg.steps:
+                if step.default_backend:
+                    self._defaults[step.name] = step.default_backend
+            self._config_loaded = True
+            return
+        except ImportError:
+            pass
+
+        # Fallback: load from YAML file directly
         config_path = (
             Path(__file__).resolve().parent.parent / "config" / "pipeline.yaml"
         )

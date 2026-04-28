@@ -56,18 +56,30 @@ class TestPathResolution:
 
 class TestParseAllowedOrigins:
     def test_default(self, monkeypatch):
-        monkeypatch.delenv("SUBCELLSPACE_ALLOWED_ORIGINS", raising=False)
+        from src.api_server import _settings
+        # Clear any existing override for allowed_origins
+        monkeypatch.setattr(_settings, '_overrides', {})
+        monkeypatch.setattr(_settings, '_raw', {})
         origins = _parse_allowed_origins()
         assert "http://127.0.0.1:5173" in origins
         assert "http://localhost:5173" in origins
 
     def test_custom(self, monkeypatch):
-        monkeypatch.setenv("SUBCELLSPACE_ALLOWED_ORIGINS", "http://example.com,http://test:3000")
+        from src.api_server import _settings
+        # Use programmatic override (highest priority) instead of env var
+        monkeypatch.setattr(
+            _settings, '_overrides',
+            {"allowed_origins": "http://example.com,http://test:3000"},
+        )
         origins = _parse_allowed_origins()
         assert origins == ["http://example.com", "http://test:3000"]
 
     def test_empty_strings_filtered(self, monkeypatch):
-        monkeypatch.setenv("SUBCELLSPACE_ALLOWED_ORIGINS", "http://a.com, , http://b.com,")
+        from src.api_server import _settings
+        monkeypatch.setattr(
+            _settings, '_overrides',
+            {"allowed_origins": "http://a.com, , http://b.com,"},
+        )
         origins = _parse_allowed_origins()
         assert origins == ["http://a.com", "http://b.com"]
 

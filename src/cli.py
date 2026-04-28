@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from .benchmark import run_cosmx_backend_benchmark
-from .pipeline import run_cosmx_minimal
+from .pipelines.cosmx_minimal import run_cosmx_minimal
 from .registry import get_available_backends
 
 
