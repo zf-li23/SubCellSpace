@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -20,17 +21,39 @@ from .steps.segmentation import AVAILABLE_SEGMENTATION_BACKENDS
 from .steps.spatial_domain import AVAILABLE_SPATIAL_DOMAIN_BACKENDS
 from .steps.subcellular_spatial_domain import AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS
 
-DEFAULT_INPUT_CSV = Path("data/test/Mouse_brain_CosMX_1000cells.csv")
-DEFAULT_OUTPUT_DIR = Path("outputs/api_runs")
-DEFAULT_REPORT_RUN = "cosmx_try_again_round"
-DEFAULT_BENCHMARK_RUN = "cosmx_benchmark_round"
+# ── Configurable defaults (all overridable via environment variables) ──────
+DEFAULT_INPUT_CSV = Path(
+    os.getenv("SUBCELLSPACE_DEFAULT_INPUT_CSV", "data/test/Mouse_brain_CosMX_1000cells.csv")
+)
+DEFAULT_OUTPUT_DIR = Path(os.getenv("SUBCELLSPACE_DEFAULT_OUTPUT_DIR", "outputs/api_runs"))
+DEFAULT_REPORT_RUN = os.getenv("SUBCELLSPACE_DEFAULT_REPORT_RUN", "cosmx_try_again_round")
+DEFAULT_BENCHMARK_RUN = os.getenv("SUBCELLSPACE_DEFAULT_BENCHMARK_RUN", "cosmx_benchmark_round")
+DEFAULT_API_HOST = os.getenv("SUBCELLSPACE_API_HOST", "0.0.0.0")
+DEFAULT_API_PORT = int(os.getenv("SUBCELLSPACE_API_PORT", "8000"))
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUTS_ROOT = (REPO_ROOT / "outputs").resolve()
 
+# ── Cell ID sanitisation ──────────────────────────────────────────────────
+_CELL_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]+$")
+
+
+def _sanitise_cell_id(cell_id: str) -> str:
+    """Reject cell IDs containing characters that could enable injection."""
+    if not _CELL_ID_PATTERN.match(cell_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid cell_id: '{cell_id}'. Allowed: alphanumeric, '_', '.', '-'.",
+        )
+    return cell_id
+
+
+# ── CORS ──────────────────────────────────────────────────────────────────
 
 def _parse_allowed_origins() -> list[str]:
     raw = os.getenv("SUBCELLSPACE_ALLOWED_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
 
 app = FastAPI(title="SubCellSpace API", version="0.1.0")
 app.add_middleware(
@@ -41,6 +64,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ── Pydantic models ───────────────────────────────────────────────────────
 
 class CosmxRunRequest(BaseModel):
     input_csv: str = Field(default=str(DEFAULT_INPUT_CSV))
@@ -58,6 +83,8 @@ class CosmxRunRequest(BaseModel):
     subcellular_domain_backend: str = "hdbscan"
 
 
+# ── Internal helpers ──────────────────────────────────────────────────────
+
 def _load_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
@@ -65,6 +92,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _resolve_under_repo(path_like: str | Path) -> Path:
+    """Resolve a path and ensure it stays within the repository root."""
     path = Path(path_like)
     if not path.is_absolute():
         path = REPO_ROOT / path
@@ -75,6 +103,7 @@ def _resolve_under_repo(path_like: str | Path) -> Path:
 
 
 def _ensure_under_outputs(path: Path) -> Path:
+    """Ensure a resolved path is within the canonical outputs directory."""
     resolved = path.resolve()
     if OUTPUTS_ROOT not in resolved.parents and resolved != OUTPUTS_ROOT:
         raise HTTPException(status_code=400, detail="Path must be under outputs/")
@@ -87,7 +116,10 @@ def _resolve_report_path(run_name: str) -> Path:
 
 def _validate_backend(name: str, value: str, allowed: list[str]) -> None:
     if value not in allowed:
-        raise HTTPException(status_code=400, detail=f"Unsupported {name}: {value}. Allowed: {allowed}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported {name}: {value}. Allowed: {allowed}",
+        )
 
 
 def _resolve_output_dir(request: CosmxRunRequest) -> Path:
@@ -95,6 +127,7 @@ def _resolve_output_dir(request: CosmxRunRequest) -> Path:
         requested = _resolve_under_repo(request.output_dir)
         return _ensure_under_outputs(requested)
 
+    # Deterministic hash-based subdirectory when no explicit output_dir
     token = hashlib.sha1(
         "|".join(
             [
@@ -122,7 +155,11 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
     _validate_backend("clustering_backend", request.clustering_backend, AVAILABLE_CLUSTERING_BACKENDS)
     _validate_backend("annotation_backend", request.annotation_backend, AVAILABLE_ANNOTATION_BACKENDS)
     _validate_backend("spatial_domain_backend", request.spatial_domain_backend, AVAILABLE_SPATIAL_DOMAIN_BACKENDS)
-    _validate_backend("subcellular_domain_backend", request.subcellular_domain_backend, AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS)
+    _validate_backend(
+        "subcellular_domain_backend",
+        request.subcellular_domain_backend,
+        AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS,
+    )
 
     input_csv_path = _resolve_under_repo(request.input_csv)
     if not input_csv_path.exists():
@@ -153,9 +190,31 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
     return report
 
 
+# ── Endpoints ─────────────────────────────────────────────────────────────
+
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/api/meta/backends")
+def backends() -> dict[str, list[str]]:
+    return {
+        "denoise": list(AVAILABLE_DENOISE_BACKENDS),
+        "segmentation": list(AVAILABLE_SEGMENTATION_BACKENDS),
+        "clustering": list(AVAILABLE_CLUSTERING_BACKENDS),
+        "annotation": list(AVAILABLE_ANNOTATION_BACKENDS),
+        "spatial_domain": list(AVAILABLE_SPATIAL_DOMAIN_BACKENDS),
+        "subcellular_spatial_domain": list(AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS),
+    }
+
+
 @app.get("/api/runs")
 def list_runs() -> list[dict[str, Any]]:
-    """List all available runs under outputs/ with parsed report metadata."""
+    """List available run reports under outputs/ with metadata.
+
+    Only relative paths are returned to avoid leaking server filesystem layout.
+    """
     runs: list[dict[str, Any]] = []
     if not OUTPUTS_ROOT.exists():
         return runs
@@ -175,9 +234,15 @@ def list_runs() -> list[dict[str, Any]]:
         params = report.get("parameters", {})
         analysis = report.get("analysis_summary", {}) or report.get("metadata", {}) or {}
 
+        # Build relative paths to avoid leaking absolute filesystem paths
+        try:
+            rel_report_path = report_path.relative_to(REPO_ROOT)
+        except ValueError:
+            rel_report_path = Path("outputs") / child.name / "cosmx_minimal_report.json"
+
         runs.append({
             "run_name": child.name,
-            "report_path": str(report_path.resolve()),
+            "report_path": str(rel_report_path),
             "created_at": params.get("created_at") or params.get("timestamp"),
             "n_cells": analysis.get("n_cells") or report.get("n_cells") or 0,
             "n_genes": analysis.get("n_genes") or report.get("n_genes") or 0,
@@ -190,23 +255,6 @@ def list_runs() -> list[dict[str, Any]]:
         })
 
     return runs
-
-
-@app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/api/meta/backends")
-def backends() -> dict[str, list[str]]:
-    return {
-        "denoise": AVAILABLE_DENOISE_BACKENDS,
-        "segmentation": AVAILABLE_SEGMENTATION_BACKENDS,
-        "clustering": AVAILABLE_CLUSTERING_BACKENDS,
-        "annotation": AVAILABLE_ANNOTATION_BACKENDS,
-        "spatial_domain": AVAILABLE_SPATIAL_DOMAIN_BACKENDS,
-        "subcellular_spatial_domain": AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS,
-    }
 
 
 @app.get("/api/reports/{run_name}")
@@ -239,10 +287,30 @@ def get_plots_by_report(
 
 @app.get("/api/benchmarks/{run_name}")
 def get_benchmark(run_name: str) -> dict[str, Any]:
-    benchmark_path = Path("outputs") / run_name / "benchmark_summary.json"
+    """Get benchmark summary for a given run.
+
+    Uses path-sanitised resolution to prevent path traversal.
+    """
+    # Sanitise run_name: only allow safe characters
+    if not re.match(r"^[A-Za-z0-9_\-]+$", run_name):
+        raise HTTPException(status_code=400, detail=f"Invalid run_name: '{run_name}'")
+
+    benchmark_dir = _ensure_under_outputs(OUTPUTS_ROOT / run_name)
+    benchmark_path = benchmark_dir / "benchmark_summary.json"
+    if not benchmark_path.exists():
+        raise HTTPException(status_code=404, detail=f"Benchmark not found for run: {run_name}")
+
     benchmark = _load_json(benchmark_path)
-    summary_csv = Path("outputs") / run_name / "benchmark_summary.csv"
-    return {"summary": benchmark, "summary_csv": str(summary_csv) if summary_csv.exists() else None}
+    summary_csv = benchmark_dir / "benchmark_summary.csv"
+    # Return relative path to avoid leaking absolute filesystem paths
+    try:
+        rel_csv_path = str(summary_csv.relative_to(REPO_ROOT))
+    except ValueError:
+        rel_csv_path = str(summary_csv)
+    return {
+        "summary": benchmark,
+        "summary_csv": rel_csv_path if summary_csv.exists() else None,
+    }
 
 
 @app.get("/api/cosmx/report")
@@ -294,9 +362,22 @@ def cosmx_benchmark(
     spatial_domain_resolution: float = Body(default=1.0),
     n_spatial_domains: int | None = Body(default=None),
 ) -> dict[str, Any]:
+    """Run the CosMx benchmark (grid search over all backend combinations).
+
+    Both input_csv and output_dir are validated for path security.
+    """
+    # Validate input_csv path
+    input_csv_path = _resolve_under_repo(input_csv)
+    if not input_csv_path.exists():
+        raise HTTPException(status_code=404, detail=f"Input file not found: {input_csv_path}")
+
+    # Validate output_dir and ensure it's under outputs/
+    output_dir_path = _resolve_under_repo(output_dir)
+    output_dir_path = _ensure_under_outputs(output_dir_path)
+
     return run_cosmx_backend_benchmark(
-        input_csv=input_csv,
-        output_dir=output_dir,
+        input_csv=str(input_csv_path),
+        output_dir=str(output_dir_path),
         min_transcripts=min_transcripts,
         min_genes=min_genes,
         leiden_resolution=leiden_resolution,
@@ -305,9 +386,77 @@ def cosmx_benchmark(
     )
 
 
+@app.get("/api/cells/{cell_id}/transcripts")
+def get_cell_transcripts(
+    cell_id: str,
+    run_name: str = Query(default=DEFAULT_REPORT_RUN),
+    gene_filter: str | None = None,
+) -> dict[str, Any]:
+    """Get transcript-level data for a single cell.
+
+    cell_id is sanitised to prevent injection attacks.
+    """
+    # Sanitise cell_id before using it in queries
+    _sanitise_cell_id(cell_id)
+
+    report = _load_json(_resolve_report_path(run_name))
+    transcripts_path = report.get("outputs", {}).get("transcripts")
+    if not transcripts_path:
+        raise HTTPException(status_code=404, detail=f"No transcripts file for run: {run_name}")
+
+    path = _resolve_under_repo(transcripts_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Transcripts file not found: {path}")
+
+    import pandas as pd
+
+    df = pd.read_parquet(path)
+    cell_mask = df["cell"] == str(cell_id)
+    cell_df = df[cell_mask].copy()
+
+    if gene_filter:
+        gene_mask = cell_df["target"].astype(str) == str(gene_filter)
+        cell_df = cell_df[gene_mask]
+
+    points = []
+    hull_x_vals: list[float] = []
+    hull_y_vals: list[float] = []
+    for _, row in cell_df.iterrows():
+        x = float(row["x_global_px"])
+        y = float(row["y_global_px"])
+        points.append({
+            "x": x,
+            "y": y,
+            "subcellular_domain": str(row.get("subcellular_domain", "0")),
+            "gene": str(row.get("target", "unknown")),
+            "cellcomp": str(row.get("CellComp", "unknown")),
+            "fov": int(row.get("fov", -1)),
+        })
+        hull_x_vals.append(x)
+        hull_y_vals.append(y)
+
+    hull = _compute_convex_hull(hull_x_vals, hull_y_vals)
+
+    return {
+        "cell_id": cell_id,
+        "n_transcripts": len(points),
+        "genes": sorted(cell_df["target"].astype(str).unique().tolist()),
+        "points": points,
+        "hull": hull,
+        "bounds": {
+            "min_x": min(hull_x_vals) if hull_x_vals else 0,
+            "max_x": max(hull_x_vals) if hull_x_vals else 0,
+            "min_y": min(hull_y_vals) if hull_y_vals else 0,
+            "max_y": max(hull_y_vals) if hull_y_vals else 0,
+        },
+    }
+
+
+# ── Internal utilities ────────────────────────────────────────────────────
+
 def _compute_convex_hull(xs: list[float], ys: list[float]) -> list[dict[str, float]]:
     """Compute the 2D convex hull of points using Andrew's monotone chain algorithm.
-    
+
     Returns a list of {x, y} dicts in counter-clockwise order forming the hull polygon.
     """
     if len(xs) < 3:
@@ -348,12 +497,6 @@ def _compute_convex_hull(xs: list[float], ys: list[float]) -> list[dict[str, flo
     return [{"x": x, "y": y} for x, y in hull_points]
 
 
-def main() -> None:
-    import uvicorn
-
-    uvicorn.run("src.api_server:app", host="0.0.0.0", port=8000, reload=False)
-
-
 def _adata_points_payload(adata: ad.AnnData, embedding_key: str, color_key: str) -> dict[str, Any]:
     if embedding_key not in adata.obsm:
         raise HTTPException(status_code=404, detail=f"Embedding not found: {embedding_key}")
@@ -386,65 +529,6 @@ def _adata_points_payload(adata: ad.AnnData, embedding_key: str, color_key: str)
     }
 
 
-@app.get("/api/cells/{cell_id}/transcripts")
-def get_cell_transcripts(
-    cell_id: str,
-    run_name: str = Query(default=DEFAULT_REPORT_RUN),
-    gene_filter: str | None = None,
-) -> dict[str, Any]:
-    report = _load_json(_resolve_report_path(run_name))
-    transcripts_path = report.get("outputs", {}).get("transcripts")
-    if not transcripts_path:
-        raise HTTPException(status_code=404, detail=f"No transcripts file for run: {run_name}")
-
-    path = _resolve_under_repo(transcripts_path)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Transcripts file not found: {path}")
-
-    import pandas as pd
-
-    df = pd.read_parquet(path)
-    cell_mask = df["cell"] == str(cell_id)
-    cell_df = df[cell_mask].copy()
-
-    if gene_filter:
-        gene_mask = cell_df["target"].astype(str) == str(gene_filter)
-        cell_df = cell_df[gene_mask]
-
-    points = []
-    hull_x_vals = []
-    hull_y_vals = []
-    for _, row in cell_df.iterrows():
-        x = float(row["x_global_px"])
-        y = float(row["y_global_px"])
-        points.append({
-            "x": x,
-            "y": y,
-            "subcellular_domain": str(row.get("subcellular_domain", "0")),
-            "gene": str(row.get("target", "unknown")),
-            "cellcomp": str(row.get("CellComp", "unknown")),
-            "fov": int(row.get("fov", -1)),
-        })
-        hull_x_vals.append(x)
-        hull_y_vals.append(y)
-
-    hull = _compute_convex_hull(hull_x_vals, hull_y_vals)
-
-    return {
-        "cell_id": cell_id,
-        "n_transcripts": len(points),
-        "genes": sorted(cell_df["target"].astype(str).unique().tolist()),
-        "points": points,
-        "hull": hull,
-        "bounds": {
-            "min_x": min(hull_x_vals) if hull_x_vals else 0,
-            "max_x": max(hull_x_vals) if hull_x_vals else 0,
-            "min_y": min(hull_y_vals) if hull_y_vals else 0,
-            "max_y": max(hull_y_vals) if hull_y_vals else 0,
-        },
-    }
-
-
 def _get_plot_payload(run_name: str) -> dict[str, Any]:
     report = _load_json(_resolve_report_path(run_name))
     return _plot_payload_from_report(report, fallback_label=run_name)
@@ -469,3 +553,14 @@ def _plot_payload_from_report(report: dict[str, Any], fallback_label: str) -> di
             "umap": _adata_points_payload(adata, embedding_key="X_umap", color_key="cluster"),
         },
     }
+
+
+def main() -> None:
+    import uvicorn
+
+    uvicorn.run(
+        "src.api_server:app",
+        host=DEFAULT_API_HOST,
+        port=DEFAULT_API_PORT,
+        reload=False,
+    )

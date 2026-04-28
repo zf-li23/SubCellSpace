@@ -12,6 +12,7 @@ from .steps.analysis import AVAILABLE_CLUSTERING_BACKENDS
 from .steps.denoise import AVAILABLE_DENOISE_BACKENDS
 from .steps.segmentation import AVAILABLE_SEGMENTATION_BACKENDS
 from .steps.spatial_domain import AVAILABLE_SPATIAL_DOMAIN_BACKENDS
+from .steps.subcellular_spatial_domain import AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS
 
 
 def run_cosmx_backend_benchmark(
@@ -36,12 +37,14 @@ def run_cosmx_backend_benchmark(
         AVAILABLE_CLUSTERING_BACKENDS,
         AVAILABLE_ANNOTATION_BACKENDS,
         AVAILABLE_SPATIAL_DOMAIN_BACKENDS,
+        AVAILABLE_SUBCELLULAR_SPATIAL_DOMAIN_BACKENDS,
     )
 
-    for denoise_backend, segmentation_backend, clustering_backend, annotation_backend, spatial_domain_backend in combinations:
+    for denoise_backend, segmentation_backend, clustering_backend, annotation_backend, spatial_domain_backend, subcellular_domain_backend in combinations:
         tag = (
             f"denoise-{denoise_backend}__seg-{segmentation_backend}__cluster-{clustering_backend}"
             f"__anno-{annotation_backend}__domain-{spatial_domain_backend}"
+            f"__subdomain-{subcellular_domain_backend}"
         )
         combo_output = output_dir / tag
 
@@ -58,6 +61,7 @@ def run_cosmx_backend_benchmark(
             spatial_domain_backend=spatial_domain_backend,
             spatial_domain_resolution=spatial_domain_resolution,
             n_spatial_domains=n_spatial_domains,
+            subcellular_domain_backend=subcellular_domain_backend,
         )
 
         report = json.loads(result.report_path.read_text(encoding="utf-8"))
