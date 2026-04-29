@@ -257,7 +257,7 @@ class Settings:
     @property
     def pipeline(self) -> PipelineConfig:
         """Return the resolved pipeline configuration."""
-        return PipelineConfig.from_dict(self._raw)
+        return PipelineConfig.from_dict(self.as_dict())
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a raw config value by dot-separated key (e.g. ``pipeline.name``)."""

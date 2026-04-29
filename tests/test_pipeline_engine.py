@@ -84,7 +84,9 @@ class TestRunStep:
 
         load_backends()
 
-        with pytest.raises(ValueError, match="No transcripts"):
+        from src.errors import PipelineStepError
+
+        with pytest.raises(PipelineStepError, match="No transcripts"):
             _run_step("denoise", "intracellular", empty_context)
 
     def test_segmentation_step(self, sample_context):
@@ -103,11 +105,12 @@ class TestRunStep:
 
     def test_segmentation_missing_denoised(self, sample_context):
         """Segmentation should raise if denoised data missing."""
+        from src.errors import PipelineStepError
         from src.registry import load_backends
 
         load_backends()
 
-        with pytest.raises(ValueError, match="No denoised"):
+        with pytest.raises(PipelineStepError, match="No denoised"):
             _run_step("segmentation", "provided_cells", sample_context)
 
     def test_unknown_step(self, empty_context):
@@ -116,12 +119,13 @@ class TestRunStep:
             _run_step("nonexistent_step", "some_backend", empty_context)
 
     def test_unknown_backend(self, sample_context):
-        """Known step but unknown backend should raise ValueError."""
+        """Known step but unknown backend should raise PipelineStepError."""
+        from src.errors import PipelineStepError
         from src.registry import load_backends
 
         load_backends()
 
-        with pytest.raises(ValueError, match="Unknown denoise backend"):
+        with pytest.raises(PipelineStepError, match="Unknown denoise backend"):
             _run_step("denoise", "nonexistent_backend", sample_context)
 
     def test_step_params_passed(self, sample_context):
@@ -282,7 +286,9 @@ class TestRunPipeline:
 class TestRunPipelineErrors:
     def test_nonexistent_input_csv(self, tmp_path):
         """Non-existent input CSV should raise an error."""
-        with pytest.raises(ValueError):
+        from src.errors import PipelineDataError
+
+        with pytest.raises(PipelineDataError, match="Failed to load data"):
             run_pipeline(
                 input_csv="/nonexistent/file.csv",
                 output_dir=str(tmp_path / "error_test"),
@@ -314,15 +320,13 @@ class TestRunPipelineErrors:
                 "output_dir": str(tmp_path / "skip_disabled"),
                 "min_transcripts": 0,
                 "min_genes": 0,
+                "pipeline": {
+                    "steps_config": {
+                        "annotation": {"enabled": False},
+                    },
+                },
             }
         )
-        cfg = settings.pipeline
-        # Disable annotation step
-        for step in cfg.steps:
-            if step.name == "annotation":
-                step.enabled = False
-                break
-        # Re-build settings with modified config
         result = run_pipeline(settings=settings)
         assert result.adata is not None
         # annotation should not be in step_results

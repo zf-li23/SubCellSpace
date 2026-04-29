@@ -138,6 +138,147 @@ def validate_annotation_input(adata: Any) -> list[str]:
     return msgs
 
 
+# ── Inter-step contract validation ──────────────────────────────────
+
+# Each entry defines the data contract for the transition from one step
+# to the next.  "source" is the step whose output is validated, "target"
+# is the step that will consume that output.  The ``checks`` list
+# specifies what must exist in the ExecutionContext after the source step.
+#
+# Contracts use set-based checks:
+#   - "df_columns": required DataFrame columns in the named context attribute
+#   - "obs_columns": required AnnData.obs columns
+#   - "obsm_keys": required AnnData.obsm keys
+
+StepContract = dict[str, Any]
+
+STEP_CONTRACTS: list[StepContract] = [
+    {
+        "source": "denoise",
+        "target": "segmentation",
+        "checks": [
+            {"type": "df_columns", "attr": "denoised_df", "required": {"cell", "fov", "cell_ID", "target", "x_global_px", "y_global_px", "CellComp"}},
+        ],
+    },
+    {
+        "source": "segmentation",
+        "target": "spatial_domain",
+        "checks": [
+            {"type": "df_columns", "attr": "segmented_df", "required": {"cell", "fov", "cell_ID"}},
+        ],
+    },
+    {
+        "source": "segmentation",
+        "target": "subcellular_spatial_domain",
+        "checks": [
+            {"type": "df_columns", "attr": "segmented_df", "required": {"cell", "x_global_px", "y_global_px"}},
+        ],
+    },
+    {
+        "source": "spatial_domain",
+        "target": "analysis",
+        "checks": [
+            {"type": "obs_columns", "attr": "adata", "required": {"spatial_domain"}},
+            {"type": "obsm_keys", "attr": "adata", "required": {"spatial"}},
+        ],
+    },
+    {
+        "source": "subcellular_spatial_domain",
+        "target": "analysis",
+        "checks": [
+            {"type": "df_columns", "attr": "segmented_df", "required": {"subcellular_domain"}},
+        ],
+    },
+    {
+        "source": "analysis",
+        "target": "annotation",
+        "checks": [
+            {"type": "obs_columns", "attr": "adata", "required": {"cluster"}},
+            {"type": "obsm_keys", "attr": "adata", "required": {"X_pca", "spatial"}},
+        ],
+    },
+    {
+        "source": "annotation",
+        "target": "__pipeline_end__",
+        "checks": [
+            {"type": "obs_columns", "attr": "adata", "required": {"cluster", "cell_type"}},
+        ],
+    },
+]
+
+
+def validate_contract(
+    source_step: str,
+    target_step: str,
+    context: Any,  # ExecutionContext
+) -> list[str]:
+    """Validate the data contract between *source_step* and *target_step*.
+
+    Parameters
+    ----------
+    source_step : str
+        Name of the step that just completed.
+    target_step : str
+        Name of the next step to run (or ``"__pipeline_end__"`` for
+        final output validation).
+    context : ExecutionContext
+        The current pipeline execution context.
+
+    Returns
+    -------
+    list[str]
+        Validation messages (empty if all checks pass).
+    """
+    msgs: list[str] = []
+
+    for contract in STEP_CONTRACTS:
+        if contract["source"] != source_step or contract["target"] != target_step:
+            continue
+        for check in contract["checks"]:
+            check_type = check["type"]
+            attr_name = check["attr"]
+            required: set[str] = set(check["required"])
+
+            obj = getattr(context, attr_name, None)
+            if obj is None:
+                msgs.append(
+                    f"Contract [{source_step} → {target_step}]: "
+                    f"context.{attr_name} is None (expected {required})"
+                )
+                continue
+
+            if check_type == "df_columns":
+                import pandas as pd
+                if not isinstance(obj, pd.DataFrame):
+                    msgs.append(
+                        f"Contract [{source_step} → {target_step}]: "
+                        f"context.{attr_name} is not a DataFrame"
+                    )
+                    continue
+                missing = required - set(obj.columns)
+                if missing:
+                    msgs.append(
+                        f"Contract [{source_step} → {target_step}]: "
+                        f"context.{attr_name} missing columns: {sorted(missing)}"
+                    )
+            elif check_type == "obs_columns":
+                missing = required - set(obj.obs.columns)
+                if missing:
+                    msgs.append(
+                        f"Contract [{source_step} → {target_step}]: "
+                        f"context.{attr_name}.obs missing columns: {sorted(missing)}"
+                    )
+            elif check_type == "obsm_keys":
+                missing = required - set(obj.obsm.keys())
+                if missing:
+                    msgs.append(
+                        f"Contract [{source_step} → {target_step}]: "
+                        f"context.{attr_name}.obsm missing keys: {sorted(missing)}"
+                    )
+
+    return msgs
+
+
 # ── Pipeline-level input validation ──────────────────────────────────
 
 

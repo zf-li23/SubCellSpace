@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from .benchmark import run_cosmx_backend_benchmark
 from .config import settings as _settings
+from .io import get_available_platforms
 from .pipelines.cosmx_minimal import run_cosmx_minimal
 from .registry import get_available_backends
 
@@ -206,6 +207,13 @@ def backends() -> dict[str, list[str]]:
         "spatial_domain": get_available_backends("spatial_domain"),
         "subcellular_spatial_domain": get_available_backends("subcellular_spatial_domain"),
     }
+
+
+@app.get("/api/meta/platforms")
+def platforms() -> dict[str, list[str]]:
+    """Return the list of supported data platforms (CosMx, Xenium, MERFISH, Stereo-seq, …)."""
+    return {"platforms": get_available_platforms()}
+
 
 
 @app.get("/api/runs")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.io.base import DataValidationError
 from src.io.cosmx import (
     REQUIRED_COLUMNS,
     build_cell_level_adata,
@@ -22,7 +23,7 @@ class TestLoadCosmxTranscripts:
     def test_missing_columns_raises_error(self, tmp_path):
         bad_csv = tmp_path / "bad.csv"
         bad_csv.write_text("x,y,z\n1,2,3\n")
-        with pytest.raises(ValueError, match="Missing required columns"):
+        with pytest.raises(DataValidationError, match="Missing required columns"):
             load_cosmx_transcripts(str(bad_csv))
 
     def test_strips_unnamed_column(self, sample_transcripts_df, tmp_path):
