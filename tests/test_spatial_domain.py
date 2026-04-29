@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import numpy as np
-import scanpy as sc
-from src.steps.spatial_domain import run_spatial_domain_identification
 from src.registry import get_available_backends
+from src.steps.spatial_domain import run_spatial_domain_identification
 
 
 class TestRunSpatialDomainIdentification:

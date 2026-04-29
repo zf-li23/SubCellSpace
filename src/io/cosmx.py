@@ -5,7 +5,6 @@ from pathlib import Path
 import anndata as ad
 import numpy as np
 import pandas as pd
-
 from spatialdata import SpatialData, sanitize_table
 from spatialdata.models import PointsModel
 
@@ -15,6 +14,9 @@ REQUIRED_COLUMNS = ["fov", "cell_ID", "x_global_px", "y_global_px", "target", "C
 
 
 def load_cosmx_transcripts(path: str | Path) -> pd.DataFrame:
+    path = Path(path)
+    if not path.exists():
+        raise ValueError(f"Input file does not exist: {path}")
     df = pd.read_csv(path)
     missing = [column for column in REQUIRED_COLUMNS if column not in df.columns]
     if missing:

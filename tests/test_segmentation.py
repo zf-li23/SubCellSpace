@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import pytest
 import pandas as pd
+import pytest
+
 from src.steps.segmentation import assign_cells
-from src.registry import get_available_backends
 
 
 class TestAssignCells:
@@ -31,7 +31,7 @@ class TestAssignCells:
         with pytest.raises(ValueError, match="Unknown segmentation backend"):
             assign_cells(sample_transcripts_df, "imaginary_backend")
 
-    def test_provided_cells_filters_empty(self, tmp_path):
+    def test_provided_cells_filters_empty(self):
         df = pd.DataFrame(
             {
                 "fov": [1, 1, 2],

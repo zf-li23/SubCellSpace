@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import pandas as pd
 import pytest
 
 from src.pipeline_engine import ExecutionContext, _run_step, run_pipeline
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -46,6 +42,7 @@ class TestExecutionContext:
 
     def test_step_results_accumulation(self, empty_context):
         from src.models import StepResult
+
         empty_context.step_results["denoise"] = StepResult(
             output=pd.DataFrame(),
             summary={"test": True},
@@ -69,6 +66,7 @@ class TestRunStep:
     def test_denoise_step(self, sample_context):
         """Denoise step should filter transcripts by CellComp."""
         from src.registry import load_backends
+
         load_backends()
 
         result = _run_step("denoise", "intracellular", sample_context)
@@ -83,6 +81,7 @@ class TestRunStep:
     def test_denoise_missing_transcripts(self, empty_context):
         """Denoise step should raise if transcripts not loaded."""
         from src.registry import load_backends
+
         load_backends()
 
         with pytest.raises(ValueError, match="No transcripts"):
@@ -91,6 +90,7 @@ class TestRunStep:
     def test_segmentation_step(self, sample_context):
         """Segmentation step needs denoised data first."""
         from src.registry import load_backends
+
         load_backends()
 
         # First run denoise to populate denoised_df
@@ -104,6 +104,7 @@ class TestRunStep:
     def test_segmentation_missing_denoised(self, sample_context):
         """Segmentation should raise if denoised data missing."""
         from src.registry import load_backends
+
         load_backends()
 
         with pytest.raises(ValueError, match="No denoised"):
@@ -111,21 +112,23 @@ class TestRunStep:
 
     def test_unknown_step(self, empty_context):
         """Unknown step/backend combination should raise ValueError."""
-        with pytest.raises(ValueError, match="Unknown step"):
+        with pytest.raises(ValueError, match="No runner registered"):
             _run_step("nonexistent_step", "some_backend", empty_context)
 
     def test_unknown_backend(self, sample_context):
         """Known step but unknown backend should raise ValueError."""
         from src.registry import load_backends
+
         load_backends()
 
-        with pytest.raises(ValueError, match="Unknown backend"):
+        with pytest.raises(ValueError, match="Unknown denoise backend"):
             _run_step("denoise", "nonexistent_backend", sample_context)
 
     def test_step_params_passed(self, sample_context):
         """Extra params should be passed to the step function."""
-        from src.registry import load_backends
         from src.models import StepResult
+        from src.registry import load_backends
+
         load_backends()
 
         # subcellular step accepts params including backend
@@ -141,6 +144,7 @@ class TestRunStep:
     def test_step_elapsed_time_recorded(self, sample_context):
         """Each step should record elapsed time in its summary."""
         from src.registry import load_backends
+
         load_backends()
 
         result = _run_step("denoise", "intracellular", sample_context)
@@ -236,12 +240,14 @@ class TestRunPipeline:
         from src.config import Settings
 
         settings = Settings(config_path="/nonexistent/path.yaml")
-        settings.update({
-            "input_csv": sample_transcripts_csv,
-            "output_dir": str(tmp_path / "settings_test"),
-            "min_transcripts": 0,
-            "min_genes": 0,
-        })
+        settings.update(
+            {
+                "input_csv": sample_transcripts_csv,
+                "output_dir": str(tmp_path / "settings_test"),
+                "min_transcripts": 0,
+                "min_genes": 0,
+            }
+        )
         result = run_pipeline(settings=settings)
         assert result.adata is not None
 
@@ -276,7 +282,7 @@ class TestRunPipeline:
 class TestRunPipelineErrors:
     def test_nonexistent_input_csv(self, tmp_path):
         """Non-existent input CSV should raise an error."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             run_pipeline(
                 input_csv="/nonexistent/file.csv",
                 output_dir=str(tmp_path / "error_test"),
@@ -302,12 +308,14 @@ class TestRunPipelineErrors:
         from src.config import Settings
 
         settings = Settings(config_path="/nonexistent/path.yaml")
-        settings.update({
-            "input_csv": sample_transcripts_csv,
-            "output_dir": str(tmp_path / "skip_disabled"),
-            "min_transcripts": 0,
-            "min_genes": 0,
-        })
+        settings.update(
+            {
+                "input_csv": sample_transcripts_csv,
+                "output_dir": str(tmp_path / "skip_disabled"),
+                "min_transcripts": 0,
+                "min_genes": 0,
+            }
+        )
         cfg = settings.pipeline
         # Disable annotation step
         for step in cfg.steps:

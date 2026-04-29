@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import numpy as np
 import scanpy as sc
-from src.steps.analysis import run_expression_and_spatial_analysis
+
 from src.registry import get_available_backends
+from src.steps.analysis import run_expression_and_spatial_analysis
 
 
 class TestRunExpressionAndSpatialAnalysis:

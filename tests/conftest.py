@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
-import anndata as ad
 from scipy.sparse import csr_matrix
 
 
@@ -16,7 +16,7 @@ def sample_transcripts_df() -> pd.DataFrame:
     cell_ids = rng.integers(1, 11, size=n)
     targets = rng.choice(["GeneA", "GeneB", "GeneC", "GeneD", "GeneE"], size=n)
     comps = rng.choice(["Nuclear", "Cytoplasm", "Membrane"], size=n)
-    cells = [f"{f}_{c}" for f, c in zip(fovs, cell_ids)]
+    cells = [f"{f}_{c}" for f, c in zip(fovs, cell_ids, strict=False)]
 
     return pd.DataFrame(
         {
@@ -39,19 +39,19 @@ def sample_anndata() -> ad.AnnData:
     """Small AnnData with 50 cells, 20 genes, spatial coordinates, and cluster/spatial_domain obs."""
     rng = np.random.default_rng(123)
     n_obs, n_vars = 50, 20
-    X = rng.poisson(lam=3, size=(n_obs, n_vars)).astype(np.float32)
-    adata = ad.AnnData(X=X)
+    x = rng.poisson(lam=3, size=(n_obs, n_vars)).astype(np.float32)
+    adata = ad.AnnData(X=x)
     adata.var_names = [f"Gene_{i}" for i in range(n_vars)]
     adata.obs_names = [f"Cell_{i}" for i in range(n_obs)]
     adata.obsm["spatial"] = rng.uniform(0, 100, size=(n_obs, 2)).astype(np.float32)
     adata.obsm["X_pca"] = rng.normal(size=(n_obs, 10)).astype(np.float32)
     adata.obs["cluster"] = [str(i % 5) for i in range(n_obs)]
     adata.obs["spatial_domain"] = [str(i % 4) for i in range(n_obs)]
-    adata.obs["total_counts"] = X.sum(axis=1)
-    adata.obs["n_genes_by_counts"] = (X > 0).sum(axis=1)
+    adata.obs["total_counts"] = x.sum(axis=1)
+    adata.obs["n_genes_by_counts"] = (x > 0).sum(axis=1)
     adata.obs["n_transcripts"] = adata.obs["total_counts"]
-    adata.layers["counts"] = X.copy()
-    adata.layers["lognorm"] = np.log1p(X)
+    adata.layers["counts"] = x.copy()
+    adata.layers["lognorm"] = np.log1p(x)
 
     # Build a simple spatial connectivities matrix
     from sklearn.neighbors import kneighbors_graph

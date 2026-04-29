@@ -9,18 +9,25 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
+if TYPE_CHECKING:
+    from .models import StepResult
+    from .pipeline_engine import ExecutionContext
+
 # ── type aliases ────────────────────────────────────────────────────
 BackendFunc = Callable[..., Any]
+StepRunner = Callable[["ExecutionContext", str, dict[str, Any]], "StepResult"]
 StepName = str
 BackendName = str
 
 
 # ── Singleton Registry ──────────────────────────────────────────────
+
 
 class _BackendRegistry:
     """Central registry that maps step names → backend names → callables.
@@ -35,20 +42,21 @@ class _BackendRegistry:
         self._defaults: dict[StepName, BackendName] = {}
         self._config: dict[str, Any] = {}
         self._config_loaded = False
+        self._runners: dict[StepName, StepRunner] = {}
 
     # ── Public API ──────────────────────────────────────────────
 
-    def register_backend(
-        self, step_name: str, backend_name: str
-    ) -> Callable[[BackendFunc], BackendFunc]:
+    def register_backend(self, step_name: str, backend_name: str) -> Callable[[BackendFunc], BackendFunc]:
         """Decorator that registers *backend_name* for *step_name*.
 
         The decorated function is added to the registry and returned
         unchanged so that normal imports / tests still work.
         """
+
         def decorator(func: BackendFunc) -> BackendFunc:
             self._backends.setdefault(step_name, {})[backend_name] = func
             return func
+
         return decorator
 
     def get_available_backends(self, step_name: str) -> list[str]:
@@ -65,8 +73,7 @@ class _BackendRegistry:
         func = step_backends.get(backend_name)
         if func is None:
             raise ValueError(
-                f"Unknown backend '{backend_name}' for step '{step_name}'. "
-                f"Available: {list(step_backends)}"
+                f"Unknown backend '{backend_name}' for step '{step_name}'. Available: {list(step_backends)}"
             )
         return func
 
@@ -106,12 +113,48 @@ class _BackendRegistry:
 
         # ── Internal helpers ────────────────────────────────────────
 
+    # ── Step runner API ──────────────────────────────────────────
+
+    def register_runner(self, step_name: str) -> Callable[[StepRunner], StepRunner]:
+        """Decorator that registers a runner function for *step_name*.
+
+        The runner function encapsulates all step-specific I/O logic
+        (reading from and writing to ``ExecutionContext``).  It has
+        signature::
+
+            def runner(ctx: ExecutionContext, backend: str,
+                       params: dict[str, Any]) -> StepResult
+
+        The engine uses this to eliminate the hardcoded if/elif chain.
+        """
+
+        def decorator(func: StepRunner) -> StepRunner:
+            self._runners[step_name] = func
+            return func
+
+        return decorator
+
+    def get_runner(self, step_name: str) -> StepRunner:
+        """Return the registered runner for *step_name*."""
+        self._ensure_config_loaded()
+        runner = self._runners.get(step_name)
+        if runner is None:
+            raise ValueError(f"No runner registered for step '{step_name}'. Available runners: {list(self._runners)}")
+        return runner
+
+    def get_available_runners(self) -> list[str]:
+        """Return list of step names that have registered runners."""
+        return list(self._runners)
+
+        # ── Internal helpers ────────────────────────────────────────
+
     def _ensure_config_loaded(self) -> None:
         if self._config_loaded:
             return
         # Try using the new Settings singleton first (Phase 1)
         try:
             from .config import settings as _settings
+
             pipeline_cfg = _settings.pipeline
             self._config = _settings.as_dict()
             for step in pipeline_cfg.steps:
@@ -123,9 +166,7 @@ class _BackendRegistry:
             pass
 
         # Fallback: load from YAML file directly
-        config_path = (
-            Path(__file__).resolve().parent.parent / "config" / "pipeline.yaml"
-        )
+        config_path = Path(__file__).resolve().parent.parent / "config" / "pipeline.yaml"
         if config_path.exists():
             with open(config_path, encoding="utf-8") as f:
                 self._config = yaml.safe_load(f) or {}
@@ -144,3 +185,6 @@ get_default_backend = registry.get_default_backend
 get_step_order = registry.get_step_order
 get_step_config = registry.get_step_config
 load_backends = registry.load_backends
+register_runner = registry.register_runner
+get_runner = registry.get_runner
+get_available_runners = registry.get_available_runners

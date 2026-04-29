@@ -7,8 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-from sklearn.metrics import adjusted_rand_score
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import adjusted_rand_score, silhouette_score
 
 
 def _safe_ratio(numerator: float, denominator: float) -> float:
@@ -75,7 +74,9 @@ def build_layer_evaluation(
     segmented_df: pd.DataFrame,
     adata: ad.AnnData,
 ) -> dict[str, Any]:
-    transcripts_per_cell = segmented_df.groupby("cell")["target"].size() if len(segmented_df) else pd.Series(dtype=float)
+    transcripts_per_cell = (
+        segmented_df.groupby("cell")["target"].size() if len(segmented_df) else pd.Series(dtype=float)
+    )
     n_clusters = int(adata.obs["cluster"].nunique()) if "cluster" in adata.obs else 0
     n_cell_types = int(adata.obs["cell_type"].nunique()) if "cell_type" in adata.obs else 0
     n_domains = int(adata.obs["spatial_domain"].nunique()) if "spatial_domain" in adata.obs else 0
@@ -115,9 +116,13 @@ def build_layer_evaluation(
         "expression": {
             "n_cells_after_qc": int(adata.n_obs),
             "n_genes_after_hvg": int(adata.n_vars),
-            "qc_pass_ratio_vs_segmented": _safe_ratio(float(adata.n_obs), float(segmented_df["cell"].nunique() if len(segmented_df) else 0)),
+            "qc_pass_ratio_vs_segmented": _safe_ratio(
+                float(adata.n_obs), float(segmented_df["cell"].nunique() if len(segmented_df) else 0)
+            ),
             "median_total_counts": float(adata.obs["total_counts"].median()) if "total_counts" in adata.obs else 0.0,
-            "median_n_genes_by_counts": float(adata.obs["n_genes_by_counts"].median()) if "n_genes_by_counts" in adata.obs else 0.0,
+            "median_n_genes_by_counts": float(adata.obs["n_genes_by_counts"].median())
+            if "n_genes_by_counts" in adata.obs
+            else 0.0,
         },
         "clustering": {
             "n_clusters": n_clusters,
@@ -143,25 +148,29 @@ def build_layer_evaluation(
             "domain_cluster_ari": domain_cluster_ari,
         },
         "subcellular_spatial_domain": {
-            "n_cells_with_multiple_domains": int(
-                adata.obs["n_subcellular_domains"].gt(1).sum()
-            ) if "n_subcellular_domains" in adata.obs else 0,
-            "fraction_multi_domain": float(
-                adata.obs["n_subcellular_domains"].gt(1).mean()
-            ) if "n_subcellular_domains" in adata.obs else 0.0,
-            "mean_domains_per_cell": float(
-                adata.obs["n_subcellular_domains"].mean()
-            ) if "n_subcellular_domains" in adata.obs else 1.0,
+            "n_cells_with_multiple_domains": int(adata.obs["n_subcellular_domains"].gt(1).sum())
+            if "n_subcellular_domains" in adata.obs
+            else 0,
+            "fraction_multi_domain": float(adata.obs["n_subcellular_domains"].gt(1).mean())
+            if "n_subcellular_domains" in adata.obs
+            else 0.0,
+            "mean_domains_per_cell": float(adata.obs["n_subcellular_domains"].mean())
+            if "n_subcellular_domains" in adata.obs
+            else 1.0,
             "n_transcripts_in_multi_domain_cells": int(
-                segmented_df[segmented_df["cell"].isin(
-                    adata.obs_names[adata.obs["n_subcellular_domains"].gt(1)]
-                )].shape[0]
-            ) if (
+                segmented_df[
+                    segmented_df["cell"].isin(adata.obs_names[adata.obs["n_subcellular_domains"].gt(1)])
+                ].shape[0]
+            )
+            if (
                 "n_subcellular_domains" in adata.obs
                 and len(segmented_df)
                 and "subcellular_domain" in segmented_df.columns
-            ) else 0,
-        } if (adata.n_obs > 0 and "n_subcellular_domains" in adata.obs) else {
+            )
+            else 0,
+        }
+        if (adata.n_obs > 0 and "n_subcellular_domains" in adata.obs)
+        else {
             "n_cells_with_multiple_domains": 0,
             "fraction_multi_domain": 0.0,
             "mean_domains_per_cell": 1.0,

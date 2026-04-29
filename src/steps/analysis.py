@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import scanpy as sc
 import squidpy as sq
 from sklearn.cluster import KMeans
 
 from ..models import StepResult
-from ..registry import register_backend
+from ..registry import register_backend, register_runner
+
+if TYPE_CHECKING:
+    from ..pipeline_engine import ExecutionContext
 
 # ── Backend implementations ────────────────────────────────────────────────
 
@@ -32,7 +37,7 @@ def _cluster_leiden(adata: sc.AnnData, resolution: float) -> str:
             return "kmeans_fallback"
 
 
-def _cluster_kmeans(adata: sc.AnnData, resolution: float) -> str:  # noqa: ARGS001
+def _cluster_kmeans(adata: sc.AnnData, resolution: float) -> str:  # noqa: ARG001
     n_clusters = min(8, max(2, adata.n_obs))
     labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(adata.obsm["X_pca"])
     adata.obs["cluster"] = labels.astype(str)
@@ -61,10 +66,7 @@ def run_expression_and_spatial_analysis(
     leiden_resolution: float,
 ) -> StepResult:
     if clustering_backend not in _CLUSTER_FUNCS:
-        raise ValueError(
-            f"Unknown clustering backend: {clustering_backend}. "
-            f"Available: {list(_CLUSTER_FUNCS)}"
-        )
+        raise ValueError(f"Unknown clustering backend: {clustering_backend}. Available: {list(_CLUSTER_FUNCS)}")
 
     n_obs_before = adata.n_obs
 
@@ -113,3 +115,29 @@ def run_expression_and_spatial_analysis(
         "leiden_resolution": float(leiden_resolution),
     }
     return StepResult(output=adata, summary=summary, backend_used=cluster_backend_used)
+
+
+# ── Step runner (registered for pipeline engine) ──────────────────────────
+
+
+@register_runner("analysis")
+def _run_analysis(
+    ctx: ExecutionContext,
+    backend: str,
+    params: dict[str, Any],
+) -> StepResult:
+    if ctx.adata is None:
+        raise ValueError("No AnnData before analysis step")
+    min_transcripts = params.get("min_transcripts", 10)
+    min_genes = params.get("min_genes", 10)
+    clustering_backend = params.get("clustering_backend", backend)
+    leiden_resolution = params.get("leiden_resolution", 1.0)
+    result = run_expression_and_spatial_analysis(
+        ctx.adata,
+        min_transcripts=min_transcripts,
+        min_genes=min_genes,
+        clustering_backend=clustering_backend,
+        leiden_resolution=leiden_resolution,
+    )
+    ctx.adata = result.output
+    return result

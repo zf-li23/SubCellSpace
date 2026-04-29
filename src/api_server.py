@@ -17,9 +17,7 @@ from .pipelines.cosmx_minimal import run_cosmx_minimal
 from .registry import get_available_backends
 
 # ── Configurable defaults (from centralized configuration system) ─────────
-DEFAULT_INPUT_CSV = Path(
-    _settings.get("input_csv", "data/test/Mouse_brain_CosMX_1000cells.csv")
-)
+DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMX_1000cells.csv"))
 DEFAULT_OUTPUT_DIR = Path(_settings.get("output_dir", "outputs/api_runs"))
 DEFAULT_REPORT_RUN = _settings.get("report_run", "cosmx_try_again_round")
 DEFAULT_BENCHMARK_RUN = _settings.get("benchmark_run", "cosmx_benchmark_round")
@@ -45,6 +43,7 @@ def _sanitise_cell_id(cell_id: str) -> str:
 
 # ── CORS ──────────────────────────────────────────────────────────────────
 
+
 def _parse_allowed_origins() -> list[str]:
     raw = _settings.get("allowed_origins", "http://127.0.0.1:5173,http://localhost:5173")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
@@ -61,6 +60,7 @@ app.add_middleware(
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────
+
 
 class CosmxRunRequest(BaseModel):
     input_csv: str = Field(default=str(DEFAULT_INPUT_CSV))
@@ -79,6 +79,7 @@ class CosmxRunRequest(BaseModel):
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -149,7 +150,9 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
     _validate_backend("segmentation_backend", request.segmentation_backend, get_available_backends("segmentation"))
     _validate_backend("clustering_backend", request.clustering_backend, get_available_backends("analysis"))
     _validate_backend("annotation_backend", request.annotation_backend, get_available_backends("annotation"))
-    _validate_backend("spatial_domain_backend", request.spatial_domain_backend, get_available_backends("spatial_domain"))
+    _validate_backend(
+        "spatial_domain_backend", request.spatial_domain_backend, get_available_backends("spatial_domain")
+    )
     _validate_backend(
         "subcellular_domain_backend",
         request.subcellular_domain_backend,
@@ -186,6 +189,7 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────
+
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
@@ -235,19 +239,21 @@ def list_runs() -> list[dict[str, Any]]:
         except ValueError:
             rel_report_path = Path("outputs") / child.name / "cosmx_minimal_report.json"
 
-        runs.append({
-            "run_name": child.name,
-            "report_path": str(rel_report_path),
-            "created_at": params.get("created_at") or params.get("timestamp"),
-            "n_cells": analysis.get("n_cells") or report.get("n_cells") or 0,
-            "n_genes": analysis.get("n_genes") or report.get("n_genes") or 0,
-            "denoise_backend": params.get("denoise_backend"),
-            "segmentation_backend": params.get("segmentation_backend"),
-            "clustering_backend": params.get("clustering_backend"),
-            "annotation_backend": params.get("annotation_backend"),
-            "spatial_domain_backend": params.get("spatial_domain_backend"),
-            "input_csv": params.get("input_csv"),
-        })
+        runs.append(
+            {
+                "run_name": child.name,
+                "report_path": str(rel_report_path),
+                "created_at": params.get("created_at") or params.get("timestamp"),
+                "n_cells": analysis.get("n_cells") or report.get("n_cells") or 0,
+                "n_genes": analysis.get("n_genes") or report.get("n_genes") or 0,
+                "denoise_backend": params.get("denoise_backend"),
+                "segmentation_backend": params.get("segmentation_backend"),
+                "clustering_backend": params.get("clustering_backend"),
+                "annotation_backend": params.get("annotation_backend"),
+                "spatial_domain_backend": params.get("spatial_domain_backend"),
+                "input_csv": params.get("input_csv"),
+            }
+        )
 
     return runs
 
@@ -343,7 +349,9 @@ def cosmx_report(
 
 
 @app.post("/api/cosmx/run")
-def cosmx_run(request: CosmxRunRequest = Body(default_factory=CosmxRunRequest)) -> dict[str, Any]:
+def cosmx_run(request: CosmxRunRequest | None = None) -> dict[str, Any]:
+    if request is None:
+        request = CosmxRunRequest()
     return _run_cosmx(request)
 
 
@@ -419,14 +427,16 @@ def get_cell_transcripts(
     for _, row in cell_df.iterrows():
         x = float(row["x_global_px"])
         y = float(row["y_global_px"])
-        points.append({
-            "x": x,
-            "y": y,
-            "subcellular_domain": str(row.get("subcellular_domain", "0")),
-            "gene": str(row.get("target", "unknown")),
-            "cellcomp": str(row.get("CellComp", "unknown")),
-            "fov": int(row.get("fov", -1)),
-        })
+        points.append(
+            {
+                "x": x,
+                "y": y,
+                "subcellular_domain": str(row.get("subcellular_domain", "0")),
+                "gene": str(row.get("target", "unknown")),
+                "cellcomp": str(row.get("CellComp", "unknown")),
+                "fov": int(row.get("fov", -1)),
+            }
+        )
         hull_x_vals.append(x)
         hull_y_vals.append(y)
 
@@ -449,15 +459,16 @@ def get_cell_transcripts(
 
 # ── Internal utilities ────────────────────────────────────────────────────
 
+
 def _compute_convex_hull(xs: list[float], ys: list[float]) -> list[dict[str, float]]:
     """Compute the 2D convex hull of points using Andrew's monotone chain algorithm.
 
     Returns a list of {x, y} dicts in counter-clockwise order forming the hull polygon.
     """
     if len(xs) < 3:
-        return [{"x": x, "y": y} for x, y in zip(xs, ys)]
+        return [{"x": x, "y": y} for x, y in zip(xs, ys, strict=False)]
 
-    points = list(zip(xs, ys))
+    points = list(zip(xs, ys, strict=False))
     # Remove duplicates and sort by x then y
     points = sorted(set(points))
 

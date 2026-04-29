@@ -18,11 +18,15 @@ def build_parser() -> argparse.ArgumentParser:
     cosmx.add_argument("--min-transcripts", type=int, default=10)
     cosmx.add_argument("--min-genes", type=int, default=10)
     cosmx.add_argument("--denoise-backend", choices=get_available_backends("denoise"), default="intracellular")
-    cosmx.add_argument("--segmentation-backend", choices=get_available_backends("segmentation"), default="provided_cells")
+    cosmx.add_argument(
+        "--segmentation-backend", choices=get_available_backends("segmentation"), default="provided_cells"
+    )
     cosmx.add_argument("--clustering-backend", choices=get_available_backends("analysis"), default="leiden")
     cosmx.add_argument("--leiden-resolution", type=float, default=1.0)
     cosmx.add_argument("--annotation-backend", choices=get_available_backends("annotation"), default="rank_marker")
-    cosmx.add_argument("--spatial-domain-backend", choices=get_available_backends("spatial_domain"), default="spatial_leiden")
+    cosmx.add_argument(
+        "--spatial-domain-backend", choices=get_available_backends("spatial_domain"), default="spatial_leiden"
+    )
     cosmx.add_argument("--spatial-domain-resolution", type=float, default=1.0)
     cosmx.add_argument("--n-spatial-domains", type=int, default=None)
     cosmx.add_argument(

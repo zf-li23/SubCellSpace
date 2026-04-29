@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import scanpy as sc
 
 from ..models import StepResult
-from ..registry import register_backend
+from ..registry import register_backend, register_runner
+
+if TYPE_CHECKING:
+    from ..pipeline_engine import ExecutionContext
 
 # ── Backend implementations ────────────────────────────────────────────────
 
@@ -58,10 +63,7 @@ def run_cell_type_annotation(
     backend: str,
 ) -> StepResult:
     if backend not in _ANNOTATION_FUNCS:
-        raise ValueError(
-            f"Unknown annotation backend: {backend}. "
-            f"Available: {list(_ANNOTATION_FUNCS)}"
-        )
+        raise ValueError(f"Unknown annotation backend: {backend}. Available: {list(_ANNOTATION_FUNCS)}")
 
     backend_used = _ANNOTATION_FUNCS[backend](adata)
 
@@ -73,3 +75,30 @@ def run_cell_type_annotation(
         "cell_type_distribution": {str(k): int(v) for k, v in distribution.items()},
     }
     return StepResult(output=adata, summary=summary, backend_used=backend_used)
+
+
+# ── Step runner (registered for pipeline engine) ──────────────────────────
+
+
+@register_runner("annotation")
+def _run_annotation(
+    ctx: ExecutionContext,
+    backend: str,
+    _params: dict[str, Any],  # noqa: ARG001
+) -> StepResult:
+    if ctx.adata is None:
+        raise ValueError("No AnnData before annotation step")
+    if "cluster" not in ctx.adata.obs or ctx.adata.n_obs == 0:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.warning("Skipping annotation step — no 'cluster' column or empty adata.")
+        result = StepResult(
+            output=ctx.adata,
+            summary={"annotation_backend": backend, "skipped": True},
+            backend_used=backend,
+        )
+    else:
+        result = run_cell_type_annotation(ctx.adata, backend=backend)
+    ctx.adata = result.output
+    return result

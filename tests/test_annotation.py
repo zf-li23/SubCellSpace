@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import scanpy as sc
-from src.steps.annotation import run_cell_type_annotation
 from src.registry import get_available_backends
+from src.steps.annotation import run_cell_type_annotation
 
 
 class TestRunCellTypeAnnotation:

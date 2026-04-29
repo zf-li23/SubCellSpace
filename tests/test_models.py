@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.models import DatasetSummary, PipelineResult
 
 
@@ -50,7 +52,6 @@ class TestDatasetSummary:
 
     def test_slots_prevent_new_attributes(self, sample_anndata):
         """Exercise that slots=True prevents ad-hoc attribute assignment."""
-        from src.models import PipelineResult
 
         result = PipelineResult(
             adata=sample_anndata,
@@ -66,8 +67,5 @@ class TestDatasetSummary:
             report_path=Path("/tmp/test_report.json"),
         )
         # Should not be able to assign a random new attribute
-        try:
+        with pytest.raises(AttributeError):
             result._extra = 42  # type: ignore[attr-defined]
-            assert False, "Should have raised AttributeError"
-        except AttributeError:
-            pass

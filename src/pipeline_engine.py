@@ -11,24 +11,24 @@
 from __future__ import annotations
 
 import json
-import time
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 
-from .config import Settings, PipelineConfig
-from .models import StepResult, PipelineResult
+from .config import PipelineConfig, Settings
+from .evaluation import build_layer_evaluation
 from .io.cosmx import (
     build_cell_level_adata,
     build_spatialdata,
     load_cosmx_transcripts,
     summarize_cosmx_transcripts,
 )
-from .evaluation import build_layer_evaluation
-from .registry import load_backends, get_backend_func, get_available_backends
+from .models import PipelineResult, StepResult
+from .registry import get_available_backends, get_runner, load_backends
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,12 @@ def _run_step(
     context: ExecutionContext,
     step_params: dict[str, Any] | None = None,
 ) -> StepResult:
-    """Execute a single pipeline step by looking up its registered backend.
+    """Execute a single pipeline step by dispatching to its registered runner.
+
+    Each step module registers a ``StepRunner`` via ``@register_runner``
+    that encapsulates all I/O logic (reading from / writing to
+    ``ExecutionContext``).  This completely eliminates the need for a
+    hardcoded if/elif chain — adding a new step is purely data-driven.
 
     Parameters
     ----------
@@ -82,116 +87,26 @@ def _run_step(
         Current execution context; the step reads inputs from and writes
         outputs to this.
     step_params : dict or None
-        Additional keyword arguments forwarded to the step function.
+        Additional keyword arguments forwarded to the step runner.
 
     Returns
     -------
     StepResult
-        The result returned by the step function.
+        The result returned by the step runner.
 
     Raises
     ------
     ValueError
-        If the step/backend combination is unknown.
+        If no runner is registered for the step.
     """
-    func = get_backend_func(step_name, backend)
     params = dict(step_params or {})
 
     t0 = time.perf_counter()
     logger.info("Running step '%s' with backend '%s' …", step_name, backend)
 
-    result: StepResult
-    if step_name == "denoise":
-        if context.transcripts is None:
-            raise ValueError("No transcripts loaded before denoise step")
-        result = func(context.transcripts)  # type: ignore[arg-type]
-        result = StepResult(
-            output=result.output if isinstance(result, StepResult) else result,
-            summary=getattr(result, "summary", {"denoise_backend": backend}),
-            backend_used=backend,
-        )
-        context.denoised_df = result.output
-
-    elif step_name == "segmentation":
-        if context.denoised_df is None:
-            raise ValueError("No denoised data before segmentation step")
-        result = func(context.denoised_df)  # type: ignore[arg-type]
-        if not isinstance(result, StepResult):
-            result = StepResult(
-                output=result,
-                summary={"segmentation_backend": backend},
-                backend_used=backend,
-            )
-        context.segmented_df = result.output
-
-    elif step_name == "spatial_domain":
-        if context.adata is None:
-            raise ValueError("No AnnData before spatial_domain step")
-        from .steps.spatial_domain import run_spatial_domain_identification as _run_sd
-        resolution = params.pop("domain_resolution", 1.0)
-        n_domains = params.pop("n_spatial_domains", None)
-        result = _run_sd(context.adata, backend, resolution, n_domains)
-        context.adata = result.output
-
-    elif step_name == "subcellular_spatial_domain":
-        if context.segmented_df is None or context.adata is None:
-            raise ValueError("No segmented data or adata before subcellular step")
-        # Use the full wrapper function instead of the raw per-cell clusterer,
-        # since the wrapper handles cell iteration, parameter dispatch, and
-        # returns a StepResult with (segmented_df, adata) tuple.
-        from .steps.subcellular_spatial_domain import run_subcellular_spatial_domain as _run_subcellular
-        result = _run_subcellular(
-            context.segmented_df,
-            context.adata,
-            backend=backend,
-            **params,
-        )
-        output_tuple = result.output
-        if isinstance(output_tuple, tuple) and len(output_tuple) == 2:
-            context.segmented_df, context.adata = output_tuple
-        else:
-            context.adata = result.output
-
-    elif step_name == "analysis":
-        if context.adata is None:
-            raise ValueError("No AnnData before analysis step")
-        from .steps.analysis import run_expression_and_spatial_analysis as _run_analysis
-        min_transcripts = params.pop("min_transcripts", 10)
-        min_genes = params.pop("min_genes", 10)
-        clustering_backend = params.pop("clustering_backend", backend)
-        leiden_resolution = params.pop("leiden_resolution", 1.0)
-        result = _run_analysis(
-            context.adata,
-            min_transcripts=min_transcripts,
-            min_genes=min_genes,
-            clustering_backend=clustering_backend,
-            leiden_resolution=leiden_resolution,
-        )
-        context.adata = result.output
-
-    elif step_name == "annotation":
-        if context.adata is None:
-            raise ValueError("No AnnData before annotation step")
-        if "cluster" not in context.adata.obs or context.adata.n_obs == 0:
-            # No clustering was performed (e.g., empty adata after filtering);
-            # skip annotation gracefully.
-            logger.warning(
-                "Skipping annotation step — no 'cluster' column or empty adata."
-            )
-            result = StepResult(
-                output=context.adata,
-                summary={"annotation_backend": backend, "skipped": True},
-                backend_used=backend,
-            )
-        else:
-            from .steps.annotation import run_cell_type_annotation as _run_anno
-            result = _run_anno(context.adata, backend=backend)
-        context.adata = result.output
-
-    else:
-        # Generic fallback – try calling the function directly with the
-        # current context data.
-        result = func(context, **params)  # type: ignore[arg-type]
+    # Dispatch to the registered runner — no if/elif chain needed
+    runner = get_runner(step_name)
+    result = runner(context, backend, params)
 
     elapsed = time.perf_counter() - t0
     logger.info(
@@ -233,6 +148,7 @@ def run_pipeline(
         ``subcellular_domain_backend``.
     """
     from .config import settings as default_settings
+
     settings = settings or default_settings
 
     # Apply overrides
@@ -283,8 +199,7 @@ def run_pipeline(
         if backend not in available:
             fallback = step_cfg.default_backend
             logger.warning(
-                "Backend '%s' not available for step '%s'. "
-                "Available: %s. Falling back to '%s'.",
+                "Backend '%s' not available for step '%s'. Available: %s. Falling back to '%s'.",
                 backend,
                 step_cfg.name,
                 available,
@@ -296,7 +211,7 @@ def run_pipeline(
         step_params: dict[str, Any] = dict(step_cfg.params)
         for key, value in overrides.items():
             if key.startswith(step_cfg.name + "_"):
-                param_name = key[len(step_cfg.name) + 1:]
+                param_name = key[len(step_cfg.name) + 1 :]
                 step_params[param_name] = value
         # Generic pipeline-level params that map to the analysis step
         if step_cfg.name == "analysis":
@@ -340,12 +255,7 @@ def run_pipeline(
         "n_obs": int(ctx.adata.n_obs),
         "n_vars": int(ctx.adata.n_vars),
         "clusters": (
-            ctx.adata.obs["cluster"]
-            .value_counts()
-            .sort_index()
-            .to_dict()
-            if "cluster" in ctx.adata.obs
-            else {}
+            ctx.adata.obs["cluster"].value_counts().sort_index().to_dict() if "cluster" in ctx.adata.obs else {}
         ),
         "summary": {
             "n_transcripts": summary_ds.n_transcripts,
@@ -354,10 +264,7 @@ def run_pipeline(
             "n_fovs": summary_ds.n_fovs,
             **summary_ds.extra,
         },
-        "step_summary": {
-            name: result.summary
-            for name, result in ctx.step_results.items()
-        },
+        "step_summary": {name: result.summary for name, result in ctx.step_results.items()},
         "step_order": cfg.get_step_names(),
         "layer_evaluation": layer_evaluation,
         "outputs": {

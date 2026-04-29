@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
+
 from src.evaluation.metrics import (
     _safe_ratio,
     _series_distribution,

@@ -1,0 +1,68 @@
+# environment.yml
+# SubCellSpace Conda Environment
+# Python 3.13, split into core (required) + optional (per-tool) dependencies
+
+name: subcellspace
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # ── Python ──
+  - python>=3.12
+
+  # ── Core Dependencies (required for SubCellSpace) ──
+  - pip
+  - anndata>=0.12
+  - fastapi>=0.115
+  - numpy>=2.0
+  - pandas>=2.2
+  - pydantic>=2.8
+  - scanpy>=1.11
+  - scikit-learn>=1.5
+  - scipy>=1.13
+  - squidpy>=1.7
+  - uvicorn>=0.30
+  - pytest>=8.0
+  - pytest-cov>=4.0
+
+  # ── Optional: Tool Dependencies ──
+  # (installed via pip from tools/ directory)
+
+  # pip section
+  - pip:
+    # === Core project (editable install) ===
+    - -e .
+
+    # === Denoise backends ===
+    # spARC: Spatial Affinity-Graph Recovery of Counts
+    - -e tools/spARC/
+    # SCRIN: CLI-only tool, no Python API needed
+
+    # === Segmentation backends ===
+    # cellpose: cell/nucleus segmentation
+    - -e tools/cellpose/
+    # sopa: SpatialData-based pipeline (with cellpose support)
+    - -e "tools/sopa/[cellpose]"
+
+    # === Spatial Domain backends ===
+    # GraphST: spatially informed clustering
+    - -e tools/GraphST/
+    - pot  # required by GraphST
+    # STAGATE: needs tensorflow (see notes below)
+    # SpaGCN: needs compilation (see notes below)
+
+    # === Subcellular Spatial Domain backends ===
+    # PhenoGraph: subpopulation detection
+    - -e tools/PhenoGraph/
+
+    # === Analysis backends ===
+    # scvi-tools: deep probabilistic analysis
+    - scvi-tools
+    # TOSICA: Transformer-based analysis
+    - -e tools/TOSICA/ --no-deps
+
+    # === Annotation backends ===
+    # CellTypist: cell type classification
+    - -e tools/celltypist/
+    # TOSICA (shared with analysis)

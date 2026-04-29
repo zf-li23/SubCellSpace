@@ -3,25 +3,22 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from src.validation import (
-    validate_dataframe,
-    validate_anndata_obs,
-    validate_anndata_obsm,
-    validate_non_empty,
-    validate_file_exists,
-    validate_denoise_input,
-    validate_segmentation_input,
-    validate_subcellular_input,
-    validate_analysis_input,
-    validate_annotation_input,
-    validate_run_input,
-    DENOISE_REQUIRED_COLUMNS,
-    SEGMENTATION_REQUIRED_COLUMNS,
-    SUBCELLULAR_REQUIRED_COLUMNS,
     ANALYSIS_REQUIRED_OBSM,
     ANNOTATION_REQUIRED_OBS,
+    DENOISE_REQUIRED_COLUMNS,
+    validate_analysis_input,
+    validate_anndata_obs,
+    validate_anndata_obsm,
+    validate_annotation_input,
+    validate_dataframe,
+    validate_denoise_input,
+    validate_file_exists,
+    validate_non_empty,
+    validate_run_input,
+    validate_segmentation_input,
+    validate_subcellular_input,
 )
 
 

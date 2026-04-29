@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-import pytest
-from src.pipeline import run_cosmx_minimal
 from src.models import PipelineResult
+from src.pipeline import run_cosmx_minimal
 
 
 class TestRunCosmxMinimal:

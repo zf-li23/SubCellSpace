@@ -12,7 +12,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -55,7 +55,7 @@ def _load_env_config() -> dict[str, Any]:
         if not key.startswith(ENV_PREFIX):
             continue
         # Remove prefix and split on __ (double underscore)
-        rest = key[len(ENV_PREFIX):]
+        rest = key[len(ENV_PREFIX) :]
         parts = rest.lower().split("__")
 
         # Try to parse as YAML scalar (int, float, bool, None, or string)
@@ -104,11 +104,7 @@ def deep_merge(base: dict, override: dict) -> dict:
     """Recursively merge two dictionaries (override wins)."""
     merged = dict(base)
     for key, value in override.items():
-        if (
-            key in merged
-            and isinstance(merged[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             merged[key] = deep_merge(merged[key], value)
         else:
             merged[key] = value
@@ -171,7 +167,7 @@ class PipelineConfig:
     def get_step_names(self) -> list[str]:
         return [s.name for s in self.steps if s.enabled]
 
-    def get_step_config(self, name: str) -> Optional[StepConfig]:
+    def get_step_config(self, name: str) -> StepConfig | None:
         for s in self.steps:
             if s.name == name:
                 return s
@@ -194,10 +190,7 @@ class Settings:
         self._overrides: dict[str, Any] = {}
 
         # Load YAML
-        if config_path is not None:
-            paths = [Path(config_path)]
-        else:
-            paths = CONFIG_SEARCH_PATHS
+        paths = [Path(config_path)] if config_path is not None else CONFIG_SEARCH_PATHS
 
         loaded = False
         for p in paths:

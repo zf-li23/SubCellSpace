@@ -10,7 +10,6 @@ from typing import Any
 
 import pandas as pd
 
-
 # ── Required column schemas per step ─────────────────────────────────
 
 DENOISE_REQUIRED_COLUMNS = {"CellComp"}
@@ -27,7 +26,7 @@ def validate_dataframe(
     df: pd.DataFrame,
     required_columns: set[str],
     name: str = "DataFrame",
-    allow_extra: bool = True,
+    allow_extra: bool = True,  # noqa: ARG001
 ) -> list[str]:
     """Validate that a DataFrame has all required columns.
 
@@ -51,9 +50,7 @@ def validate_dataframe(
     messages: list[str] = []
     missing = required_columns - set(df.columns)
     if missing:
-        messages.append(
-            f"{name}: missing required columns: {sorted(missing)}"
-        )
+        messages.append(f"{name}: missing required columns: {sorted(missing)}")
     return messages
 
 
@@ -66,9 +63,7 @@ def validate_anndata_obs(
     messages: list[str] = []
     missing = required_obs - set(adata.obs.columns)
     if missing:
-        messages.append(
-            f"{name}.obs: missing required columns: {sorted(missing)}"
-        )
+        messages.append(f"{name}.obs: missing required columns: {sorted(missing)}")
     return messages
 
 
@@ -81,9 +76,7 @@ def validate_anndata_obsm(
     messages: list[str] = []
     missing = required_obsm - set(adata.obsm.keys())
     if missing:
-        messages.append(
-            f"{name}.obsm: missing required keys: {sorted(missing)}"
-        )
+        messages.append(f"{name}.obsm: missing required keys: {sorted(missing)}")
     return messages
 
 
@@ -150,7 +143,7 @@ def validate_annotation_input(adata: Any) -> list[str]:
 
 def validate_run_input(
     input_csv: str | Path,
-    output_dir: str | Path,
+    output_dir: str | Path,  # noqa: ARG001
     min_transcripts: int,
     min_genes: int,
 ) -> list[str]:

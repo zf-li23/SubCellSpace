@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import anndata as ad
 import numpy as np
 import pandas as pd
-import anndata as ad
 import pytest
-from src.steps.subcellular_spatial_domain import run_subcellular_spatial_domain
+
 from src.registry import get_available_backends
+from src.steps.subcellular_spatial_domain import run_subcellular_spatial_domain
 
 
 class TestRunSubcellularSpatialDomain:
@@ -114,7 +115,7 @@ class TestRunSubcellularSpatialDomain:
         assert "leiden_spatial" in backends
         assert "none" in backends
 
-    def test_adata_obs_names_match_cell_column(self, sample_transcripts_df, sample_anndata):
+    def test_adata_obs_names_match_cell_column(self):
         """The function should handle mismatched cell names gracefully."""
         # Create adata with a different cell set
         rng = np.random.default_rng(99)

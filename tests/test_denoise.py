@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import pandas as pd
-import numpy as np
-from src.steps.denoise import apply_transcript_denoise
+
 from src.registry import get_available_backends
+from src.steps.denoise import apply_transcript_denoise
 
 
 class TestApplyTranscriptDenoise:
@@ -44,7 +44,19 @@ class TestApplyTranscriptDenoise:
         assert 0.0 <= result.summary["drop_ratio"] <= 1.0
 
     def test_empty_dataframe(self):
-        df_empty = pd.DataFrame(columns=["CellComp", "fov", "cell_ID", "x_global_px", "y_global_px", "x_local_px", "y_local_px", "z", "target"])
+        df_empty = pd.DataFrame(
+            columns=[
+                "CellComp",
+                "fov",
+                "cell_ID",
+                "x_global_px",
+                "y_global_px",
+                "x_local_px",
+                "y_local_px",
+                "z",
+                "target",
+            ]
+        )
         result = apply_transcript_denoise(df_empty, "intracellular")
         assert len(result.output) == 0
         assert result.summary["drop_ratio"] == 0.0

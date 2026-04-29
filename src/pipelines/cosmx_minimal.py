@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..pipeline_engine import run_pipeline
 from ..models import PipelineResult
+from ..pipeline_engine import run_pipeline
 
 
 def run_cosmx_minimal(

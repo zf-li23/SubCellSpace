@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-import json
-
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from src.api_server import app, _validate_backend, _resolve_under_repo, _resolve_report_path, _parse_allowed_origins
+from src.api_server import _parse_allowed_origins, _resolve_report_path, _resolve_under_repo, _validate_backend, app
 
 client = TestClient(app)
 
@@ -38,7 +36,7 @@ class TestValidateBackend:
         _validate_backend("test_backend", "intracellular", ["intracellular", "supercellular"])
 
     def test_invalid_backend_raises(self):
-        with pytest.raises(Exception):  # HTTPException
+        with pytest.raises(HTTPException):
             _validate_backend("test_backend", "bad_value", ["allowed_value"])
 
 
@@ -57,18 +55,21 @@ class TestPathResolution:
 class TestParseAllowedOrigins:
     def test_default(self, monkeypatch):
         from src.api_server import _settings
+
         # Clear any existing override for allowed_origins
-        monkeypatch.setattr(_settings, '_overrides', {})
-        monkeypatch.setattr(_settings, '_raw', {})
+        monkeypatch.setattr(_settings, "_overrides", {})
+        monkeypatch.setattr(_settings, "_raw", {})
         origins = _parse_allowed_origins()
         assert "http://127.0.0.1:5173" in origins
         assert "http://localhost:5173" in origins
 
     def test_custom(self, monkeypatch):
         from src.api_server import _settings
+
         # Use programmatic override (highest priority) instead of env var
         monkeypatch.setattr(
-            _settings, '_overrides',
+            _settings,
+            "_overrides",
             {"allowed_origins": "http://example.com,http://test:3000"},
         )
         origins = _parse_allowed_origins()
@@ -76,8 +77,10 @@ class TestParseAllowedOrigins:
 
     def test_empty_strings_filtered(self, monkeypatch):
         from src.api_server import _settings
+
         monkeypatch.setattr(
-            _settings, '_overrides',
+            _settings,
+            "_overrides",
             {"allowed_origins": "http://a.com, , http://b.com,"},
         )
         origins = _parse_allowed_origins()

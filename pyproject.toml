@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "anndata>=0.12",
   "fastapi>=0.115",
+  "hdbscan>=0.8.42",
   "numpy>=2.0",
   "pandas>=2.2",
   "pydantic>=2.8",
@@ -22,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-cov>=4.0"]
+dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.6", "mypy>=1.11"]
 
 [project.scripts]
 subcellspace = "src.cli:main"
@@ -31,4 +32,44 @@ subcellspace-api = "src.api_server:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "ARG", # flake8-unused-arguments
+]
+ignore = ["E501"]  # line-length is handled by ruff formatter
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disable_error_code = [
+    "type-arg",      # numpy/scipy/pandas stubs not fully aligned
+    "var-annotated", # some untyped class vars ok in dataclasses
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+]
 

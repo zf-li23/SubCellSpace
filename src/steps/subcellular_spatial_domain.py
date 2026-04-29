@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
+import anndata as ad
 import numpy as np
 import pandas as pd
-import anndata as ad
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import kneighbors_graph
 
 from ..models import StepResult
-from ..registry import register_backend
+from ..registry import register_backend, register_runner
+
+if TYPE_CHECKING:
+    from ..pipeline_engine import ExecutionContext
 
 
 # ── per-backend clustering functions ──────────────────────────────────────
+
 
 def _hdbscan_subcellular_domains(
     cell_df: pd.DataFrame,
@@ -87,9 +93,7 @@ def _leiden_spatial_subcellular_domains(
         return pd.Series(["0"] * n, index=cell_df.index)
 
     # Build symmetric k-NN adjacency matrix
-    adj = kneighbors_graph(
-        coords, n_neighbors=n_neighbors, mode="connectivity", n_jobs=-1
-    )
+    adj = kneighbors_graph(coords, n_neighbors=n_neighbors, mode="connectivity", n_jobs=-1)
     # Make symmetric (mutual k-NN)
     adj = adj.maximum(adj.T)
 
@@ -148,6 +152,7 @@ _CLUSTER_FUNCS = {
 
 # ── main entry point ──────────────────────────────────────────────────────
 
+
 def run_subcellular_spatial_domain(
     segmented_df: pd.DataFrame,
     adata: ad.AnnData,
@@ -184,8 +189,7 @@ def run_subcellular_spatial_domain(
     """
     if backend not in _CLUSTER_FUNCS and backend != "none":
         raise ValueError(
-            f"Unknown subcellular spatial domain backend: {backend}. "
-            f"Choose from {list(_CLUSTER_FUNCS) + ['none']}"
+            f"Unknown subcellular spatial domain backend: {backend}. Choose from {list(_CLUSTER_FUNCS) + ['none']}"
         )
 
     if backend == "none":
@@ -249,9 +253,7 @@ def run_subcellular_spatial_domain(
 
         cell_domain_counts[str(cell_id)] = n_domains
         dist = labels.value_counts().to_dict()
-        cell_domain_distributions[str(cell_id)] = ",".join(
-            f"{k}:{v}" for k, v in sorted(dist.items())
-        )
+        cell_domain_distributions[str(cell_id)] = ",".join(f"{k}:{v}" for k, v in sorted(dist.items()))
 
     if all_labels:
         segmented_df["subcellular_domain"] = pd.concat(all_labels)
@@ -273,13 +275,9 @@ def run_subcellular_spatial_domain(
         "subcellular_spatial_domain_backend": backend,
         "n_cells_processed": n_cells,
         "n_cells_with_multiple_domains": n_cells_with_multiple,
-        "fraction_multi_domain": round(
-            n_cells_with_multiple / max(n_cells, 1), 4
-        ),
+        "fraction_multi_domain": round(n_cells_with_multiple / max(n_cells, 1), 4),
         "mean_domains_per_cell": round(
-            np.mean(list(cell_domain_counts.values()))
-            if cell_domain_counts
-            else 1.0,
+            np.mean(list(cell_domain_counts.values())) if cell_domain_counts else 1.0,
             3,
         ),
         "total_noise_transcripts": total_noise,
@@ -292,3 +290,28 @@ def run_subcellular_spatial_domain(
         summary=summary,
         backend_used=backend,
     )
+
+
+# ── Step runner (registered for pipeline engine) ──────────────────────────
+
+
+@register_runner("subcellular_spatial_domain")
+def _run_subcellular_spatial_domain(
+    ctx: ExecutionContext,
+    backend: str,
+    params: dict[str, Any],
+) -> StepResult:
+    if ctx.segmented_df is None or ctx.adata is None:
+        raise ValueError("No segmented data or adata before subcellular step")
+    result = run_subcellular_spatial_domain(
+        ctx.segmented_df,
+        ctx.adata,
+        backend=backend,
+        **params,
+    )
+    output_tuple = result.output
+    if isinstance(output_tuple, tuple) and len(output_tuple) == 2:
+        ctx.segmented_df, ctx.adata = output_tuple
+    else:
+        ctx.adata = result.output
+    return result

@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-import pytest
-
 from src.config import (
-    Settings,
+    CONFIG_SEARCH_PATHS,
     PipelineConfig,
+    Settings,
     StepConfig,
     _load_env_config,
     _parse_env_value,
     deep_merge,
-    CONFIG_SEARCH_PATHS,
 )
 
 
@@ -249,11 +246,7 @@ class TestSettingsWithConfigFile:
 
     def test_env_overrides_yaml(self, monkeypatch, tmp_path):
         config_path = tmp_path / "test_config.yaml"
-        config_path.write_text(
-            "pipeline:\n"
-            "  name: yaml_name\n"
-            "  version: '1.0'\n"
-        )
+        config_path.write_text("pipeline:\n  name: yaml_name\n  version: '1.0'\n")
         monkeypatch.setenv("SUBCELLSPACE_PIPELINE__NAME", "env_name")
         settings = Settings(config_path=str(config_path))
         # Env should override YAML

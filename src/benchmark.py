@@ -42,7 +42,14 @@ def run_cosmx_backend_benchmark(
         subcellular_domain_backends,
     )
 
-    for denoise_backend, segmentation_backend, clustering_backend, annotation_backend, spatial_domain_backend, subcellular_domain_backend in combinations:
+    for (
+        denoise_backend,
+        segmentation_backend,
+        clustering_backend,
+        annotation_backend,
+        spatial_domain_backend,
+        subcellular_domain_backend,
+    ) in combinations:
         tag = (
             f"denoise-{denoise_backend}__seg-{segmentation_backend}__cluster-{clustering_backend}"
             f"__anno-{annotation_backend}__domain-{spatial_domain_backend}"

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import pandas as pd
 
 from ..models import StepResult
-from ..registry import register_backend
+from ..registry import register_backend, register_runner
+
+if TYPE_CHECKING:
+    from ..pipeline_engine import ExecutionContext
 
 # ── Backend implementations ────────────────────────────────────────────────
 
@@ -38,10 +43,7 @@ _DENOISE_FUNCS = {
 
 def apply_transcript_denoise(df: pd.DataFrame, backend: str) -> StepResult:
     if backend not in _DENOISE_FUNCS:
-        raise ValueError(
-            f"Unknown denoise backend: {backend}. "
-            f"Available: {list(_DENOISE_FUNCS)}"
-        )
+        raise ValueError(f"Unknown denoise backend: {backend}. Available: {list(_DENOISE_FUNCS)}")
 
     before = len(df)
     filtered = _DENOISE_FUNCS[backend](df)
@@ -56,3 +58,19 @@ def apply_transcript_denoise(df: pd.DataFrame, backend: str) -> StepResult:
         "drop_ratio": float(ratio),
     }
     return StepResult(output=filtered, summary=summary, backend_used=backend)
+
+
+# ── Step runner (registered for pipeline engine) ──────────────────────────
+
+
+@register_runner("denoise")
+def _run_denoise(
+    ctx: ExecutionContext,
+    backend: str,
+    _params: dict[str, Any],  # noqa: ARG001
+) -> StepResult:
+    if ctx.transcripts is None:
+        raise ValueError("No transcripts loaded before denoise step")
+    result = apply_transcript_denoise(ctx.transcripts, backend)
+    ctx.denoised_df = result.output
+    return result

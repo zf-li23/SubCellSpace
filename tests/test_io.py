@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import numpy as np
 import pytest
-from pathlib import Path
 
 from src.io.cosmx import (
-    load_cosmx_transcripts,
-    summarize_cosmx_transcripts,
+    REQUIRED_COLUMNS,
     build_cell_level_adata,
     build_spatialdata,
-    REQUIRED_COLUMNS,
+    load_cosmx_transcripts,
+    summarize_cosmx_transcripts,
 )
 from src.models import DatasetSummary
 
@@ -38,8 +36,6 @@ class TestLoadCosmxTranscripts:
         # Create a file that has "Unnamed: 0" as a column header
         csv_path = tmp_path / "unnamed_test.csv"
         sample_transcripts_df.to_csv(csv_path)
-        # Append an Unnamed: 0 line artificially
-        content = csv_path.read_text()
         # The pandas default to_csv may already include index. Let's just test that load handles it.
         df = load_cosmx_transcripts(str(csv_path))
         assert "Unnamed: 0" not in df.columns
@@ -47,9 +43,7 @@ class TestLoadCosmxTranscripts:
 
 class TestSummarizeCosmxTranscripts:
     def test_returns_dataset_summary(self, sample_transcripts_csv):
-        summary = summarize_cosmx_transcripts(
-            load_cosmx_transcripts(sample_transcripts_csv), sample_transcripts_csv
-        )
+        summary = summarize_cosmx_transcripts(load_cosmx_transcripts(sample_transcripts_csv), sample_transcripts_csv)
         assert isinstance(summary, DatasetSummary)
         assert summary.n_transcripts > 0
         assert summary.n_cells > 0
