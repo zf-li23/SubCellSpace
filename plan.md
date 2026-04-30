@@ -123,14 +123,47 @@
 
 ---
 
-### Phase 2：多平台支持（中期 1-2 个月）
+### ✅ Phase 2：第三方工具集成（已完成）
 
-#### Step 11: 抽象数据加载接口
+#### ✅ Step 11: 去噪后端 — spARC
+- 集成 `SPARC.spARC`（Spatial Affinity-Graph Recovery of Counts）
+- 构建 cell×gene 表达矩阵，进行空间感知表达去噪
+- 去噪后的表达矩阵通过 `df.attrs["denoised_expression"]` 传递给下游
+
+#### ✅ Step 12: 空间域后端 — GraphST / STAGATE / SpaGCN
+- **GraphST**：图引导空间 Transformer，使用图注意力学习细胞表示后 Leiden 聚类
+- **STAGATE**：空间感知图注意力自编码器，生成嵌入后 KMeans 聚类
+- **SpaGCN**：空间图卷积网络，无图像模式运行
+
+#### ✅ Step 13: 亚细胞空间域后端 — PhenoGraph
+- 基于空间坐标构建 k-NN 图，使用 Louvain 算法检测亚群
+- 兼容 `k` 和 `min_cluster_size` 参数
+
+#### ✅ Step 14: 分析后端 — scVI
+- 单细胞变分推断（scVI）学习潜在表示
+- 支持接收上游 spARC 去噪表达矩阵作为输入
+- 在 scVI 潜在空间上执行 Leiden 聚类
+
+#### ✅ Step 15: 注释后端 — CellTypist
+- 基于预训练参考模型的自动细胞类型分类
+- 支持 majority_voting 模式，输出 cell_type、score、confidence
+
+#### ✅ Step 16: 更新测试断言（所有 155 个测试通过）
+- `tests/test_analysis.py` — 断言 `scvi` 在后端列表中
+- `tests/test_annotation.py` — 断言 `celltypist` 在后端列表中
+- `tests/test_spatial_domain.py` — 断言 `graphst`、`stagate`、`spagcn` 在后端列表中
+- `tests/test_subcellular_spatial_domain.py` — 断言 `phenograph` 在后端列表中
+
+---
+
+### Phase 3：多平台支持（中期 1-2 个月）
+
+#### Step 17: 抽象数据加载接口
 - 创建 `src/io/base.py`，定义 `BaseDataLoader`
 - 现有 `cosmx.py` 改为 `CosMxDataLoader`
 - 添加 Xenium、MERFISH、Stereo-seq 的 stub
 
-#### Step 12: 前端插件化
+#### Step 18: 前端插件化
 - 前端 API 地址改为环境变量
 - 后端列表动态获取（已有 `/api/meta/backends`）
 - 添加步骤配置 UI

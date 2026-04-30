@@ -114,20 +114,20 @@ curl "http://127.0.0.1:8000/api/plots?report_path=outputs/cosmx_try_again_round/
 - `output_dir`
 - `min_transcripts`
 - `min_genes`
-- `denoise_backend`
-- `segmentation_backend`
-- `clustering_backend`
+- `denoise_backend` (`none`, `intracellular`, `nuclear_only`, `sparc`)
+- `segmentation_backend` (`provided_cells`, `fov_cell_id`)
+- `clustering_backend` (`leiden`, `kmeans`, `scvi`)
 - `leiden_resolution`
-- `annotation_backend`
-- `spatial_domain_backend`
+- `annotation_backend` (`cluster_label`, `rank_marker`, `celltypist`)
+- `spatial_domain_backend` (`spatial_leiden`, `spatial_kmeans`, `graphst`, `stagate`, `spagcn`)
 - `spatial_domain_resolution`
 - `n_spatial_domains`
-- `subcellular_domain_backend`
+- `subcellular_domain_backend` (`hdbscan`, `dbscan`, `leiden_spatial`, `phenograph`, `none`)
 
 示例：
 
 ```bash
-curl "http://127.0.0.1:8000/api/cosmx/report?input_csv=data/test/Mouse_brain_CosMX_1000cells.csv&denoise_backend=intracellular&segmentation_backend=provided_cells&clustering_backend=leiden&annotation_backend=rank_marker&spatial_domain_backend=spatial_leiden"
+curl "http://127.0.0.1:8000/api/cosmx/report?input_csv=data/test/Mouse_brain_CosMX_1000cells.csv&denoise_backend=sparc&segmentation_backend=provided_cells&clustering_backend=scvi&annotation_backend=celltypist&spatial_domain_backend=graphst&subcellular_domain_backend=phenograph"
 ```
 
 ### `POST /api/cosmx/run`

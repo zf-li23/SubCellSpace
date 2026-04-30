@@ -72,3 +72,6 @@ class TestRunSpatialDomainIdentification:
         backends = get_available_backends("spatial_domain")
         assert "spatial_leiden" in backends
         assert "spatial_kmeans" in backends
+        assert "graphst" in backends
+        assert "stagate" in backends
+        assert "spagcn" in backends

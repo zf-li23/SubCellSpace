@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
+import anndata as ad
+import numpy as np
+import pandas as pd
 import scanpy as sc
 
 from ..models import StepResult
@@ -9,6 +13,8 @@ from ..registry import register_backend, register_runner
 
 if TYPE_CHECKING:
     from ..pipeline_engine import ExecutionContext
+
+logger = logging.getLogger(__name__)
 
 # ── Backend implementations ────────────────────────────────────────────────
 
@@ -44,14 +50,64 @@ def _anno_rank_marker(adata: sc.AnnData) -> str:
     return "rank_marker"
 
 
+def _anno_celltypist(adata: sc.AnnData, model_name: str = "Immune_All_Low.pkl") -> str:
+    """CellTypist: automated cell-type annotation using scRNA-seq reference models.
+
+    Uses CellTypist to predict cell types based on pre-trained reference models.
+    The ``model_name`` parameter specifies which CellTypist model to download
+    and use (e.g. "Immune_All_Low.pkl", "Adult_Human_Brain.pkl").
+
+    Parameters
+    ----------
+    adata : AnnData
+        Preprocessed AnnData (normalised, log1p-transformed) with cluster labels.
+    model_name : str
+        Name of the CellTypist model to use.  Will be downloaded if not cached.
+
+    Returns
+    -------
+    str
+        Backend identifier ``"celltypist"``.
+    """
+    import celltypist
+    from celltypist import models
+
+    # Ensure the model is downloaded
+    try:
+        model = models.Model.load(model=model_name)
+    except Exception:
+        logger.info("Downloading CellTypist model '%s' ...", model_name)
+        celltypist.models.download_models(model=model_name)
+        model = models.Model.load(model=model_name)
+
+    # Run celltypist annotation
+    prediction = celltypist.annotate(
+        adata,
+        model=model,
+        majority_voting=True,
+        mode="best match",
+        p_thres=0.5,
+    )
+
+    # Merge predicted labels into adata.obs
+    pred_labels = prediction.predicted_labels
+    adata.obs["cell_type"] = pred_labels["majority_voting"].values.astype(str)
+    adata.obs["celltypist_score"] = pred_labels["score"].values
+    adata.obs["celltypist_confidence"] = pred_labels["conf_score"].values
+
+    return "celltypist"
+
+
 # Register backends
 register_backend("annotation", "cluster_label")(_anno_cluster_label)
 register_backend("annotation", "rank_marker")(_anno_rank_marker)
+register_backend("annotation", "celltypist")(_anno_celltypist)
 
 # Dispatch table
 _ANNOTATION_FUNCS = {
     "cluster_label": _anno_cluster_label,
     "rank_marker": _anno_rank_marker,
+    "celltypist": _anno_celltypist,
 }
 
 

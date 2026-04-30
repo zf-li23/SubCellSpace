@@ -11,7 +11,6 @@ requires-python = ">=3.11"
 dependencies = [
   "anndata>=0.12",
   "fastapi>=0.115",
-  "hdbscan>=0.8.42",
   "numpy>=2.0",
   "pandas>=2.2",
   "pydantic>=2.8",
@@ -24,6 +23,28 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.6", "mypy>=1.11"]
+
+# Denoise backends
+sparc = []  # installed via -e tools/spARC/
+
+# Spatial domain backends
+graphst = ["pot"]  # GraphST installed via -e tools/GraphST/; pot is an extra pip dependency
+stagate = []  # installed manually (needs tensorflow)
+spagcn = []   # installed manually (needs compilation)
+
+# Subcellular spatial domain backends
+phenograph = []  # installed via -e tools/PhenoGraph/
+hdbscan = ["hdbscan>=0.8.42"]
+
+# Analysis backends
+scvi = ["scvi-tools"]
+
+# Annotation backends
+celltypist = []  # installed via -e tools/celltypist/
+
+# All optional tools combined
+all = ["subcellspace[dev,sparc,graphst,phenograph,hdbscan,scvi,celltypist]"]
+
 
 [project.scripts]
 subcellspace = "src.cli:main"

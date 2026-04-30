@@ -128,6 +128,41 @@ def _leiden_spatial_subcellular_domains(
     return pd.Series(domain_labels, index=cell_df.index)
 
 
+def _phenograph_subcellular_domains(
+    cell_df: pd.DataFrame,
+    k: int = 30,
+    min_cluster_size: int = 10,
+) -> pd.Series:
+    """PhenoGraph: Graph-based clustering on spatial coordinates.
+
+    Builds a k-nearest-neighbour graph from spatial coordinates and
+    detects communities using the Louvain algorithm implemented in
+    PhenoGraph.
+
+    Parameters
+    ----------
+    k : int
+        Number of nearest neighbours for graph construction.
+    min_cluster_size : int
+        Minimum cluster size parameter passed to PhenoGraph.
+    """
+    import phenograph
+
+    coords = cell_df[["x_global_px", "y_global_px"]].to_numpy(dtype=np.float64)
+    n = len(coords)
+    if n < max(k + 1, min_cluster_size):
+        return pd.Series(["0"] * n, index=cell_df.index)
+
+    communities, _ = phenograph.cluster(
+        coords,
+        k=k,
+        min_cluster_size=min_cluster_size,
+        primary_metric="euclidean",
+        n_jobs=-1,
+    )
+    return pd.Series(communities.astype(str), index=cell_df.index)
+
+
 def _none_subcellular_domains(
     cell_df: pd.DataFrame,
 ) -> pd.Series:
@@ -139,6 +174,7 @@ def _none_subcellular_domains(
 register_backend("subcellular_spatial_domain", "hdbscan")(_hdbscan_subcellular_domains)
 register_backend("subcellular_spatial_domain", "dbscan")(_dbscan_subcellular_domains)
 register_backend("subcellular_spatial_domain", "leiden_spatial")(_leiden_spatial_subcellular_domains)
+register_backend("subcellular_spatial_domain", "phenograph")(_phenograph_subcellular_domains)
 register_backend("subcellular_spatial_domain", "none")(_none_subcellular_domains)
 
 # Dispatch table
@@ -146,6 +182,7 @@ _CLUSTER_FUNCS = {
     "hdbscan": _hdbscan_subcellular_domains,
     "dbscan": _dbscan_subcellular_domains,
     "leiden_spatial": _leiden_spatial_subcellular_domains,
+    "phenograph": _phenograph_subcellular_domains,
     "none": _none_subcellular_domains,
 }
 

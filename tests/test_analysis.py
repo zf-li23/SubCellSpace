@@ -79,3 +79,4 @@ class TestRunExpressionAndSpatialAnalysis:
         backends = get_available_backends("analysis")
         assert "leiden" in backends
         assert "kmeans" in backends
+        assert "scvi" in backends

@@ -45,3 +45,4 @@ class TestRunCellTypeAnnotation:
         backends = get_available_backends("annotation")
         assert "cluster_label" in backends
         assert "rank_marker" in backends
+        assert "celltypist" in backends

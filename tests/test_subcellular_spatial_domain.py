@@ -113,6 +113,7 @@ class TestRunSubcellularSpatialDomain:
         assert "hdbscan" in backends
         assert "dbscan" in backends
         assert "leiden_spatial" in backends
+        assert "phenograph" in backends
         assert "none" in backends
 
     def test_adata_obs_names_match_cell_column(self):

@@ -51,6 +51,9 @@ class ExecutionContext:
     adata: Any = None  # AnnData
     sdata: Any = None  # SpatialData
 
+    # Optional: denoised expression matrix (e.g., from spARC backend)
+    denoised_expression: Any = None  # np.ndarray | pd.DataFrame | None
+
     # Accumulated step results
     step_results: dict[str, StepResult] = field(default_factory=dict)
 

@@ -32,7 +32,8 @@ dependencies:
   # pip section
   - pip:
     # === Core project (editable install) ===
-    - -e .
+    # 核心依赖 + hdbscan（作为核心可选项）
+    - -e ".[hdbscan]"
 
     # === Denoise backends ===
     # spARC: Spatial Affinity-Graph Recovery of Counts
@@ -49,8 +50,8 @@ dependencies:
     # GraphST: spatially informed clustering
     - -e tools/GraphST/
     - pot  # required by GraphST
-    # STAGATE: needs tensorflow (see notes below)
-    # SpaGCN: needs compilation (see notes below)
+    # STAGATE (optional): needs tensorflow; see tools/STAGATE/ for install
+    # SpaGCN (optional): needs compilation; see tools/SpaGCN/ for install
 
     # === Subcellular Spatial Domain backends ===
     # PhenoGraph: subpopulation detection
@@ -59,10 +60,16 @@ dependencies:
     # === Analysis backends ===
     # scvi-tools: deep probabilistic analysis
     - scvi-tools
-    # TOSICA: Transformer-based analysis
-    - -e tools/TOSICA/ --no-deps
 
     # === Annotation backends ===
     # CellTypist: cell type classification
     - -e tools/celltypist/
     # TOSICA (shared with analysis)
+
+    # === 通过 pyproject.toml 可选依赖组安装 ===
+    # 全部工具（含 dev）：
+    #   pip install -e ".[all]"
+    # 仅 scVI：
+    #   pip install -e ".[scvi]"
+    # 仅 HDBSCAN：
+    #   pip install -e ".[hdbscan]"

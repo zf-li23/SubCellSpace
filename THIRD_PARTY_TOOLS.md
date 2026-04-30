@@ -20,7 +20,6 @@ Large local datasets and full third-party tool source trees are kept out of vers
 - scVI (Deep probabilistic analysis of single-cell and spatial omics data): https://github.com/scverse/scvi-tools
 - CellTypist (A tool for semi-automatic cell type classification): https://github.com/Teichlab/CellTypist
 - scArches (Reference mapping for single-cell genomics): https://github.com/theislab/scarches
-- TOSICA (Transformer for One-Stop Interpretable Cell-type Annotation): https://github.com/JackieHanLab/TOSICA
 
 ## Local usage recommendation
 

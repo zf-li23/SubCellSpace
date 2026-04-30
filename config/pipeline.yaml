@@ -26,6 +26,11 @@ pipeline:
       module: "src.steps.denoise"
       default_backend: "intracellular"
       description: "Filter transcripts based on cell compartment"
+      available_backends:
+        - none: "Pass-through (no filtering)"
+        - intracellular: "Keep Nuclear & Cytoplasm transcripts only"
+        - nuclear_only: "Keep Nuclear transcripts only"
+        - sparc: "Spatially-aware expression denoising (spARC)"
 
     segmentation:
       module: "src.steps.segmentation"
@@ -36,18 +41,38 @@ pipeline:
       module: "src.steps.spatial_domain"
       default_backend: "spatial_leiden"
       description: "Identify tissue-level spatial domains"
+      available_backends:
+        - spatial_leiden: "Leiden clustering on spatial neighbors graph"
+        - spatial_kmeans: "KMeans clustering on spatial coordinates"
+        - graphst: "Graph-guided Spatial Transformer (GraphST)"
+        - stagate: "Spatially-Aware Graph Attention Autoencoder (STAGATE)"
+        - spagcn: "Spatial Graph Convolutional Network (SpaGCN)"
 
     subcellular_spatial_domain:
       module: "src.steps.subcellular_spatial_domain"
       default_backend: "hdbscan"
       description: "Identify subcellular spatial domains within each cell"
+      available_backends:
+        - hdbscan: "Density-based HDBSCAN clustering"
+        - dbscan: "Density-based DBSCAN clustering"
+        - leiden_spatial: "Spatial k-NN graph + Leiden clustering"
+        - phenograph: "Graph-based PhenoGraph clustering"
+        - none: "Skip subcellular clustering"
 
     analysis:
       module: "src.steps.analysis"
       default_backend: "leiden"
       description: "Clustering & expression analysis"
+      available_backends:
+        - leiden: "Leiden clustering on PCA embedding"
+        - kmeans: "KMeans clustering on PCA embedding"
+        - scvi: "Single-cell Variational Inference (scVI) for latent representation + Leiden"
 
     annotation:
       module: "src.steps.annotation"
       default_backend: "rank_marker"
       description: "Cell-type annotation"
+      available_backends:
+        - cluster_label: "Map cluster IDs to cell type labels"
+        - rank_marker: "Annotate based on top differentially expressed genes"
+        - celltypist: "Automated cell-type annotation using CellTypist reference models"

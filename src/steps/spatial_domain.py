@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -12,6 +13,8 @@ from ..registry import register_backend, register_runner
 
 if TYPE_CHECKING:
     from ..pipeline_engine import ExecutionContext
+
+logger = logging.getLogger(__name__)
 
 # ── Backend implementations ────────────────────────────────────────────────
 
@@ -79,14 +82,156 @@ def _domain_spatial_kmeans(
     return "spatial_kmeans"
 
 
+def _domain_graphst(adata: sc.AnnData, domain_resolution: float, n_spatial_domains: int | None = None) -> str:  # noqa: ARG001
+    """GraphST: Graph-guided Spatial Transformer for spatial domain identification.
+
+    Uses graph attention to learn cell representations, then clusters
+    the embeddings with Leiden to identify spatial domains.
+    """
+    import GraphST
+
+    # GraphST requires preprocessed adata (normalized, log1p)
+    adata_tmp = adata.copy()
+    sc.pp.normalize_total(adata_tmp, target_sum=1e4)
+    sc.pp.log1p(adata_tmp)
+
+    # Preprocess: find highly variable genes
+    sc.pp.highly_variable_genes(adata_tmp, flavor="seurat_v3", n_top_genes=min(2000, adata_tmp.n_vars))
+    adata_tmp = adata_tmp[:, adata_tmp.var.highly_variable].copy()
+
+    # Run GraphST
+    GraphST.preprocess(adata_tmp)
+    GraphST.get_feature(adata_tmp)
+
+    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(2, int(np.sqrt(adata.n_obs) // 2 + 2))
+
+    # Use Leiden clustering since mclust_R is not available
+    GraphST.clustering(
+        adata_tmp,
+        n_clusters=n_clusters,
+        radius=50,
+        key="emb",
+        method="leiden",
+        start=0.1,
+        end=3.0,
+        increment=0.01,
+        refinement=False,
+    )
+
+    # Transfer domain labels from the GraphST-processed adata back to original
+    domain_labels = adata_tmp.obs["domain"].astype(str).to_numpy()
+    adata.obs["spatial_domain"] = domain_labels
+    return "graphst"
+
+
+def _domain_stagate(
+    adata: sc.AnnData,
+    _domain_resolution: float = 1.0,
+    n_spatial_domains: int | None = None,  # noqa: ARG001
+) -> str:
+    """STAGATE: Spatially-Aware Graph Attention Autoencoder.
+
+    Learns latent representations using a graph attention autoencoder
+    that incorporates spatial information. Then clusters embeddings
+    with KMeans to identify spatial domains.
+    """
+    import STAGATE
+
+    # Preprocess
+    adata_tmp = adata.copy()
+    sc.pp.normalize_total(adata_tmp, target_sum=1e4)
+    sc.pp.log1p(adata_tmp)
+    sc.pp.highly_variable_genes(adata_tmp, flavor="seurat_v3", n_top_genes=min(2000, adata_tmp.n_vars))
+    adata_tmp = adata_tmp[:, adata_tmp.var.highly_variable].copy()
+    sc.pp.scale(adata_tmp, max_value=10)
+
+    # Calculate spatial network from coordinates
+    coords = adata.obsm["spatial"]
+    adata_tmp.obsm["spatial"] = coords.copy()
+    STAGATE.Cal_Spatial_Net(adata_tmp, rad_cutoff=None, k_cutoff=None, model="Radius", verbose=False)
+
+    # Train STAGATE to get embeddings
+    adata_tmp, _ = STAGATE.train_STAGATE(
+        adata_tmp,
+        hidden_dims=[512, 30],
+        alpha=0,
+        n_epochs=500,
+        lr=0.0001,
+        key_added="STAGATE",
+        verbose=False,
+    )
+
+    # Extract embeddings and cluster with KMeans (mclust_R not available)
+    embed = adata_tmp.obsm["STAGATE"]
+    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(2, int(np.sqrt(adata.n_obs) // 2 + 2))
+    n_clusters = max(2, min(int(n_clusters), adata.n_obs))
+    labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(embed)
+
+    adata.obs["spatial_domain"] = labels.astype(str)
+    return "stagate"
+
+
+def _domain_spagcn(
+    adata: sc.AnnData,
+    _domain_resolution: float = 1.0,
+    n_spatial_domains: int | None = None,
+) -> str:
+    """SpaGCN: Spatial Graph Convolutional Network.
+
+    Constructs a spatial adjacency graph and uses a GCN to assign
+    spatial domains. For CosMx transcript-only data (no image),
+    it runs with histology=False.
+    """
+    import SpaGCN
+
+    coords = adata.obsm["spatial"]
+    x_array = coords[:, 0].tolist()
+    y_array = coords[:, 1].tolist()
+
+    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(2, int(np.sqrt(adata.n_obs) // 2 + 2))
+    n_clusters = max(2, min(int(n_clusters), adata.n_obs))
+
+    # Preprocess adata
+    adata_tmp = adata.copy()
+    sc.pp.normalize_total(adata_tmp, target_sum=1e4)
+    sc.pp.log1p(adata_tmp)
+
+    # Run SpaGCN's easy-mode detection (no image)
+    y_pred = SpaGCN.detect_spatial_domains_ez_mode(
+        adata_tmp,
+        img=None,
+        x_array=x_array,
+        y_array=y_array,
+        x_pixel=x_array,
+        y_pixel=y_array,
+        n_clusters=n_clusters,
+        histology=False,
+        s=1,
+        b=49,
+        p=0.5,
+        r_seed=100,
+        t_seed=100,
+        n_seed=100,
+    )
+
+    adata.obs["spatial_domain"] = y_pred.astype(str)
+    return "spagcn"
+
+
 # Register backends
 register_backend("spatial_domain", "spatial_leiden")(_domain_spatial_leiden)
 register_backend("spatial_domain", "spatial_kmeans")(_domain_spatial_kmeans)
+register_backend("spatial_domain", "graphst")(_domain_graphst)
+register_backend("spatial_domain", "stagate")(_domain_stagate)
+register_backend("spatial_domain", "spagcn")(_domain_spagcn)
 
 # Dispatch table
 _SPATIAL_DOMAIN_FUNCS = {
     "spatial_leiden": _domain_spatial_leiden,
     "spatial_kmeans": _domain_spatial_kmeans,
+    "graphst": _domain_graphst,
+    "stagate": _domain_stagate,
+    "spagcn": _domain_spagcn,
 }
 
 
