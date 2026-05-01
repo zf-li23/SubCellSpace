@@ -7,7 +7,38 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const frontendRoot = resolve(__dirname, '..')
 const repoRoot = resolve(frontendRoot, '..')
-const pythonBin = '/home/zf-li23/miniconda3/envs/zf-li23/bin/python'
+// Try to detect Python from the project venv, then fall back to system PATH
+import { accessSync, constants } from 'node:fs'
+
+function detectPython() {
+  // 1. Check .venv in repo root (pip venv)
+  const venvPython = resolve(repoRoot, '.venv/bin/python')
+  try {
+    accessSync(venvPython, constants.X_OK)
+    return venvPython
+  } catch { /* not found */ }
+
+  // 2. Check conda env named "subcellspace" (primary for this project)
+  const condaBase = '/home/zf-li23/miniconda3'
+  const subcellspacePython = `${condaBase}/envs/subcellspace/bin/python`
+  try {
+    accessSync(subcellspacePython, constants.X_OK)
+    return subcellspacePython
+  } catch { /* not found */ }
+
+  // 3. Check conda env named "zf-li23" (legacy)
+  const condaPython = `${condaBase}/envs/zf-li23/bin/python`
+  try {
+    accessSync(condaPython, constants.X_OK)
+    return condaPython
+  } catch { /* not found */ }
+
+  // 4. Fall back to PATH
+  return 'python3'
+}
+
+const pythonBin = detectPython()
+console.log(`[launcher] using Python: ${pythonBin}`)
 
 let backendProcess = null
 let frontendProcess = null

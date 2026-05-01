@@ -1,0 +1,93 @@
+# ─────────────────────────────────────────────────────────────────────
+# SubCellSpace Third-Party Tools Registry
+# ─────────────────────────────────────────────────────────────────────
+# This file stores all third-party tool repository URLs.
+# Users can selectively clone and install tools via:
+#   bash scripts/setup-tools.sh clone [tool_name...]   # clone specified tools
+#   bash scripts/setup-tools.sh clone --all            # clone all tools
+#   bash scripts/setup-tools.sh install [tool_name...]  # install specified tools
+# ─────────────────────────────────────────────────────────────────────
+
+tools:
+  spARC:
+    description: "Spatial Affinity-Graph Recovery of Counts (denoise)"
+    https: "https://github.com/KrishnaswamyLab/sparc.git"
+    ssh: "git@github.com:KrishnaswamyLab/sparc.git"
+    pip_install: "-e tools/spARC/"
+    category: "denoise"
+
+  GraphST:
+    description: "Graph-guided Spatial Transformer (spatial domain)"
+    https: "https://github.com/JinmiaoChenLab/GraphST.git"
+    ssh: "git@github.com:JinmiaoChenLab/GraphST.git"
+    pip_install: "-e tools/GraphST/"
+    extra_pip: ["POT"]
+    category: "spatial_domain"
+
+  STAGATE:
+    description: "Spatially-Aware Graph Attention Autoencoder (spatial domain)"
+    https: "https://github.com/RucDongLab/STAGATE.git"
+    ssh: "git@github.com:RucDongLab/STAGATE.git"
+    pip_install: "git+https://github.com/RucDongLab/STAGATE.git"
+    category: "spatial_domain"
+    notes: "No git clone needed; install directly via pip"
+
+  SpaGCN:
+    description: "Spatial Graph Convolutional Network (spatial domain)"
+    https: "https://github.com/jianhuupenn/SpaGCN.git"
+    ssh: "git@github.com:jianhuupenn/SpaGCN.git"
+    pip_install: "git+https://github.com/jianhuupenn/SpaGCN.git#subdirectory=SpaGCN_package"
+    category: "spatial_domain"
+    notes: "setup.py is under SpaGCN_package/ subdirectory; needs C/C++ compiler and cmake for louvain"
+    dependencies: ["cmake", "gcc_linux-64", "gxx_linux-64"]
+
+  PhenoGraph:
+    description: "Graph-based subpopulation detection (subcellular domain)"
+    https: "https://github.com/jacoblevine/PhenoGraph.git"
+    ssh: "git@github.com:jacoblevine/PhenoGraph.git"
+    pip_install: "-e tools/PhenoGraph/"
+    category: "subcellular_spatial_domain"
+
+  CellTypist:
+    description: "Automated cell-type annotation using reference models"
+    https: "https://github.com/Teichlab/CellTypist.git"
+    ssh: "git@github.com:Teichlab/CellTypist.git"
+    pip_install: "-e tools/celltypist/"
+    category: "annotation"
+
+  cellpose:
+    description: "Cell and nucleus segmentation"
+    https: "https://github.com/MouseLand/cellpose.git"
+    ssh: "git@github.com:MouseLand/cellpose.git"
+    pip_install: "cellpose"
+    category: "segmentation"
+
+  scArches:
+    description: "Reference mapping for single-cell genomics (annotation)"
+    https: "https://github.com/theislab/scarches.git"
+    ssh: "git@github.com:theislab/scarches.git"
+    pip_install: "scarches"
+    category: "annotation"
+    notes: "Known incompatibility with anndata>=1.0 (anndata removed old read() function). If import fails, downgrade anndata: pip install 'anndata<1.0'"
+
+  SCRIN:
+    description: "Subcellular co-localized RNA interaction network"
+    https: "https://github.com/xryanglab/SCRIN.git"
+    ssh: "git@github.com:xryanglab/SCRIN.git"
+    pip_install: "manual"
+    category: "analysis"
+    notes: "Separate analysis module, not yet integrated into pipeline"
+
+  Sopa:
+    description: "SpatialData-based spatial omics pipeline"
+    https: "https://github.com/prism-oncology/sopa.git"
+    ssh: "git@github.com:prism-oncology/sopa.git"
+    pip_install: "sopa"
+    category: "pipeline"
+
+# Tools installed directly from PyPI (no git clone needed)
+pypi_tools:
+  scVI:
+    description: "Single-cell Variational Inference (analysis)"
+    pip_install: "scvi-tools"
+    category: "analysis"

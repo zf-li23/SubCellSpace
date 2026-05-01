@@ -3,26 +3,68 @@
 The SubCellSpace repository is intended to remain lightweight for GitHub backup and collaboration.
 Large local datasets and full third-party tool source trees are kept out of version control.
 
-## Referenced tools
+## Canonical Source: `tools/urls.yaml`
 
-- SCRIN (Subcellular co-localized RNA interaction network): https://github.com/xryanglab/SCRIN
-- Sopa (SpatialData-based spatial omics pipeline): https://github.com/prism-oncology/sopa
-- spARC (Spatial Affinity-Graph Recovery of Counts): https://github.com/KrishnaswamyLab/sparc
-- cellpose (cell and nucleus segmentation with superhuman generalization): https://github.com/MouseLand/cellpose
-- Baysor (Bayesian segmentation of imaging-based spatial transcriptomics data): https://github.com/kharchenkolab/Baysor
-- Proseg (Probabilistic cell segmentation for in situ spatial transcriptomics): https://github.com/dcjones/proseg
-- BayesSpace (Bayesian model for clustering and enhancing the resolution of spatial gene expression experiments): https://github.com/edward130603/BayesSpace
-- STAGATE (Adaptive Graph Attention Auto-encoder for Spatial Domain Identification of Spatial Transcriptomics): https://github.com/RucDongLab/STAGATE
-- SpaGCN (spatial graph convolutional network): https://github.com/jianhuupenn/SpaGCN
-- GraphST (Spatially informed clustering, integration, and deconvolution of spatial transcriptomics): https://github.com/JinmiaoChenLab/GraphST
-- BANKSY (spatial clustering): https://github.com/prabhakarlab/BANKSY
-- PhenoGraph (Subpopulation detection in high-dimensional single-cell data): https://github.com/jacoblevine/PhenoGraph
-- scVI (Deep probabilistic analysis of single-cell and spatial omics data): https://github.com/scverse/scvi-tools
-- CellTypist (A tool for semi-automatic cell type classification): https://github.com/Teichlab/CellTypist
-- scArches (Reference mapping for single-cell genomics): https://github.com/theislab/scarches
+All third-party tool registry information (URLs, install methods, notes) is now maintained in a single YAML file:
+
+```bash
+cat tools/urls.yaml
+```
+
+This file tracks both HTTPS and SSH git URLs for each tool, making it easy to clone via either protocol.
+
+## Quick Start
+
+```bash
+# List all tools with their categories and URLs
+bash scripts/setup-tools.sh list
+
+# Clone specific tools
+bash scripts/setup-tools.sh clone spARC GraphST
+
+# Clone all tools using SSH
+bash scripts/setup-tools.sh clone --ssh --all
+
+# Install all tools (pip install + clone if needed)
+bash scripts/setup-tools.sh install --all
+```
+
+## Python Tool List (from `tools/urls.yaml`)
+
+| Tool | Category | Install Method | Status |
+|------|----------|---------------|--------|
+| spARC | denoise | `pip install -e tools/spARC/` | ✅ |
+| GraphST | spatial_domain | `pip install -e tools/GraphST/` + `POT` | ✅ |
+| STAGATE | spatial_domain | `pip install git+https://github.com/RucDongLab/STAGATE.git` | ✅ |
+| SpaGCN | spatial_domain | Manual (needs louvain C extension) | ⚠️ |
+| PhenoGraph | subcellular_spatial_domain | `pip install -e tools/PhenoGraph/` | ✅ |
+| CellTypist | annotation | `pip install -e tools/celltypist/` | ✅ |
+| cellpose | segmentation | `pip install cellpose` | ✅ |
+| scArches | annotation | `pip install scarches` | ✅ |
+| Sopa | pipeline | `pip install sopa` | ✅ |
+| scVI | analysis | `pip install scvi-tools` | ✅ |
+
+## Non-Python Tools (Removed)
+
+The following tools are not Python-based and are **no longer tracked** in this repository.
+They are not integrated into the SubCellSpace pipeline:
+
+| Tool | Category | Runtime | Reason for Removal |
+|------|----------|---------|-------------------|
+| BayesSpace | spatial_domain | R package | R dependency, not pip-compatible |
+| BANKSY | spatial_domain | R package | R dependency, not pip-compatible |
+| Baysor | segmentation | Julia | Julia runtime required |
+| Proseg | segmentation | Rust build | Requires manual Rust compilation |
+
+If you wish to use any of these tools, install them separately per their respective documentation.
+They can be used as preprocessing steps before running the SubCellSpace pipeline.
 
 ## Local usage recommendation
 
-1. Keep cloned tool repositories under local `tools/` for development experiments.
-2. Keep large raw/intermediate files under local `data/` and `outputs/`.
-3. Commit only SubCellSpace source code, configs, and lightweight documentation.
+1. Use `bash scripts/setup-tools.sh` to manage all third-party tools.
+2. Use `bash scripts/setup-step3.sh` for one-step clone + install of all tools.
+3. Keep cloned tool repositories under local `tools/` for development experiments.
+4. Keep large raw/intermediate files under local `data/` and `outputs/`.
+5. Commit only SubCellSpace source code, configs, and lightweight documentation.
+   - `tools/urls.yaml` is tracked in git (the canonical registry).
+   - `tools/*/` (cloned repos) is ignored by `.gitignore`.

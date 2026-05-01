@@ -5,10 +5,13 @@ from pathlib import Path
 
 from .benchmark import run_cosmx_backend_benchmark
 from .pipelines.cosmx_minimal import run_cosmx_minimal
-from .registry import get_available_backends
+from .registry import get_available_backends, registry
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # Load step modules so @register_backend decorators populate the registry
+    # before we query get_available_backends() for choices.
+    registry.load_backends()
     parser = argparse.ArgumentParser(prog="subcellspace")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

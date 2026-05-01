@@ -1,50 +1,65 @@
-## 全面审查结果
+# SubCellSpace 开发计划与架构文档
 
-在继续之前，我发现当前代码库存在以下**必须修复的问题**（按优先级排列）：
+## 概览
 
----
-
-### 🔴 必须修复的问题（阻碍插件化重构）
-
-#### 1. 后端注册机制缺失（核心问题）
-当前每个步骤的后端列表是**硬编码的元组**（如 `AVAILABLE_DENOISE_BACKENDS = ("none", "intracellular", "nuclear_only")`），新增后端需要修改步骤文件本身。这完全违背了"插件式替换"的目标。
-
-#### 2. 步骤间耦合严重
-- `cosmx_minimal.py` 硬编码了步骤执行顺序和参数传递
-- 每个步骤函数签名不一致（有的返回 `(df, dict)`，有的返回 `(adata, dict)`，有的返回 `(df, adata, dict)`）
-- 无法在不修改管线代码的情况下插入/移除/重排步骤
-
-#### 3. 缺少抽象基类/接口
-- 没有 `BaseStep` 或 `BaseBackend` 抽象类
-- 没有统一的步骤注册机制
-- 没有步骤元数据（名称、描述、依赖关系、输入输出类型）
-
-#### 4. 配置管理混乱
-- 参数散落在 `api_server.py`、`cli.py`、`cosmx_minimal.py` 中
-- 没有统一的配置模型
-- 环境变量命名不一致（`SUBCELLSPACE_*` 前缀但未集中管理）
-
-#### 5. 数据流不透明
-- `PipelineResult` 只包含最终结果，没有中间步骤数据
-- 无法追踪每个步骤的输入/输出
-- 没有步骤执行日志
-
-#### 6. 测试覆盖不足
-- 缺少后端注册测试
-- 缺少插件加载测试
-- 缺少步骤接口契约测试
+SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台。本文档记录项目的架构设计、已完成的重构和未来方向。
 
 ---
 
-### 🟢 可以继续开发的方向（插件化架构）
+## 环境配置与可复现性（已完成）
 
-基于以上分析，我制定了一个**分阶段的重构计划**，目标是让每个步骤工具都能像插件一样注册、发现、替换。
+### 原始流程的问题
+
+| 问题 | 说明 |
+|------|------|
+| **缺少 Step 0** | conda create 下载 Python 很慢，之前和三步脚本混在一起，首次运行卡住无法排查 |
+| **Step 3 硬编码工具** | 工具地址散落在脚本中，新增工具要改脚本，不灵活 |
+| **缺少统一 YAML 注册表** | 工具地址和安装方式没有集中管理的地方 |
+| **pip+venv 与 conda 混用** | `reproduce.sh` 用 pip+venv，三步脚本用 conda，两套环境不一致 |
+| **可复现性不足** | 没有依赖锁定文件（`requirements-lock.txt`），无法精确恢复依赖版本 |
+| **缺少编译依赖检查** | SpaGCN 需要 cmake/gcc/g++，之前没有预检 |
+
+### 改进后的四步工作流
+
+```
+Step 0:  bash scripts/setup-step0.sh    # 创建 conda 环境（单独抽出，可提前跑）
+Step 1:  bash scripts/setup-step1.sh    # 核心依赖 + 测试 + 管线 + 生成锁定文件
+Step 2:  bash scripts/setup-step2.sh    # 前端 npm 依赖
+Step 3:  bash scripts/setup-step3.sh    # 工具环境（通过 unified YAML 管理）
+```
+
+### 关键改进
+
+1. **Step 0 独立**：conda create 单独抽出，避免首次运行时"卡死但不知道在哪一步"
+2. **统一 YAML 注册表**：`tools/urls.yaml` 集中管理所有工具的 HTTPS/SSH 地址、安装方式、依赖
+3. **setup-tools.sh 调度器**：`bash scripts/setup-tools.sh [list|clone|install|info]` 统一调度
+4. **setup-step3.sh 一键化**：调用 `setup-tools.sh` 完成克隆+安装，按 `--clone-only` / `--install-only` / `--ssh` 分模式
+5. **依赖锁定**：Step 1 和 reproduce.sh 末尾自动生成 `requirements-lock.txt`
+6. **reproduce.sh 统一用 conda**：不再混用 pip+venv，与三步脚本保持一致
+7. **编译依赖检查**：Step 3 预检 cmake/gcc/g++
+8. **非 Python 工具移除**：BayesSpace(R)、BANKSY(R)、Baysor(Julia)、Proseg(Rust) 从注册表删除，降低依赖复杂度
+
+### 文件变更清单
+
+| 文件 | 操作 |
+|------|------|
+| `scripts/setup-step0.sh` | **新建** — 独立的 conda 环境创建脚本 |
+| `scripts/setup-step3.sh` | **重写** — 使用 tools/urls.yaml + setup-tools.sh 调度 |
+| `scripts/reproduce.sh` | **重写** — 改用 conda 环境，增加依赖锁定 |
+| `scripts/setup-step1.sh` | **改进** — 末尾生成 requirements-lock.txt |
+| `tools/urls.yaml` | **更新** — 补充 scArches 不兼容性注释，移除非 Python 工具 |
+| `docs/setup-guide.md` | **更新** — 新增 Step 0、工具管理、一键复现流程 |
+| `.gitignore` | **更新** — 忽略 setup-step*-ok 标记文件和 requirements-lock.txt |
+| `scripts/install-python-tools.sh` | **删除** — 已由 setup-tools.sh + setup-step3.sh 替代 |
+| `THIRD_PARTY_TOOLS.md` | **更新** — 移除对 install-python-tools.sh 的引用 |
+| `plan.md` | **更新** — 本文件 |
+| `README.md` | **更新** — 指向新的四步工作流 |
 
 ---
 
-## 完整重构计划
+## 架构重构（Phase 0-2，已完成）
 
-### ✅ Phase 0：基础设施重构（已完成）
+### ✅ Phase 0：基础设施重构
 
 **目标**：建立插件化架构的基础设施，不破坏现有功能
 
@@ -59,35 +74,18 @@
 - 模块级便利别名：`register_backend`, `get_available_backends`, `get_backend_func`
 
 #### ✅ Step 2: 统一步骤返回值
-- 创建 `StepResult` 数据类（在 `src/models.py` 中）：
-  ```python
-  @dataclass
-  class StepResult:
-      output: Any          # 步骤输出数据
-      summary: dict        # 步骤摘要信息
-      backend_used: str    # 实际使用的后端名称
-  ```
-- 所有 6 个步骤函数改为返回 `StepResult`：
-  - `denoise` → `StepResult(output=filtered_df, summary=..., backend_used=...)`
-  - `segmentation` → `StepResult(output=segmented_df, summary=..., backend_used=...)`
-  - `spatial_domain` → `StepResult(output=adata, summary=..., backend_used=...)`
-  - `subcellular_spatial_domain` → `StepResult(output=(segmented_df, adata), summary=..., backend_used=...)`
-  - `analysis` → `StepResult(output=adata, summary=..., backend_used=...)`
-  - `annotation` → `StepResult(output=adata, summary=..., backend_used=...)`
+- 创建 `StepResult` 数据类（在 `src/models.py` 中）
+- 所有 6 个步骤函数改为返回 `StepResult`
 
 #### ✅ Step 3: 所有步骤改用装饰器注册后端
 - 移除所有 `AVAILABLE_XXX_BACKENDS` 硬编码元组
 - 每个后端函数通过 `@register_backend(step_name, backend_name)` 注册
-- 内部 dispatch 使用私有字典（`_CLUSTER_FUNCS`, `_SPATIAL_DOMAIN_FUNCS` 等）
 
 #### ✅ Step 4: 更新管线编排
 - `src/pipelines/cosmx_minimal.py` 改为使用 `StepResult.output` / `.summary` 模式
-- 函数签名不变（向后兼容），仍返回 `PipelineResult`
 
 #### ✅ Step 5: 更新 API/CLI/Benchmark
-- `api_server.py`：移除 `AVAILABLE_*` 导入，改用 `get_available_backends(step_name)`
-- `cli.py`：同上
-- `benchmark.py`：同上
+- `api_server.py`、`cli.py`、`benchmark.py` 改用 `get_available_backends()`
 - `src/__main__.py`：清理未使用的 `import os`
 
 #### ✅ Step 6: 更新测试
@@ -97,24 +95,20 @@
 
 ---
 
-### ✅ Phase 1：功能增强（已完成）
+### ✅ Phase 1：功能增强
 
 #### ✅ Step 7: 配置管理系统
 - 创建 `src/config.py`，集中管理所有配置
 - 支持 YAML/环境变量/CLI 参数三层覆盖
 - 定义 `PipelineConfig`/`StepConfig` 数据类
-- 创建 `Settings` 单例，支持 `deep_merge` 三层覆盖
-- 注册表集成 YAML 配置（通过 `settings.pipeline` 获取）
 
 #### ✅ Step 8: 添加数据验证层
 - 创建 `src/validation.py`，使用 Pydantic 风格的数据验证
-- 添加管线步骤的输入/输出 schema 验证（validate_dataframe, validate_anndata 等）
 
 #### ✅ Step 9: 完善日志和可观测性
 - 创建 `src/pipeline_engine.py`，插件式管线执行引擎
 - 每个步骤记录执行时间、后端、参数
 - 报告系统增强（包含实际使用的算法、回退信息、步骤摘要）
-- 支持 `ExecutionContext` 跨步骤状态传递
 
 #### ✅ Step 10: 提升测试覆盖率
 - 添加 `tests/test_config.py`（20 个测试）
@@ -123,36 +117,26 @@
 
 ---
 
-### ✅ Phase 2：第三方工具集成（已完成）
+### ✅ Phase 2：第三方工具集成
 
 #### ✅ Step 11: 去噪后端 — spARC
 - 集成 `SPARC.spARC`（Spatial Affinity-Graph Recovery of Counts）
-- 构建 cell×gene 表达矩阵，进行空间感知表达去噪
-- 去噪后的表达矩阵通过 `df.attrs["denoised_expression"]` 传递给下游
 
 #### ✅ Step 12: 空间域后端 — GraphST / STAGATE / SpaGCN
-- **GraphST**：图引导空间 Transformer，使用图注意力学习细胞表示后 Leiden 聚类
-- **STAGATE**：空间感知图注意力自编码器，生成嵌入后 KMeans 聚类
-- **SpaGCN**：空间图卷积网络，无图像模式运行
+- **GraphST**：图引导空间 Transformer
+- **STAGATE**：空间感知图注意力自编码器
+- **SpaGCN**：空间图卷积网络
 
 #### ✅ Step 13: 亚细胞空间域后端 — PhenoGraph
 - 基于空间坐标构建 k-NN 图，使用 Louvain 算法检测亚群
-- 兼容 `k` 和 `min_cluster_size` 参数
 
 #### ✅ Step 14: 分析后端 — scVI
 - 单细胞变分推断（scVI）学习潜在表示
-- 支持接收上游 spARC 去噪表达矩阵作为输入
-- 在 scVI 潜在空间上执行 Leiden 聚类
 
 #### ✅ Step 15: 注释后端 — CellTypist
 - 基于预训练参考模型的自动细胞类型分类
-- 支持 majority_voting 模式，输出 cell_type、score、confidence
 
 #### ✅ Step 16: 更新测试断言（所有 155 个测试通过）
-- `tests/test_analysis.py` — 断言 `scvi` 在后端列表中
-- `tests/test_annotation.py` — 断言 `celltypist` 在后端列表中
-- `tests/test_spatial_domain.py` — 断言 `graphst`、`stagate`、`spagcn` 在后端列表中
-- `tests/test_subcellular_spatial_domain.py` — 断言 `phenograph` 在后端列表中
 
 ---
 
@@ -170,33 +154,42 @@
 
 ---
 
-## 文件结构变更预览（Phase 0 后）
+## 文件结构
 
 ```
-src/
-├── __init__.py
-├── __main__.py
-├── api_server.py              # [REFACTOR] 使用注册表
-├── benchmark.py               # [REFACTOR] 使用注册表
-├── cli.py                     # [REFACTOR] 使用注册表
-├── models.py                  # [REFACTOR] 添加 StepResult
-├── pipeline.py                # 转发层，未变
-├── registry.py                # [NEW] 中央后端注册机制
-├── evaluation/
-│   ├── __init__.py
-│   └── metrics.py
-├── io/
-│   ├── __init__.py
-│   └── cosmx.py
-├── pipelines/
-│   ├── __init__.py
-│   └── cosmx_minimal.py      # [REFACTOR] StepResult 模式
-└── steps/
-    ├── __init__.py            # [CLEAN] 简化导出
-    ├── analysis.py            # [REFACTOR] 装饰器注册 + StepResult
-    ├── annotation.py          # [REFACTOR] 装饰器注册 + StepResult
-    ├── denoise.py             # [REFACTOR] 装饰器注册 + StepResult
-    ├── segmentation.py        # [REFACTOR] 装饰器注册 + StepResult
-    ├── spatial_domain.py      # [REFACTOR] 装饰器注册 + StepResult
-    └── subcellular_spatial_domain.py  # [REFACTOR] 装饰器注册 + StepResult
+SubCellSpace/
+├── src/                    # Python 源码
+│   ├── registry.py         # 中央后端注册机制
+│   ├── config.py           # 配置管理系统
+│   ├── pipeline_engine.py  # 插件式管线执行引擎
+│   ├── validation.py       # 数据验证层
+│   ├── steps/              # 各步骤后端实现
+│   ├── pipelines/          # 管线编排
+│   ├── io/                 # 数据加载
+│   └── evaluation/         # 评估指标
+├── frontend/               # React 前端
+├── scripts/                # 自动化脚本
+│   ├── setup-step0.sh      # 创建 conda 环境
+│   ├── setup-step1.sh      # 安装核心依赖 + 测试 + 管线
+│   ├── setup-step2.sh      # 前端环境
+│   ├── setup-step3.sh      # 工具环境
+│   ├── setup-tools.sh      # 工具管理调度器
+│   └── reproduce.sh        # 一键复现脚本
+├── tools/
+│   └── urls.yaml           # [git-tracked] 第三方工具注册表
+├── config/
+│   └── pipeline.yaml       # 管线配置
+├── docs/
+│   └── setup-guide.md      # 环境配置指南
+├── pyproject.toml          # 项目配置和依赖
+├── environment.yml         # conda 环境定义
+└── .gitignore              # 忽略规则
 ```
+
+本地目录（`.gitignore` 忽略）：
+```
+data/           # 测试数据
+tools/*/        # 克隆的第三方工具仓库
+outputs/        # 运行输出
+```
+

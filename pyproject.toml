@@ -14,15 +14,19 @@ dependencies = [
   "numpy>=2.0",
   "pandas>=2.2",
   "pydantic>=2.8",
+  "pyyaml>=6.0",
   "scanpy>=1.11",
   "scikit-learn>=1.5",
   "scipy>=1.13",
+  "spatialdata>=0.3",
   "squidpy>=1.7",
   "uvicorn[standard]>=0.30",
+  "igraph>=0.11",
+  "leidenalg>=0.10",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.6", "mypy>=1.11", "httpx>=0.28.1"]
 
 # Denoise backends
 sparc = []  # installed via -e tools/spARC/
