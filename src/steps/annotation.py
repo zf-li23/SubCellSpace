@@ -16,6 +16,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ── Backend availability flags ─────────────────────────────────────────────
+
+_CELLTYPIST_AVAILABLE: bool = False
+
+try:
+    import celltypist  # noqa: F401
+    _CELLTYPIST_AVAILABLE = True
+except ImportError:
+    pass
+
+
 # ── Backend implementations ────────────────────────────────────────────────
 
 
@@ -69,8 +80,14 @@ def _anno_celltypist(adata: sc.AnnData, model_name: str = "Immune_All_Low.pkl") 
     str
         Backend identifier ``"celltypist"``.
     """
-    import celltypist
-    from celltypist import models
+    try:
+        import celltypist
+        from celltypist import models
+    except ImportError as exc:
+        raise ImportError(
+            "CellTypist backend requires 'celltypist' to be installed. "
+            "Run: pip install celltypist"
+        ) from exc
 
     # Ensure the model is downloaded
     try:

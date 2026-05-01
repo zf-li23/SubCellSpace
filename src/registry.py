@@ -64,6 +64,42 @@ class _BackendRegistry:
         self._ensure_config_loaded()
         return list(self._backends.get(step_name, {}))
 
+    def check_backend_available(self, step_name: str, backend_name: str) -> bool:
+        """Check whether a specific backend's runtime dependencies are installed.
+
+        This works by importing the step module and reading its
+        ``_<BACKEND>_AVAILABLE`` flag.  If no such flag exists, the
+        backend is assumed available (since it has been registered).
+
+        Parameters
+        ----------
+        step_name : str
+            The pipeline step name (e.g. ``"segmentation"``).
+        backend_name : str
+            The backend name to check (e.g. ``"cellpose"``).
+
+        Returns
+        -------
+        bool
+            ``True`` if the backend's dependencies are available,
+            ``False`` otherwise.
+        """
+        # Build the expected flag name: _<BACKEND>_AVAILABLE
+        flag_name = f"_{backend_name.upper()}_AVAILABLE"
+        step_cfg = self.get_step_config(step_name)
+        module_path = step_cfg.get("module", f"src.steps.{step_name}")
+        try:
+            import importlib
+            mod = importlib.import_module(module_path)
+            if hasattr(mod, flag_name):
+                return getattr(mod, flag_name)
+            # No flag → assume available
+            return True
+        except ImportError:
+            return False
+        except Exception:
+            return False
+
     def get_backend_func(self, step_name: str, backend_name: str) -> BackendFunc:
         """Return the callable for a specific step+backend combination."""
         self._ensure_config_loaded()
@@ -180,6 +216,7 @@ registry = _BackendRegistry()
 #   from .registry import registry, register_backend, get_available_backends, ...
 register_backend = registry.register_backend
 get_available_backends = registry.get_available_backends
+check_backend_available = registry.check_backend_available
 get_backend_func = registry.get_backend_func
 get_default_backend = registry.get_default_backend
 get_step_order = registry.get_step_order

@@ -14,6 +14,23 @@ from ..registry import register_backend, register_runner
 if TYPE_CHECKING:
     from ..pipeline_engine import ExecutionContext
 
+# ── Backend availability flags ─────────────────────────────────────────────
+
+_HDBSCAN_AVAILABLE: bool = False
+_PHENOGRAPH_AVAILABLE: bool = False
+
+try:
+    import hdbscan  # noqa: F401
+    _HDBSCAN_AVAILABLE = True
+except ImportError:
+    pass
+
+try:
+    import phenograph  # noqa: F401
+    _PHENOGRAPH_AVAILABLE = True
+except ImportError:
+    pass
+
 
 # ── per-backend clustering functions ──────────────────────────────────────
 
@@ -34,7 +51,13 @@ def _hdbscan_subcellular_domains(
         A point is labelled noise if fewer than ``min_samples`` points are
         within its core-distance radius.
     """
-    import hdbscan
+    try:
+        import hdbscan
+    except ImportError as exc:
+        raise ImportError(
+            "HDBSCAN backend requires 'hdbscan' to be installed. "
+            "Run: pip install hdbscan"
+        ) from exc
 
     coords = cell_df[["x_global_px", "y_global_px"]].to_numpy(dtype=np.float64)
     n = len(coords)
@@ -146,7 +169,13 @@ def _phenograph_subcellular_domains(
     min_cluster_size : int
         Minimum cluster size parameter passed to PhenoGraph.
     """
-    import phenograph
+    try:
+        import phenograph
+    except ImportError as exc:
+        raise ImportError(
+            "PhenoGraph backend requires 'PhenoGraph' to be installed. "
+            "Run: pip install -e tools/PhenoGraph/"
+        ) from exc
 
     coords = cell_df[["x_global_px", "y_global_px"]].to_numpy(dtype=np.float64)
     n = len(coords)

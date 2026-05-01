@@ -16,6 +16,31 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ── Backend availability flags ─────────────────────────────────────────────
+
+_GRAPHST_AVAILABLE: bool = False
+_STAGATE_AVAILABLE: bool = False
+_SPAGCN_AVAILABLE: bool = False
+
+try:
+    import GraphST  # noqa: F401
+    _GRAPHST_AVAILABLE = True
+except ImportError:
+    pass
+
+try:
+    import STAGATE  # noqa: F401
+    _STAGATE_AVAILABLE = True
+except ImportError:
+    pass
+
+try:
+    import SpaGCN  # noqa: F401
+    _SPAGCN_AVAILABLE = True
+except ImportError:
+    pass
+
+
 # ── Backend implementations ────────────────────────────────────────────────
 
 
@@ -88,7 +113,13 @@ def _domain_graphst(adata: sc.AnnData, domain_resolution: float, n_spatial_domai
     Uses graph attention to learn cell representations, then clusters
     the embeddings with Leiden to identify spatial domains.
     """
-    import GraphST
+    try:
+        import GraphST
+    except ImportError as exc:
+        raise ImportError(
+            "GraphST backend requires 'GraphST' to be installed. "
+            "Run: pip install -e tools/GraphST/"
+        ) from exc
 
     # GraphST requires preprocessed adata (normalized, log1p)
     adata_tmp = adata.copy()
@@ -135,7 +166,13 @@ def _domain_stagate(
     that incorporates spatial information. Then clusters embeddings
     with KMeans to identify spatial domains.
     """
-    import STAGATE
+    try:
+        import STAGATE
+    except ImportError as exc:
+        raise ImportError(
+            "STAGATE backend requires 'STAGATE' to be installed. "
+            "Run: pip install -e tools/STAGATE/"
+        ) from exc
 
     # Preprocess
     adata_tmp = adata.copy()
@@ -182,7 +219,13 @@ def _domain_spagcn(
     spatial domains. For CosMx transcript-only data (no image),
     it runs with histology=False.
     """
-    import SpaGCN
+    try:
+        import SpaGCN
+    except ImportError as exc:
+        raise ImportError(
+            "SpaGCN backend requires 'SpaGCN' to be installed. "
+            "Run: pip install -e tools/SpaGCN/"
+        ) from exc
 
     coords = adata.obsm["spatial"]
     x_array = coords[:, 0].tolist()

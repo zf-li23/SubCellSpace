@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────────────
+# SubCellSpace — Pre-commit hooks
+#
+# Install:  pre-commit install
+# Run all:  pre-commit run --all-files
+# Update:   pre-commit autoupdate
+# ─────────────────────────────────────────────────────────────────────
+
+repos:
+  # ── General-purpose linting & formatting ────────────────────────
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: detect-private-keys
+
+  # ── Python-specific ─────────────────────────────────────────────
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.5
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.15.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-PyYAML
+          - types-requests
+        args: [--strict, --ignore-missing-imports]
+        # Only check source code, not tests or generated files
+        exclude: ^tests|^tools|^scripts
+
+  # ── TypeScript / JavaScript (frontend) ──────────────────────────
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        types_or: [javascript, jsx, typescript, tsx, css, json, markdown, yaml]
+        args: [--write]
+        additional_dependencies:
+          - prettier@3.1.0
+
+  # ── Markdown ───────────────────────────────────────────────────
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.44.0
+    hooks:
+      - id: markdownlint
+        args: [--disable, MD013, MD033, MD041]

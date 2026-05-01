@@ -36,6 +36,12 @@ pipeline:
       module: "src.steps.segmentation"
       default_backend: "provided_cells"
       description: "Assign transcripts to cells"
+      available_backends:
+        - provided_cells: "Use pre-existing cell ID column (fast, no segmentation)"
+        - fov_cell_id: "Combine FOV + cell_ID into a cell label (fallback)"
+        - cellpose: "Deep learning-based cell segmentation (Cellpose, requires image)"
+        - baysor: "Probabilistic Bayesian spatial segmentation (requires Baysor CLI)"
+
 
     spatial_domain:
       module: "src.steps.spatial_domain"
