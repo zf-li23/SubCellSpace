@@ -226,6 +226,76 @@ def platforms() -> dict[str, list[str]]:
     return {"platforms": get_available_platforms()}
 
 
+# ── Per-backend statistics (static-first: one load, client-side filtering) ─
+
+
+@app.get("/api/stats/by-backend")
+def stats_by_backend() -> dict[str, Any]:
+    """Return per-step, per-backend metrics from pre-computed validation runs.
+
+    Scans ``outputs/backend_validation/`` for individual reports (one per
+    backend variant) and merges them into a structure keyed by step name::
+
+        {
+          "denoise": {
+            "intracellular": { "layer_evaluation": {...}, "step_summary": {...} },
+            "sparc":        { ... },
+          },
+          "analysis": { ... },
+          ...
+        }
+
+    The frontend uses this to let users switch backend per step and see
+    the corresponding stats — without re-running the pipeline.
+    """
+    validation_dir = OUTPUTS_ROOT / "backend_validation"
+    if not validation_dir.is_dir():
+        return {"steps": {}, "available": False}
+
+    # Map directory-name prefix to step name
+    DIR_PREFIX_TO_STEP = {
+        "denoise": "denoise",
+        "segmentation": "segmentation",
+        "analysis": "analysis",
+        "annotation": "annotation",
+        "spatial_domain": "spatial_domain",
+        "subcellular_spatial_domain": "subcellular_spatial_domain",
+    }
+
+    steps: dict[str, dict[str, Any]] = {}
+
+    for child_dir in sorted(validation_dir.iterdir()):
+        if not child_dir.is_dir():
+            continue
+        report_file = child_dir / "cosmx_minimal_report.json"
+        if not report_file.is_file():
+            continue
+
+        # Parse "denoise_intracellular" → step="denoise", backend="intracellular"
+        dir_name = child_dir.name
+        for prefix, step_name in DIR_PREFIX_TO_STEP.items():
+            if dir_name.startswith(prefix + "_"):
+                backend = dir_name[len(prefix) + 1 :]  # everything after "denoise_"
+                break
+        else:
+            continue  # skip unrecognised directories
+
+        try:
+            report = json.loads(report_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        layer_eval = report.get("layer_evaluation", {})
+        step_summary = report.get("step_summary", {})
+
+        step_data = steps.setdefault(step_name, {})
+        step_data[backend] = {
+            "layer_evaluation": layer_eval.get(step_name),
+            "step_summary": step_summary.get(step_name),
+        }
+
+    return {"steps": steps, "available": True}
+
 
 @app.get("/api/runs")
 def list_runs() -> list[dict[str, Any]]:

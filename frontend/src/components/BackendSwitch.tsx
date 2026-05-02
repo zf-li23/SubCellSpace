@@ -6,6 +6,7 @@ export type BackendConfig = {
   clustering: string
   annotation: string
   spatialDomain: string
+  subcellularDomain: string
 }
 
 type BackendSwitchProps = {
@@ -13,49 +14,48 @@ type BackendSwitchProps = {
   onChange: (next: BackendConfig) => void
 }
 
-export default function BackendSwitch({ value, onChange }: BackendSwitchProps){
+/** All registered backends, matching the Python pipeline config.
+ *
+ *  Maintained manually — when the Python side adds/removes a backend,
+ *  update these lists to keep the frontend in sync.
+ *
+ *  See: config/pipeline.yaml and src/steps/*.py
+ */
+const BACKENDS = {
+  denoise: ['intracellular', 'none', 'nuclear_only', 'sparc'],
+  segmentation: ['provided_cells', 'fov_cell_id', 'cellpose', 'baysor'],
+  clustering: ['leiden', 'kmeans', 'scvi'],
+  annotation: ['rank_marker', 'cluster_label', 'celltypist'],
+  spatialDomain: ['spatial_leiden', 'spatial_kmeans', 'graphst', 'stagate', 'spagcn'],
+  subcellularDomain: ['hdbscan', 'dbscan', 'leiden_spatial', 'phenograph', 'none'],
+} as const
+
+const LABELS: Record<string, string> = {
+  denoise: '去噪',
+  segmentation: '分割',
+  clustering: '聚类',
+  annotation: '注释',
+  spatialDomain: '空间域',
+  subcellularDomain: '亚细胞域',
+}
+
+export default function BackendSwitch({ value, onChange }: BackendSwitchProps) {
   const update = (key: keyof BackendConfig, nextValue: string) => {
     onChange({ ...value, [key]: nextValue })
   }
 
   return (
     <div className="backend-switch">
-      <label>
-        去噪
-        <select value={value.denoise} onChange={(event) => update('denoise', event.target.value)}>
-          <option value="intracellular">intracellular</option>
-          <option value="none">none</option>
-          <option value="nuclear_only">nuclear_only</option>
-        </select>
-      </label>
-      <label>
-        分割
-        <select value={value.segmentation} onChange={(event) => update('segmentation', event.target.value)}>
-          <option value="provided_cells">provided_cells</option>
-          <option value="fov_cell_id">fov_cell_id</option>
-        </select>
-      </label>
-      <label>
-        聚类
-        <select value={value.clustering} onChange={(event) => update('clustering', event.target.value)}>
-          <option value="leiden">leiden</option>
-          <option value="kmeans">kmeans</option>
-        </select>
-      </label>
-      <label>
-        注释
-        <select value={value.annotation} onChange={(event) => update('annotation', event.target.value)}>
-          <option value="rank_marker">rank_marker</option>
-          <option value="cluster_label">cluster_label</option>
-        </select>
-      </label>
-      <label>
-        空间域
-        <select value={value.spatialDomain} onChange={(event) => update('spatialDomain', event.target.value)}>
-          <option value="spatial_leiden">spatial_leiden</option>
-          <option value="spatial_kmeans">spatial_kmeans</option>
-        </select>
-      </label>
+      {(Object.keys(BACKENDS) as Array<keyof typeof BACKENDS>).map((key) => (
+        <label key={key}>
+          {LABELS[key]}
+          <select value={value[key]} onChange={(e) => update(key, e.target.value)}>
+            {BACKENDS[key].map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </label>
+      ))}
     </div>
   )
 }

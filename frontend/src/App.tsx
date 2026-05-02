@@ -113,6 +113,7 @@ export default function App() {
     clustering: 'leiden',
     annotation: 'rank_marker',
     spatialDomain: 'spatial_leiden',
+    subcellularDomain: 'hdbscan',
   })
 
   const navItems: Array<{ route: Route; label: string; icon: string }> = [

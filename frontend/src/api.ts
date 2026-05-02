@@ -161,6 +161,7 @@ export type BackendConfig = {
   clustering: string
   annotation: string
   spatialDomain: string
+  subcellularDomain: string
 }
 
 export type CosmxRunOptions = {
@@ -227,6 +228,7 @@ function withBackendQuery(url: string, backendConfig?: BackendConfig): string {
     clustering: backendConfig.clustering,
     annotation: backendConfig.annotation,
     spatial_domain: backendConfig.spatialDomain,
+    subcellular_domain: backendConfig.subcellularDomain,
   })
 
   return `${url}?${searchParams.toString()}`
@@ -368,6 +370,7 @@ export async function runCosmxPipeline(
         spatial_domain_backend: backendConfig.spatialDomain,
         spatial_domain_resolution: options.spatialDomainResolution ?? 1.0,
         n_spatial_domains: options.nSpatialDomains ?? null,
+        subcellular_domain_backend: backendConfig.subcellularDomain,
       }),
     })
 
@@ -425,4 +428,21 @@ export async function loadRunCompareData(runNames: string[]): Promise<RunCompare
     }))
   )
   return { runs: results }
+}
+
+/* ── Per-backend statistics (static-first: one load, client-side filtering) ─ */
+
+/** Per-step, per-backend metrics loaded from /api/stats/by-backend */
+export type PerBackendStepData = {
+  layer_evaluation?: Record<string, unknown> | null
+  step_summary?: Record<string, unknown> | null
+}
+
+export type PerBackendStats = {
+  steps: Record<string, Record<string, PerBackendStepData>>
+  available: boolean
+}
+
+export async function loadPerBackendStats(): Promise<PerBackendStats | null> {
+  return await fetchJson<PerBackendStats>('/api/stats/by-backend')
 }

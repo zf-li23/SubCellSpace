@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import BackendSwitch, { type BackendConfig } from '../components/BackendSwitch'
 import {
   loadPipelineReport,
   loadPlotData,
-  runCosmxPipeline,
   loadCellTranscripts,
+  loadPerBackendStats,
   type CellTranscripts,
   type CellTranscriptPoint,
   type PlotData,
@@ -24,10 +24,30 @@ import {
   type AnalysisStepSummary,
   type SpatialDomainStepSummary,
   type SubcellularStepSummary,
+  type PerBackendStats,
 } from '../api'
 import InteractiveScatterPlot from '../components/InteractiveScatterPlot'
 import DonutChart from '../components/DonutChart'
 import LoadingSkeleton, { SkeletonCard } from '../components/LoadingSkeleton'
+
+/** All backends per step — mirrors BackendSwitch.BACKENDS */
+const STEP_BACKENDS: Record<string, string[]> = {
+  denoise: ['intracellular', 'none', 'nuclear_only', 'sparc'],
+  segmentation: ['provided_cells', 'fov_cell_id', 'cellpose', 'baysor'],
+  spatial_domain: ['spatial_leiden', 'spatial_kmeans', 'graphst', 'stagate', 'spagcn'],
+  subcellular_spatial_domain: ['hdbscan', 'dbscan', 'leiden_spatial', 'phenograph', 'none'],
+  analysis: ['leiden', 'kmeans', 'scvi'],
+  annotation: ['rank_marker', 'cluster_label', 'celltypist'],
+}
+
+const STEP_LABELS: Record<string, string> = {
+  denoise: '去噪',
+  segmentation: '分割',
+  spatial_domain: '空间域',
+  subcellular_spatial_domain: '亚细胞域',
+  analysis: '聚类',
+  annotation: '注释',
+}
 
 type ReportPageProps = {
   backendConfig: BackendConfig
@@ -37,35 +57,73 @@ type ReportPageProps = {
 export default function ReportPage({ backendConfig, onBackendChange }: ReportPageProps) {
   const [report, setReport] = useState<PipelineReport | null>(null)
   const [plotData, setPlotData] = useState<PlotData | null>(null)
-  const [running, setRunning] = useState(false)
-  const [status, setStatus] = useState<string>('')
+  const [perBackendStats, setPerBackendStats] = useState<PerBackendStats | null>(null)
   const [selectedCell, setSelectedCell] = useState<string | null>(null)
 
+  // Load main report & plot data when backendConfig changes
   useEffect(() => {
-    loadPipelineReport()
+    setReport(null)
+    setPlotData(null)
+    loadPipelineReport(backendConfig)
       .then((value) => {
         setReport(value)
         return value?.outputs?.report ?? null
       })
       .then((reportPath) => loadPlotData(reportPath as string | null | undefined))
       .then((value) => setPlotData(value))
+  }, [backendConfig])
+
+  // Load per-backend stats once
+  useEffect(() => {
+    loadPerBackendStats().then(setPerBackendStats)
   }, [])
+
+  /** Read per-backend stats for a specific step + backend */
+  const stepStats = useCallback(
+    (stepName: string, backend: string) => {
+      return perBackendStats?.steps?.[stepName]?.[backend] ?? null
+    },
+    [perBackendStats],
+  )
 
   const eval_ = report?.layer_evaluation
   const step_ = report?.step_summary
-  type ColorMode = 'subcellular' | 'gene' | 'cellcomp'
-  const defaultColorMode: ColorMode = 'subcellular'
 
-  const rerun = async () => {
-    setRunning(true)
-    setStatus('Running pipeline with selected backends...')
-    const nextReport = await runCosmxPipeline(backendConfig)
-    setReport(nextReport)
-    const nextPlotData = await loadPlotData((nextReport?.outputs?.report as string | undefined) ?? null)
-    setPlotData(nextPlotData)
-    setStatus(nextReport ? 'Pipeline run completed.' : 'Pipeline run failed.')
-    setRunning(false)
-  }
+  // Handle step-level backend changes — sync back to the global config
+  const stepBackendChange = useCallback(
+    (stepName: string, backend: string) => {
+      const mapping: Record<string, keyof BackendConfig> = {
+        denoise: 'denoise',
+        segmentation: 'segmentation',
+        analysis: 'clustering',
+        annotation: 'annotation',
+        spatial_domain: 'spatialDomain',
+        subcellular_spatial_domain: 'subcellularDomain',
+      }
+      const key = mapping[stepName]
+      if (key) {
+        onBackendChange({ ...backendConfig, [key]: backend })
+      }
+    },
+    [backendConfig, onBackendChange],
+  )
+
+  /** The per-step backend value from the current global config */
+  const currentStepBackend = useCallback(
+    (stepName: string): string => {
+      const mapping: Record<string, keyof BackendConfig> = {
+        denoise: 'denoise',
+        segmentation: 'segmentation',
+        analysis: 'clustering',
+        annotation: 'annotation',
+        spatial_domain: 'spatialDomain',
+        subcellular_spatial_domain: 'subcellularDomain',
+      }
+      const key = mapping[stepName]
+      return key ? backendConfig[key] : ''
+    },
+    [backendConfig],
+  )
 
   return (
     <div className="container">
@@ -77,12 +135,14 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
         </div>
         <div className="report-actions">
           <BackendSwitch value={backendConfig} onChange={onBackendChange} />
-          <button onClick={rerun} disabled={running}>
-            {running ? 'Running...' : '▶ Run pipeline'}
-          </button>
         </div>
       </section>
-      {status && <p className="status-bar">{status}</p>}
+
+      {perBackendStats && !perBackendStats.available && (
+        <div className="alert alert-error" style={{ marginTop: 12 }}>
+          Per-backend stats unavailable. Run the benchmark first: <code>subcellspace benchmark-cosmx ...</code>
+        </div>
+      )}
 
       {report ? (
         <div className="report-layout">
@@ -90,24 +150,22 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           {/* STEP 1: Filtering (Denoise)                   */}
           {/* ============================================ */}
           <StepSection title="Step 1: Filtering / Denoise" stepIndex={1} totalSteps={5}
-            substeps={[
-              { label: 'Filtering backend', value: backendConfig.denoise },
-              { label: 'Before → After', value: formatTranscriptFiltering(eval_?.denoise) },
-            ]}
+            stepName="denoise"
+            currentBackend={currentStepBackend('denoise')}
+            allBackends={STEP_BACKENDS.denoise ?? []}
+            stepStats={stepStats('denoise', currentStepBackend('denoise'))}
+            onBackendChange={(b) => stepBackendChange('denoise', b)}
           >
             <div className="step-two-col">
-              {/* Raw ingestion stats */}
               <div className="step-insight-card">
                 <h4>Raw data overview</h4>
                 <StatTable rows={rawIngestionRows(eval_?.ingestion)} />
               </div>
-              {/* Filtering comparison */}
               <div className="step-insight-card">
                 <h4>Filtering effect</h4>
                 <StatTable rows={denoiseEffectRows(eval_?.denoise, step_?.denoise)} />
               </div>
             </div>
-            {/* CellComp distribution bar */}
             {eval_?.denoise?.cellcomp_distribution_after && (
               <div className="step-insight-card" style={{ marginTop: 12 }}>
                 <h4>CellComp distribution after filtering</h4>
@@ -120,19 +178,17 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           {/* STEP 2: Segmentation                          */}
           {/* ============================================ */}
           <StepSection title="Step 2: Segmentation" stepIndex={2} totalSteps={5}
-            substeps={[
-              { label: 'Segmentation backend', value: backendConfig.segmentation },
-              { label: 'Cells assigned', value: formatMetric(eval_?.segmentation?.n_cells_assigned) },
-              { label: 'Transcripts assigned', value: formatMetric(eval_?.segmentation?.n_transcripts_assigned) },
-            ]}
+            stepName="segmentation"
+            currentBackend={currentStepBackend('segmentation')}
+            allBackends={STEP_BACKENDS.segmentation ?? []}
+            stepStats={stepStats('segmentation', currentStepBackend('segmentation'))}
+            onBackendChange={(b) => stepBackendChange('segmentation', b)}
           >
             <div className="step-two-col">
-              {/* Segmentation stats */}
               <div className="step-insight-card">
                 <h4>Assignment statistics</h4>
                 <StatTable rows={segmentationStatRows(eval_?.segmentation, step_?.segmentation)} />
               </div>
-              {/* Spatial scatter (colored by cell_id) */}
               <div className="step-insight-card">
                 <h4>Spatial layout — cells colored by cell ID</h4>
                 {plotData?.points?.spatial ? (
@@ -146,13 +202,10 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
                 <p className="step-hint">Click a cell to highlight its transcript coordinates (below)</p>
               </div>
             </div>
-            {/* When a cell is selected, show its transcript-level view */}
             {selectedCell && (
               <div className="step-insight-card" style={{ marginTop: 12 }}>
                 <h4>Transcripts in cell <code>{selectedCell}</code> (colored by gene)</h4>
-                <TranscriptScatter
-                  cellId={selectedCell}
-                />
+                <TranscriptScatter cellId={selectedCell} />
                 <p className="step-hint" style={{ marginTop: 8 }}>
                   Each dot = one transcript. Color encodes gene target.
                   <button className="link-btn" onClick={() => setSelectedCell(null)} style={{ marginLeft: 12 }}>
@@ -167,21 +220,17 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           {/* STEP 3: Spatial Domain Identification        */}
           {/* ============================================ */}
           <StepSection title="Step 3: Spatial Domain Identification" stepIndex={3} totalSteps={5}
-            substeps={[
-              { label: 'Cell-level backend', value: step_?.spatial_domain?.spatial_domain_backend_used ?? backendConfig.spatialDomain },
-              { label: '# cell domains', value: formatMetric(eval_?.spatial_domain?.n_spatial_domains) },
-              { label: 'Subcell backend', value: step_?.subcellular_spatial_domain?.subcellular_spatial_domain_backend ?? 'dbscan' },
-              { label: 'Multi-domain cells', value: formatMetric(eval_?.subcellular_spatial_domain?.n_cells_with_multiple_domains) },
-            ]}
+            stepName="spatial_domain"
+            currentBackend={currentStepBackend('spatial_domain')}
+            allBackends={STEP_BACKENDS.spatial_domain ?? []}
+            stepStats={stepStats('spatial_domain', currentStepBackend('spatial_domain'))}
+            onBackendChange={(b) => stepBackendChange('spatial_domain', b)}
           >
-            {/* Subcellular domain summary */}
             <div className="step-insight-card">
               <h4>Subcellular spatial domain statistics</h4>
               <StatTable rows={subcellularDomainRows(eval_?.subcellular_spatial_domain, step_?.subcellular_spatial_domain)} />
             </div>
-
             <div className="step-two-col" style={{ marginTop: 12 }}>
-              {/* Spatial domain distribution */}
               <div className="step-insight-card">
                 <h4>Cell-level spatial domain distribution</h4>
                 {step_?.spatial_domain?.spatial_domain_distribution ? (
@@ -190,14 +239,11 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
                   <div className="empty-state">No domain distribution data.</div>
                 )}
               </div>
-              {/* Spatial graph metrics */}
               <div className="step-insight-card">
                 <h4>Spatial graph (cell-level)</h4>
                 <StatTable rows={spatialGraphStatRows(eval_?.spatial)} />
               </div>
             </div>
-
-            {/* Multi-level explanation */}
             <div className="step-insight-card" style={{ marginTop: 12 }}>
               <h4>Multi-level spatial domains</h4>
               <table className="domain-level-table">
@@ -213,25 +259,17 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
                   <tr>
                     <td><strong>Cell-level</strong></td>
                     <td>Groups of cells sharing spatial proximity</td>
-                    <td>
-                      <span className="status-badge status-badge--supported">Available</span>
-                    </td>
-                    <td>{step_?.spatial_domain?.spatial_domain_backend_used ?? 'spatial_leiden'}</td>
+                    <td><span className="status-badge status-badge--supported">Available</span></td>
+                    <td>{step_?.spatial_domain?.spatial_domain_backend_used ?? backendConfig.spatialDomain}</td>
                   </tr>
                   <tr>
                     <td><strong>Subcellular-level</strong></td>
                     <td>Transcript-level spatial domains within cells</td>
-                    <td>
-                      <span className="status-badge status-badge--supported">Available</span>
-                    </td>
-                    <td>DBSCAN (eps={step_?.subcellular_spatial_domain?.dbscan_eps ?? 40}, min_samples={step_?.subcellular_spatial_domain?.dbscan_min_samples ?? 5})</td>
+                    <td><span className="status-badge status-badge--supported">Available</span></td>
+                    <td>{step_?.subcellular_spatial_domain?.subcellular_spatial_domain_backend ?? backendConfig.subcellularDomain}</td>
                   </tr>
                 </tbody>
               </table>
-              <p className="step-hint" style={{ marginTop: 8 }}>
-                Subcellular domains are identified by clustering transcripts within each cell using DBSCAN on spatial coordinates.
-                Click a cell in the spatial layout above to visualize its subcellular domains, genes, or CellComp regions.
-              </p>
             </div>
           </StepSection>
 
@@ -239,15 +277,13 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           {/* STEP 4: Clustering / Expression Analysis     */}
           {/* ============================================ */}
           <StepSection title="Step 4: Clustering & Expression Analysis" stepIndex={4} totalSteps={5}
-            substeps={[
-              { label: 'Clustering backend', value: step_?.analysis?.clustering_backend_used ?? backendConfig.clustering },
-              { label: '# clusters', value: formatMetric(eval_?.clustering?.n_clusters) },
-              { label: 'Silhouette (PCA)', value: formatMetric(eval_?.clustering?.silhouette_pca) },
-              { label: 'Resolution', value: formatMetric(step_?.analysis?.leiden_resolution) },
-            ]}
+            stepName="analysis"
+            currentBackend={currentStepBackend('analysis')}
+            allBackends={STEP_BACKENDS.analysis ?? []}
+            stepStats={stepStats('analysis', currentStepBackend('analysis'))}
+            onBackendChange={(b) => stepBackendChange('analysis', b)}
           >
             <div className="step-grid-2x2">
-              {/* UMAP */}
               <div className="step-insight-card full-width-col">
                 <h4>UMAP embedding</h4>
                 {plotData?.points?.umap ? (
@@ -256,17 +292,14 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
                   <div className="empty-state">No UMAP data available.</div>
                 )}
               </div>
-              {/* Cluster distribution */}
               <div className="step-insight-card">
                 <h4>Cluster distribution</h4>
                 <ClusterDonut report={report} />
               </div>
-              {/* Expression QC metrics */}
               <div className="step-insight-card">
                 <h4>Expression & QC</h4>
                 <StatTable rows={expressionStatRows(eval_?.expression, step_?.analysis)} />
               </div>
-              {/* Clustering details */}
               <div className="step-insight-card">
                 <h4>Clustering details</h4>
                 <StatTable rows={clusteringStatRows(eval_?.clustering)} />
@@ -278,9 +311,11 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           {/* STEP 5: Annotation                           */}
           {/* ============================================ */}
           <StepSection title="Step 5: Cell-type Annotation" stepIndex={5} totalSteps={5}
-            substeps={[
-              { label: 'Annotation backend', value: backendConfig.annotation },
-            ]}
+            stepName="annotation"
+            currentBackend={currentStepBackend('annotation')}
+            allBackends={STEP_BACKENDS.annotation ?? []}
+            stepStats={stepStats('annotation', currentStepBackend('annotation'))}
+            onBackendChange={(b) => stepBackendChange('annotation', b)}
           >
             {eval_?.annotation?.n_cell_types && eval_.annotation.n_cell_types > 0 ? (
               <div className="step-insight-card">
@@ -293,8 +328,8 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
                 <h4>No single-cell reference available</h4>
                 <p>
                   Cell-type annotation requires a single-cell RNA-seq reference dataset for label transfer.
-                  Currently the pipeline operates in a discovery mode without external reference data,
-                  which means annotation is skipped. Common solutions include:
+                  Currently the pipeline operates in a discovery mode without external reference data.
+                  Common solutions include:
                 </p>
                 <ul>
                   <li>Provide a pre-annotated scRNA-seq reference (e.g., as AnnData .h5ad file)</li>
@@ -325,20 +360,30 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
 
 /* ============ Sub-components ============ */
 
-/** A visual step section with title bar, substeps row, and content body */
+/** A visual step section with title bar, backend selector, and content body */
 function StepSection({
   title,
   stepIndex,
   totalSteps,
-  substeps,
+  stepName,
+  currentBackend,
+  allBackends,
+  stepStats,
+  onBackendChange,
   children,
 }: {
   title: string
   stepIndex: number
   totalSteps: number
-  substeps: Array<{ label: string; value: string | number | null | undefined }>
+  stepName: string
+  currentBackend: string
+  allBackends: string[]
+  stepStats: { layer_evaluation?: Record<string, unknown> | null; step_summary?: Record<string, unknown> | null } | null
+  onBackendChange: (backend: string) => void
   children: React.ReactNode
 }) {
+  const label = STEP_LABELS[stepName] ?? stepName
+
   return (
     <section className="step-block">
       <div className="step-header">
@@ -347,12 +392,24 @@ function StepSection({
           <h3>{title}</h3>
         </div>
         <div className="step-substeps">
-          {substeps.map((s, i) => (
-            <span className="step-substep" key={i}>
-              <span className="step-substep-label">{s.label}</span>
-              <span className="step-substep-value">{String(s.value ?? 'n/a')}</span>
+          <span className="step-substep">
+            <span className="step-substep-label">{label}</span>
+            <select
+              className="step-backend-select"
+              value={currentBackend}
+              onChange={(e) => onBackendChange(e.target.value)}
+            >
+              {allBackends.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </span>
+          {stepStats?.step_summary && Object.keys(stepStats.step_summary).length > 0 && (
+            <span className="step-substep">
+              <span className="step-substep-label">per-backend</span>
+              <span className="step-substep-value">✓ loaded</span>
             </span>
-          ))}
+          )}
         </div>
       </div>
       <div className="step-body">
