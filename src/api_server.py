@@ -22,6 +22,7 @@ DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMX
 DEFAULT_OUTPUT_DIR = Path(_settings.get("output_dir", "outputs/api_runs"))
 DEFAULT_REPORT_RUN = _settings.get("report_run", "cosmx_try_again_round")
 DEFAULT_BENCHMARK_RUN = _settings.get("benchmark_run", "cosmx_benchmark_round")
+DEFAULT_BENCHMARK_VALIDATION_DIR = _settings.get("benchmark_validation_dir", "outputs/backend_validation")
 DEFAULT_API_HOST = _settings.get("api_host", "0.0.0.0")
 DEFAULT_API_PORT = int(_settings.get("api_port", "8000"))
 
@@ -319,6 +320,62 @@ def get_benchmark(run_name: str) -> dict[str, Any]:
     return {
         "summary": benchmark,
         "summary_csv": rel_csv_path if summary_csv.exists() else None,
+    }
+
+
+@app.get("/api/benchmark-validation")
+def get_benchmark_validation() -> dict[str, Any]:
+    """Return the backend validation benchmark results and per-run reports.
+
+    Reads benchmark_results.json and individual per-run reports under
+    DEFAULT_BENCHMARK_VALIDATION_DIR.
+    """
+    validation_dir = OUTPUTS_ROOT / "backend_validation"
+    if not validation_dir.is_dir():
+        raise HTTPException(status_code=404, detail="No backend validation directory found")
+
+    # Load the summary results file
+    results_path = validation_dir / "benchmark_results.json"
+    if not results_path.exists():
+        raise HTTPException(status_code=404, detail="benchmark_results.json not found")
+
+    results = _load_json(results_path)
+
+    # Build per-run details by reading individual report files
+    runs: dict[str, Any] = {}
+    for key in results:
+        run_dir = validation_dir / key
+        report_path = run_dir / "cosmx_minimal_report.json"
+        report_data = None
+        if report_path.exists():
+            try:
+                report_data = _load_json(report_path)
+            except (json.JSONDecodeError, OSError):
+                pass
+        runs[key] = {
+            "status": results[key].get("status"),
+            "elapsed_seconds": results[key].get("elapsed_seconds"),
+            "n_cells": results[key].get("n_cells"),
+            "n_genes": results[key].get("n_genes"),
+            "n_clusters": results[key].get("n_clusters"),
+            "n_spatial_domains": results[key].get("n_spatial_domains"),
+            "n_subcellular_domains": results[key].get("n_subcellular_domains"),
+            "error": results[key].get("error"),
+            "report": report_data,
+        }
+
+    # Compute aggregate stats
+    passed = sum(1 for r in results.values() if r.get("status") == "PASS")
+    failed = sum(1 for r in results.values() if r.get("status") == "FAIL")
+    total = len(results)
+    total_elapsed = sum(r.get("elapsed_seconds", 0) for r in results.values())
+
+    return {
+        "total_runs": total,
+        "passed": passed,
+        "failed": failed,
+        "total_elapsed_seconds": round(total_elapsed, 1),
+        "results": runs,
     }
 
 

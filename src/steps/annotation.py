@@ -97,9 +97,24 @@ def _anno_celltypist(adata: sc.AnnData, model_name: str = "Immune_All_Low.pkl") 
         celltypist.models.download_models(model=model_name)
         model = models.Model.load(model=model_name)
 
+    # CellTypist expects log1p-normalized expression (to 10k counts/cell).
+    # The adata after analysis has been scaled (max_value=10), so we
+    # restore the lognorm layer if available, or re-normalize from raw.
+    adata_for_ct = adata.copy()
+    if "lognorm" in adata.layers:
+        adata_for_ct.X = adata.layers["lognorm"].copy()
+    elif adata.raw is not None:
+        adata_for_ct.X = adata.raw.X.copy()
+        sc.pp.normalize_total(adata_for_ct, target_sum=1e4)
+        sc.pp.log1p(adata_for_ct)
+    else:
+        # Last resort: assume adata.X is counts (unlikely but try)
+        sc.pp.normalize_total(adata_for_ct, target_sum=1e4)
+        sc.pp.log1p(adata_for_ct)
+
     # Run celltypist annotation
     prediction = celltypist.annotate(
-        adata,
+        adata_for_ct,
         model=model,
         majority_voting=True,
         mode="best match",
@@ -109,8 +124,20 @@ def _anno_celltypist(adata: sc.AnnData, model_name: str = "Immune_All_Low.pkl") 
     # Merge predicted labels into adata.obs
     pred_labels = prediction.predicted_labels
     adata.obs["cell_type"] = pred_labels["majority_voting"].values.astype(str)
-    adata.obs["celltypist_score"] = pred_labels["score"].values
-    adata.obs["celltypist_confidence"] = pred_labels["conf_score"].values
+    # 'score' column only present w/o majority_voting;
+    # with majority_voting=True, no 'conf_score' column exists in pred_labels.
+    # Use the probability_matrix to compute per-cell max confidence.
+    if "score" in pred_labels.columns:
+        adata.obs["celltypist_score"] = pred_labels["score"].values
+        adata.obs["celltypist_confidence"] = pred_labels["score"].values
+    elif "conf_score" in pred_labels.columns:
+        adata.obs["celltypist_score"] = pred_labels["conf_score"].values
+        adata.obs["celltypist_confidence"] = pred_labels["conf_score"].values
+    else:
+        # majority_voting=True: columns are ['predicted_labels', 'over_clustering', 'majority_voting']
+        max_probs = prediction.probability_matrix.max(axis=1)
+        adata.obs["celltypist_score"] = max_probs.values
+        adata.obs["celltypist_confidence"] = max_probs.values
 
     return "celltypist"
 

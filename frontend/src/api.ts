@@ -264,6 +264,33 @@ export async function loadBenchmarkSummary(): Promise<BenchmarkSummary | null> {
   )
 }
 
+/* ── Benchmark Validation (outputs/backend_validation) ───────────────── */
+
+
+export type BenchmarkValidationRun = {
+  status: string
+  elapsed_seconds: number
+  n_cells?: number
+  n_genes?: number
+  n_clusters?: number
+  n_spatial_domains?: number
+  n_subcellular_domains?: number
+  error?: string
+  report?: PipelineReport | null
+}
+
+export type BenchmarkValidationData = {
+  total_runs: number
+  passed: number
+  failed: number
+  total_elapsed_seconds: number
+  results: Record<string, BenchmarkValidationRun>
+}
+
+export async function loadBenchmarkValidation(): Promise<BenchmarkValidationData | null> {
+  return await fetchJson<BenchmarkValidationData>('/api/benchmark-validation')
+}
+
 export async function loadPlotData(reportPath?: string | null, outputDir?: string | null): Promise<PlotData | null> {
   const searchParams = new URLSearchParams()
   if (reportPath) {

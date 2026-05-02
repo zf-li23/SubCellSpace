@@ -50,7 +50,21 @@ def _ensure_spatial_neighbors(adata: sc.AnnData) -> None:
         sq.gr.spatial_neighbors(adata, spatial_key="spatial", coord_type="generic")
 
 
-def _domain_spatial_leiden(adata: sc.AnnData, domain_resolution: float, n_spatial_domains: int | None = None) -> str:  # noqa: ARG001
+def _domain_spatial_leiden(
+    adata: sc.AnnData,
+    domain_resolution: float,
+    n_spatial_domains: int | None = None,  # noqa: ARG001
+) -> str:
+    """Spatial Leiden clustering on spatial neighbor graph.
+
+    Tries three strategies in order:
+    1. Leiden with igraph flavor
+    2. Leiden with default flavor
+    3. KMeans fallback on spatial coordinates
+
+    This ensures robustness even when the spatial connectivities matrix
+    is ill-conditioned or igraph is unavailable.
+    """
     _ensure_spatial_neighbors(adata)
 
     try:
@@ -94,6 +108,7 @@ def _domain_spatial_kmeans(
     _domain_resolution: float = 1.0,
     n_spatial_domains: int | None = None,  # noqa: ARG001
 ) -> str:
+    """Spatial domain identification via KMeans on spatial coordinates."""
     if "spatial" not in adata.obsm:
         raise ValueError("`spatial` not found in adata.obsm.")
 
@@ -107,14 +122,23 @@ def _domain_spatial_kmeans(
     return "spatial_kmeans"
 
 
-def _domain_graphst(adata: sc.AnnData, domain_resolution: float, n_spatial_domains: int | None = None) -> str:  # noqa: ARG001
+def _domain_graphst(
+    adata: sc.AnnData,
+    domain_resolution: float,
+    n_spatial_domains: int | None = None,  # noqa: ARG001
+) -> str:
     """GraphST: Graph-guided Spatial Transformer for spatial domain identification.
 
     Uses graph attention to learn cell representations, then clusters
     the embeddings with Leiden to identify spatial domains.
+
+    NOTE: GraphST versions may store embeddings under different keys in
+    ``adata.obsm`` (e.g. ``"emb"``, ``"GraphST"``, or custom).  This
+    implementation probes for the embedding and falls back gracefully.
     """
     try:
         import GraphST
+        _GraphST = GraphST.GraphST
     except ImportError as exc:
         raise ImportError(
             "GraphST backend requires 'GraphST' to be installed. "
@@ -128,29 +152,99 @@ def _domain_graphst(adata: sc.AnnData, domain_resolution: float, n_spatial_domai
 
     # Preprocess: find highly variable genes
     sc.pp.highly_variable_genes(adata_tmp, flavor="seurat_v3", n_top_genes=min(2000, adata_tmp.n_vars))
-    adata_tmp = adata_tmp[:, adata_tmp.var.highly_variable].copy()
+    if "highly_variable" not in adata_tmp.var or not adata_tmp.var["highly_variable"].any():
+        logger.warning("GraphST: HVG selection produced no genes, using all genes.")
+    else:
+        adata_tmp = adata_tmp[:, adata_tmp.var["highly_variable"]].copy()
 
-    # Run GraphST
-    GraphST.preprocess(adata_tmp)
+    # Run GraphST pre-processing pipeline
+    try:
+        GraphST.preprocess(adata_tmp)
+    except Exception as exc:
+        logger.warning("GraphST.preprocess failed: %s. Falling back to spatial_leiden.", exc)
+        return _domain_spatial_leiden(adata, domain_resolution, n_spatial_domains)
+
     GraphST.get_feature(adata_tmp)
 
-    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(2, int(np.sqrt(adata.n_obs) // 2 + 2))
-
-    # Use Leiden clustering since mclust_R is not available
-    GraphST.clustering(
-        adata_tmp,
-        n_clusters=n_clusters,
-        radius=50,
-        key="emb",
-        method="leiden",
-        start=0.1,
-        end=3.0,
-        increment=0.01,
-        refinement=False,
+    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(
+        2, int(np.sqrt(adata.n_obs) // 2 + 2)
     )
 
-    # Transfer domain labels from the GraphST-processed adata back to original
-    domain_labels = adata_tmp.obs["domain"].astype(str).to_numpy()
+    # Train the GraphST model to get embeddings
+    import torch
+
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda:0" if use_cuda else "cpu")
+    try:
+        model = _GraphST(
+            adata_tmp,
+            device=device,
+            learning_rate=0.001,
+            epochs=200,
+            dim_output=64,
+            random_seed=42,
+        )
+        adata_tmp = model.train()
+    except Exception as exc:
+        logger.warning("GraphST model training failed: %s. Falling back to spatial_leiden.", exc)
+        return _domain_spatial_leiden(adata, domain_resolution, n_spatial_domains)
+
+    # Probe for the embedding key
+    logger.info("GraphST: adata_tmp.obsm keys = %s", list(adata_tmp.obsm.keys()))
+    logger.info("GraphST: adata_tmp.obs columns = %s", list(adata_tmp.obs.columns))
+
+    known_emb_keys = {"emb", "GraphST", "embedding", "latent", "graphst_emb"}
+    emb_key: str | None = None
+    for k in known_emb_keys:
+        if k in adata_tmp.obsm:
+            emb_key = k
+            break
+    if emb_key is None and adata_tmp.obsm:
+        emb_key = list(adata_tmp.obsm.keys())[0]
+        logger.info("GraphST: No known embedding key found, using '%s' as fallback.", emb_key)
+
+    if emb_key is not None:
+        GraphST.clustering(
+            adata_tmp,
+            n_clusters=n_clusters,
+            radius=50,
+            key=emb_key,
+            method="leiden",
+            start=0.1,
+            end=3.0,
+            increment=0.01,
+            refinement=False,
+        )
+
+    # Determine the column name where GraphST.clustering stored labels
+    known_label_cols = {"domain", "clusters", "label", "spatial_domain"}
+    label_col: str | None = None
+    for c in known_label_cols:
+        if c in adata_tmp.obs:
+            label_col = c
+            break
+    if label_col is None:
+        logger.warning("GraphST: No cluster label column found. Falling back to KMeans on embeddings.")
+        if emb_key is not None and emb_key in adata_tmp.obsm:
+            embed = adata_tmp.obsm[emb_key]
+            from sklearn.cluster import KMeans as _KMeans
+
+            labels = _KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(embed)
+            adata_tmp.obs["spatial_domain_fallback"] = labels.astype(str)
+            label_col = "spatial_domain_fallback"
+        else:
+            logger.warning("GraphST: No embeddings available either. Falling back to spatial_leiden.")
+            return _domain_spatial_leiden(adata, domain_resolution, n_spatial_domains)
+
+    # Transfer domain labels — guard against length mismatch
+    domain_labels = adata_tmp.obs[label_col].astype(str).to_numpy()
+    if len(domain_labels) != adata.n_obs:
+        logger.warning(
+            "GraphST: label length mismatch (%d vs %d). Falling back to spatial_leiden.",
+            len(domain_labels),
+            adata.n_obs,
+        )
+        return _domain_spatial_leiden(adata, domain_resolution, n_spatial_domains)
     adata.obs["spatial_domain"] = domain_labels
     return "graphst"
 
@@ -165,6 +259,9 @@ def _domain_stagate(
     Learns latent representations using a graph attention autoencoder
     that incorporates spatial information. Then clusters embeddings
     with KMeans to identify spatial domains.
+
+    All failures (import, preprocessing, training, shape mismatches)
+    degrade gracefully to spatial_leiden fallback.
     """
     try:
         import STAGATE
@@ -179,7 +276,10 @@ def _domain_stagate(
     sc.pp.normalize_total(adata_tmp, target_sum=1e4)
     sc.pp.log1p(adata_tmp)
     sc.pp.highly_variable_genes(adata_tmp, flavor="seurat_v3", n_top_genes=min(2000, adata_tmp.n_vars))
-    adata_tmp = adata_tmp[:, adata_tmp.var.highly_variable].copy()
+    if "highly_variable" in adata_tmp.var and adata_tmp.var["highly_variable"].any():
+        adata_tmp = adata_tmp[:, adata_tmp.var.highly_variable].copy()
+    else:
+        logger.warning("STAGATE: HVG selection produced no genes, using all genes.")
     sc.pp.scale(adata_tmp, max_value=10)
 
     # Calculate spatial network from coordinates
@@ -188,21 +288,72 @@ def _domain_stagate(
     STAGATE.Cal_Spatial_Net(adata_tmp, rad_cutoff=None, k_cutoff=None, model="Radius", verbose=False)
 
     # Train STAGATE to get embeddings
-    adata_tmp, _ = STAGATE.train_STAGATE(
-        adata_tmp,
-        hidden_dims=[512, 30],
-        alpha=0,
-        n_epochs=500,
-        lr=0.0001,
-        key_added="STAGATE",
-        verbose=False,
-    )
+    try:
+        adata_tmp, _ = STAGATE.train_STAGATE(
+            adata_tmp,
+            hidden_dims=[512, 30],
+            alpha=0,
+            n_epochs=500,
+            lr=0.0001,
+            key_added="STAGATE",
+            verbose=False,
+        )
+    except Exception as exc:
+        logger.warning("STAGATE training failed: %s. Falling back to spatial_leiden.", exc)
+        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
 
-    # Extract embeddings and cluster with KMeans (mclust_R not available)
-    embed = adata_tmp.obsm["STAGATE"]
-    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(2, int(np.sqrt(adata.n_obs) // 2 + 2))
-    n_clusters = max(2, min(int(n_clusters), adata.n_obs))
+    # Debug: probe STAGATE output
+    logger.info("STAGATE: adata_tmp.obsm keys = %s", list(adata_tmp.obsm.keys()))
+    logger.info("STAGATE: adata_tmp.n_obs = %d, adata.n_obs = %d", adata_tmp.n_obs, adata.n_obs)
+
+    # Guard: empty return
+    if adata_tmp.n_obs == 0:
+        logger.warning("STAGATE returned empty adata. Falling back to spatial_leiden.")
+        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
+
+    # Probe for the correct embedding key
+    known_emb_keys = {"STAGATE", "embedding", "latent", "stagate_emb"}
+    emb_key: str | None = None
+    for k in known_emb_keys:
+        if k in adata_tmp.obsm:
+            emb_key = k
+            break
+    if emb_key is None and adata_tmp.obsm:
+        emb_key = list(adata_tmp.obsm.keys())[0]
+        logger.info("STAGATE: No known embedding key found, using '%s' as fallback.", emb_key)
+
+    if emb_key is None or emb_key not in adata_tmp.obsm:
+        logger.warning("STAGATE: No embeddings found. Falling back to spatial_leiden.")
+        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
+
+    embed = adata_tmp.obsm[emb_key]
+
+    # Guard: embedding shape mismatch (e.g. STAGATE filtered cells)
+    if embed.shape[0] != adata.n_obs or embed.shape[0] != adata_tmp.n_obs:
+        logger.warning(
+            "STAGATE: embedding shape mismatch — embed=%s, adata_tmp.n_obs=%d, adata.n_obs=%d. "
+            "Falling back to spatial_leiden.",
+            embed.shape,
+            adata_tmp.n_obs,
+            adata.n_obs,
+        )
+        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
+
+    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(
+        2, int(np.sqrt(adata.n_obs) // 2 + 2)
+    )
+    n_clusters = max(2, min(int(n_clusters), adata_tmp.n_obs))
+
     labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(embed)
+
+    # Final guard: label count mismatch
+    if len(labels) != adata.n_obs:
+        logger.warning(
+            "STAGATE: label count mismatch (%d vs %d). Falling back to spatial_leiden.",
+            len(labels),
+            adata.n_obs,
+        )
+        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
 
     adata.obs["spatial_domain"] = labels.astype(str)
     return "stagate"
@@ -231,7 +382,9 @@ def _domain_spagcn(
     x_array = coords[:, 0].tolist()
     y_array = coords[:, 1].tolist()
 
-    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(2, int(np.sqrt(adata.n_obs) // 2 + 2))
+    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(
+        2, int(np.sqrt(adata.n_obs) // 2 + 2)
+    )
     n_clusters = max(2, min(int(n_clusters), adata.n_obs))
 
     # Preprocess adata
@@ -288,7 +441,9 @@ def run_spatial_domain_identification(
     n_spatial_domains: int | None,
 ) -> StepResult:
     if backend not in _SPATIAL_DOMAIN_FUNCS:
-        raise ValueError(f"Unknown spatial domain backend: {backend}. Available: {list(_SPATIAL_DOMAIN_FUNCS)}")
+        raise ValueError(
+            f"Unknown spatial domain backend: {backend}. Available: {list(_SPATIAL_DOMAIN_FUNCS)}"
+        )
 
     backend_used = _SPATIAL_DOMAIN_FUNCS[backend](adata, domain_resolution, n_spatial_domains)
 

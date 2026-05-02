@@ -40,13 +40,13 @@ def _denoise_sparc(df: pd.DataFrame) -> pd.DataFrame:
     """
     from SPARC import spARC
 
-    # Build cell×gene expression matrix
-    expr_matrix = df.pivot_table(
-        index="cell",
-        columns="target",
-        values="target",
-        aggfunc="count",
-        fill_value=0,
+    # Build cell×gene expression matrix using crosstab (avoids pivot_table
+    # issues with string columns and newer pandas versions)
+    # Ensure `target` column values are 1D scalars to avoid crosstab
+    # errors when encountering non-scalar (e.g., nested) values.
+    expr_matrix = pd.crosstab(
+        index=df["cell"],
+        columns=df["target"].astype(str),
     ).astype(np.float64)
     cells = expr_matrix.index.tolist()
     genes = expr_matrix.columns.tolist()
@@ -56,15 +56,19 @@ def _denoise_sparc(df: pd.DataFrame) -> pd.DataFrame:
     spatial_coords = df.groupby("cell")[["x_global_px", "y_global_px"]].mean().to_numpy()
 
     # Run spARC
+    # NOTE: Do NOT pass expression_graph=True / spatial_graph=True here.
+    # spARC's fit() checks `if self.expression_graph is None:` to decide
+    # whether to build the graph; passing a bool (True) skips graph
+    # construction, and then accessing .diff_op on a bool fails with
+    # "'bool' object has no attribute 'diff_op'".
     model = spARC(
-        expression_graph=True,
-        spatial_graph=True,
         expression_knn=15,
         spatial_knn=15,
         expression_n_pca=min(50, X.shape[0] - 1, X.shape[1] - 1),
         random_state=42,
     )
     X_denoised = model.fit_transform(X, spatial_X=spatial_coords)
+
 
     # Store denoised matrix as DataFrame for downstream use
     denoised_expr_df = pd.DataFrame(

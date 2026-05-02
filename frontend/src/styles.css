@@ -1269,6 +1269,43 @@ select {
 	font-size: 13px;
 }
 
+.status-pass {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-fail {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.status-neutral {
+  background: rgba(11, 76, 110, 0.1);
+  color: #0b4c6e;
+}
+
+.run-key-cell {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 12px;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.validation-error-cell {
+  padding: 12px 16px !important;
+  background: rgba(255, 242, 240, 0.6);
+  color: #721c24;
+  font-size: 12px;
+  border-bottom: 1px solid #f4b7ae;
+  word-break: break-word;
+}
+
+.validation-table tbody tr:last-child td {
+  border-bottom: 1px solid rgba(22, 50, 63, 0.05);
+}
+
 .data-table td:first-child,
 .data-table th:first-child {
 	padding-left: 16px;

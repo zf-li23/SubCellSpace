@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from src.registry import get_available_backends
@@ -66,3 +67,45 @@ class TestApplyTranscriptDenoise:
         assert "none" in backends
         assert "intracellular" in backends
         assert "nuclear_only" in backends
+        assert "sparc" in backends
+
+    # ── spARC (bug fix: crosstab str conversion, bool graph params) ──────────
+
+    @staticmethod
+    def _make_sparc_compatible_df(n_cells: int = 50) -> pd.DataFrame:
+        """Build a DataFrame with enough cells for spARC's default knn=15 (needs ≥47)."""
+        rows = []
+        for c in range(n_cells):
+            for g in range(5):
+                rows.append(
+                    {
+                        "cell": f"Cell_{c}",
+                        "target": f"Gene_{g}",
+                        "CellComp": "Nuclear",
+                        "x_global_px": float(c * 10),
+                        "y_global_px": float(c * 10),
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    def test_sparc_crosstab_str_conversion(self):
+        """Verify that `target` values are cast to str before crosstab,
+        preventing 'must have non-scalar value' errors from nested dtypes."""
+        df = self._make_sparc_compatible_df(n_cells=50)
+        # Add a row with non-string target to test str conversion
+        df.loc[0, "target"] = 123  # non-string scalar
+        result = apply_transcript_denoise(df, "sparc")
+        assert result.summary["denoise_backend"] == "sparc"
+        # spARC passes all transcripts through
+        assert len(result.output) == 250
+        # Denoised expression matrix should be stored in attrs
+        assert "denoised_expression" in result.output.attrs
+        assert "denoised_backend" in result.output.attrs
+        assert result.output.attrs["denoised_backend"] == "sparc"
+
+    def test_sparc_denoised_expression_shape(self):
+        """spARC should produce a cell×gene expression matrix with correct shape."""
+        df = self._make_sparc_compatible_df(n_cells=50)
+        result = apply_transcript_denoise(df, "sparc")
+        denoised = result.output.attrs["denoised_expression"]
+        assert denoised.shape == (50, 5)  # 50 cells × 5 genes

@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   loadBenchmarkSummary,
+  loadBenchmarkValidation,
   loadRuns,
   type BenchmarkRow,
+  type BenchmarkValidationData,
   type PipelineReport,
   type RunListItem,
 } from '../api'
 import LoadingSkeleton from '../components/LoadingSkeleton'
+
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -400,6 +403,124 @@ function MetaItem({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Benchmark Validation Panel (outputs/backend_validation)            */
+/* ------------------------------------------------------------------ */
+
+
+function BenchmarkValidationPanel({ data }: { data: BenchmarkValidationData | null }) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
+
+  if (!data) {
+    return (
+      <section className="card" style={{ marginBottom: 16 }}>
+        <div className="section-header">
+          <h3>Backend Validation</h3>
+          <span className="status-badge status-neutral">No data</span>
+        </div>
+        <p className="data-empty">
+          No backend validation data found. Run the benchmark script to populate outputs/backend_validation/.
+        </p>
+      </section>
+    )
+  }
+
+  const passRate = data.total_runs > 0 ? ((data.passed / data.total_runs) * 100).toFixed(1) : '—'
+
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <div className="section-header">
+        <h3>Backend Validation</h3>
+        <span className="status-badge" style={{
+          background: data.failed === 0 ? 'var(--color-success-bg, #d4edda)' : 'var(--color-danger-bg, #f8d7da)',
+          color: data.failed === 0 ? 'var(--color-success-text, #155724)' : 'var(--color-danger-text, #721c24)',
+        }}>
+          {data.passed}/{data.total_runs} passed ({passRate}%)
+        </span>
+      </div>
+
+      {/* Summary metrics */}
+      <div className="metrics-grid" style={{ marginBottom: 16 }}>
+        <div className="metric-tile">
+          <span>Total runs</span>
+          <strong>{data.total_runs}</strong>
+        </div>
+        <div className="metric-tile">
+          <span>Passed</span>
+          <strong style={{ color: 'var(--color-success-text, #155724)' }}>{data.passed}</strong>
+        </div>
+        <div className="metric-tile">
+          <span>Failed</span>
+          <strong style={{ color: 'var(--color-danger-text, #721c24)' }}>{data.failed}</strong>
+        </div>
+        <div className="metric-tile">
+          <span>Total time</span>
+          <strong>{data.total_elapsed_seconds.toFixed(1)}s</strong>
+        </div>
+      </div>
+
+      {/* Per-run breakdown */}
+      {Object.entries(data.results).length > 0 && (
+        <>
+          <h4 style={{ marginBottom: 8, fontSize: 14, color: 'var(--color-text-secondary, #666)' }}>
+            Per-run details
+          </h4>
+          <div className="table-wrap">
+            <table className="data-table validation-table">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Time (s)</th>
+                  <th style={{ textAlign: 'right' }}>Cells</th>
+                  <th style={{ textAlign: 'right' }}>Genes</th>
+                  <th style={{ textAlign: 'right' }}>Clusters</th>
+                  <th style={{ textAlign: 'right' }}>Spatial</th>
+                  <th style={{ textAlign: 'right' }}>Subcellular</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(data.results).map(([key, run]) => {
+                  const isExpanded = expandedKey === key
+                  return (
+                    <React.Fragment key={key}>
+                      <tr
+                        className="data-row-clickable"
+                        onClick={() => setExpandedKey(isExpanded ? null : key)}
+                      >
+                        <td className="run-key-cell">{key}</td>
+                        <td>
+                          <span className={`status-badge ${run.status === 'PASS' ? 'status-pass' : run.status === 'FAIL' ? 'status-fail' : 'status-neutral'}`}>
+                            {run.status}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{run.elapsed_seconds.toFixed(1)}</td>
+                        <td style={{ textAlign: 'right' }}>{run.n_cells ?? '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{run.n_genes ?? '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{run.n_clusters ?? '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{run.n_spatial_domains ?? '—'}</td>
+                        <td style={{ textAlign: 'right' }}>{run.n_subcellular_domains ?? '—'}</td>
+                      </tr>
+                      {isExpanded && run.error && (
+                        <tr>
+                          <td colSpan={8} className="validation-error-cell">
+                            <strong>Error:</strong> {run.error}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+
+/* ------------------------------------------------------------------ */
 /*  Benchmark Comparison Chart                                         */
 /* ------------------------------------------------------------------ */
 
@@ -460,6 +581,7 @@ function BenchmarkChart({ rows }: { rows: ChartRow[] }) {
 export default function DataBrowser() {
   const [summary, setSummary] = useState<BenchmarkRow[] | null>(null)
   const [runs, setRuns] = useState<RunListItem[]>([])
+  const [validationData, setValidationData] = useState<BenchmarkValidationData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -473,7 +595,7 @@ export default function DataBrowser() {
     clustering: ALL_VALUE,
   })
 
-  /* Load data: runs + benchmark */
+  /* Load data: runs + benchmark + validation */
   useEffect(() => {
     setLoading(true)
     Promise.all([
@@ -489,10 +611,12 @@ export default function DataBrowser() {
           return [] as BenchmarkRow[]
         })
         .catch(() => [] as BenchmarkRow[]),
+      loadBenchmarkValidation().catch(() => null),
     ])
-      .then(([loadedRuns, loadedSummary]) => {
+      .then(([loadedRuns, loadedSummary, loadedValidation]) => {
         setRuns(loadedRuns)
         setSummary(loadedSummary)
+        setValidationData(loadedValidation)
       })
       .catch((err) => setError(String(err)))
       .finally(() => setLoading(false))
@@ -642,6 +766,9 @@ export default function DataBrowser() {
           </p>
         </div>
       </section>
+
+      {/* Benchmark Validation Panel */}
+      <BenchmarkValidationPanel data={validationData} />
 
       {/* Filters */}
       <section className="card filter-card">
