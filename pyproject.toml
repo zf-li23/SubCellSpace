@@ -31,10 +31,14 @@ dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.6", "mypy>=1.11", "httpx>=0.28
 # Denoise backends
 sparc = []  # installed via -e tools/spARC/
 
+# Segmentation backends
+cellpose = ["cellpose>=3.0"]  # requires external microscopy image (DAPI) for segmentation pipeline step
+baysor = []  # NOT available: requires Julia runtime; not tracked in Python toolchain
+
 # Spatial domain backends
 graphst = ["pot"]  # GraphST installed via -e tools/GraphST/; pot is an extra pip dependency
 stagate = []  # installed manually (needs tensorflow)
-spagcn = []   # installed manually (needs compilation)
+spagcn = []   # installed manually (needs compilation); ⚠️ installed but not fully benchmark-verified
 
 # Subcellular spatial domain backends
 phenograph = []  # installed via -e tools/PhenoGraph/
@@ -46,8 +50,8 @@ scvi = ["scvi-tools"]
 # Annotation backends
 celltypist = []  # installed via -e tools/celltypist/
 
-# All optional tools combined
-all = ["subcellspace[dev,sparc,graphst,phenograph,hdbscan,scvi,celltypist]"]
+# All optional tools combined (Python-installable only; excludes baysor)
+all = ["subcellspace[dev,sparc,cellpose,graphst,phenograph,hdbscan,scvi,celltypist]"]
 
 
 [project.scripts]
@@ -92,6 +96,22 @@ disable_error_code = [
     "type-arg",      # numpy/scipy/pandas stubs not fully aligned
     "var-annotated", # some untyped class vars ok in dataclasses
 ]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "tools/*", "scripts/*"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "raise NotImplementedError",
+    "def __repr__",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
 
 [dependency-groups]
 dev = [

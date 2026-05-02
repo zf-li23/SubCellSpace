@@ -33,16 +33,18 @@ bash scripts/setup-tools.sh install --all
 
 | Tool | Category | Install Method | Status |
 |------|----------|---------------|--------|
-| spARC | denoise | `pip install -e tools/spARC/` | ✅ |
-| GraphST | spatial_domain | `pip install -e tools/GraphST/` + `POT` | ✅ |
-| STAGATE | spatial_domain | `pip install git+https://github.com/RucDongLab/STAGATE.git` | ✅ |
-| SpaGCN | spatial_domain | Manual (needs louvain C extension) | ⚠️ |
-| PhenoGraph | subcellular_spatial_domain | `pip install -e tools/PhenoGraph/` | ✅ |
-| CellTypist | annotation | `pip install -e tools/celltypist/` | ✅ |
-| cellpose | segmentation | `pip install cellpose` | ✅ |
-| scArches | annotation | `pip install scarches` | ✅ |
-| Sopa | pipeline | `pip install sopa` | ✅ |
-| scVI | analysis | `pip install scvi-tools` | ✅ |
+| spARC | denoise | `pip install -e tools/spARC/` | ✅ 已验证（denoise=sparc PASS） |
+| GraphST | spatial_domain | `pip install -e tools/GraphST/` + `POT` | ✅ 已验证 |
+| STAGATE | spatial_domain | `pip install git+https://github.com/RucDongLab/STAGATE.git` | ✅ 已验证 |
+| SpaGCN | spatial_domain | Manual (needs louvain C extension) | ⚠️ 已安装但未经 benchmark 网格验证 |
+| PhenoGraph | subcellular_spatial_domain | `pip install -e tools/PhenoGraph/` | ✅ 已验证 |
+| CellTypist | annotation | `pip install -e tools/celltypist/` | ✅ 已验证（annotation=celltypist PASS） |
+| cellpose | segmentation | `pip install cellpose` | ⚠️ 已安装，但作为分割后端需要外部显微图像路径 |
+| scArches | annotation | `pip install scarches` | ✅ 已安装（备选） |
+| Sopa | pipeline | `pip install sopa` | ✅ 已安装（备选管线） |
+| scVI | analysis | `pip install scvi-tools` | ✅ 已验证（analysis=scvi PASS） |
+
+> 验证状态来源：`outputs/backend_validation/benchmark_results.json`（2026-05-02 实际运行结果）
 
 ## Non-Python Tools (Removed)
 

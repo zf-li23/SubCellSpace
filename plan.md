@@ -1,225 +1,146 @@
-# SubCellSpace 项目分析报告 & 开发计划
+# SubCellSpace 项目真实状态 & 开发计划
+
+> **最后更新：2026-05-02** — 基于代码审查和 benchmark 实际运行结果的客观评估。
 
 ---
 
 ## 📋 项目概况
 
-SubCellSpace 是一个面向**亚细胞空间转录组学**的模块化分析平台。采用插件式管线引擎（plugin-style pipeline engine），支持 CosMx、Xenium、MERFISH、Stereo-seq 等多平台数据，贯穿从原始数据读取到生物学解释的全流程。
+SubCellSpace 是一个面向**亚细胞空间转录组学**的模块化分析平台。采用插件式管线引擎，当前 **CosMx 数据链路已完整跑通**，Xenium/MERFISH/Stereo-seq 的 I/O 骨架已存在但尚未集成到管线。
 
 ---
 
-## ✅ 项目优势与亮点
+## 🎯 当前真实阶段
 
-### 1. 🏗️ 架构设计 — 真正的「可替换」管线
+| 阶段 | 状态 | 说明 |
+|------|:----:|------|
+| **Phase 0：项目骨架** | ✅ 完成 | Python 包结构、CLI、数据模型、配置系统、输出约定均已建立 |
+| **Phase 1：CosMx 最小主流程** | ✅ 完成 | 1000-cell CosMx 数据端到端跑通：denoise → segmentation → spatial domain → subcellular domain → clustering → annotation |
+| **Phase 2：工具可替换** | 🟡 大部分完成 | 插件引擎完整运行，20/22 后端可用（cellpose 需外部图像，Baysor 不可用），benchmark 网格搜索已运行 |
+| **Phase 3：平台扩展** | 🔴 仅骨架 | I/O loader 类已写好（Xenium/MERFISH/Stereo-seq），但管线引擎未接入，管线命名仍与 CosMx 深度耦合 |
 
-| 优点 | 说明 |
-|------|------|
-| **插件式管线引擎** | `pipeline_engine.py` 通过 `@register_backend` + `@register_runner` 装饰器实现完全数据驱动的步骤调度，无硬编码 if/elif 链 |
-| **统一的错误层级** | `PipelineError` → `PipelineStepError / PipelineContractError / PipelineDataError / PipelineConfigError / PipelineRuntimeError`，每个异常携带 `step_name`, `backend`, `original`, `context` 结构化信息 |
-| **数据契约验证** | `validation.py` 在步骤之间进行 contract validation，确保上下游数据一致性 |
-| **集中式注册表** | `_BackendRegistry` 单例统一管理所有步骤的后端函数和 runner，支持运行时查询可用后端 |
+### 真实可用的后端（20/22）
 
-**核心亮点：`pipeline_engine.py` 是关键创新** — 它通过 `ExecutionContext` 上下文对象在步骤间传递数据，每个步骤只声明自己的输入/输出契约，引擎自动编排执行顺序。这是典型的**微内核架构**。
+| 步骤 | 可用 | 不可用 |
+|------|------|--------|
+| **Denoise** | none, intracellular, nuclear_only, spARC | — |
+| **Segmentation** | provided_cells, fov_cell_id | cellpose（需外部 DAPI 图像路径），baysor（Julia 运行时，已从 Python 工具链移除） |
+| **Spatial Domain** | spatial_leiden, spatial_kmeans, GraphST, STAGATE, SpaGCN | — |
+| **Subcellular Domain** | hdbscan, dbscan, leiden_spatial, PhenoGraph, none | — |
+| **Analysis** | leiden, kmeans, scVI | — |
+| **Annotation** | cluster_label, rank_marker, CellTypist | — |
 
-### 2. 🔧 工程质量
+### Benchmark 验证结果（outputs/backend_validation/benchmark_results.json）
 
-| 优点 | 说明 |
-|------|------|
-| **完整类型注解** | 全项目使用 `from __future__ import annotations` + TYPE_CHECKING，类型覆盖率高 |
-| **测试覆盖充分** | 168 个测试全部通过，覆盖 pipeline_engine、config、io、各步骤、validation、evaluation 等核心模块 |
-| **分层评估框架** | `build_layer_evaluation()` 评估 ingestion/denoise/segmentation/expression/clustering/annotation/spatial_domain/subcellular/spatial 九个维度，指标全面 |
-| **后端对比基准** | `benchmark.py` 支持网格搜索所有后端组合，输出 CSV/JSON 汇总 |
-| **路径安全** | API 层 `_resolve_under_repo()` + `_ensure_under_outputs()` 双重防护路径穿越攻击 |
-| **pytest 配置完善** | `conftest.py` 包含 fixture 管理、临时目录、mock 数据生成 |
-
-### 3. 🌐 多平台 I/O 支持
-
-| 平台 | I/O 模块 | 状态 |
-|------|---------|------|
-| **CosMx** | `src/io/cosmx.py` — 完整实现，含 transcript 读取、cell-level 聚合、SpatialData 构建 | ✅ 生产就绪 |
-| **Xenium** | `src/io/xenium.py` — 已实现 loader | ✅ 代码就绪 |
-| **MERFISH** | `src/io/merfish.py` — 已实现 loader | ✅ 代码就绪 |
-| **Stereo-seq** | `src/io/stereoseq.py` — 已实现 loader | ✅ 代码就绪 |
-| **抽象基类** | `src/io/base.py` — `DataLoader` 抽象类定义统一接口 | ✅ 规范 |
-
-### 4. 📚 文档与配置
-
-- **README.md**: 完整的设计原则、开发路线、快速开始、22 个后端的完整表格
-- **API.md**: 10+ 端点的完整 API 文档（health, backends, reports, plots, cosmx run, benchmark, cells）
-- **docs/setup-guide.md**: 分步安装指南（Step 0~3 + 常见问题 + 目录结构）
-- **THIRD_PARTY_TOOLS.md**: 9 个第三方工具的版本、安装方式和状态一览
-- **tools/urls.yaml**: 统一工具注册表（HTTPS/SSH 双协议 + 安装方式）
-- **config/pipeline.yaml**: 管线配置（步骤顺序、默认后端）
-- **pyproject.toml**: 多 extras 分组（hdbscan, dev, scvi, cellpose）
-
-### 5. 🎨 前端
-
-- React + TypeScript + Vite，现代化前端架构
-- **InteractiveScatterPlot**: 交互式散点图（UMAP + 空间坐标），hover 高亮 + 点击选 cell + glow 特效 + 图例 + tooltip
-- **DonutChart**: 甜甜圈图用于比例展示
-- **BackendSwitch**: 后端切换 UI
-- **ErrorBoundary**: 错误边界组件防止白屏
-- **LoadingSkeleton**: 加载骨架屏
-- **自动后端探测启动**：`scripts/dev.mjs` 自动检测 Python 环境并启动 API
-
-### 6. 🧩 后端可替换性（全表）
-
-| 步骤 | 可用后端 | 数量 |
-|------|---------|:----:|
-| **Denoise** | none, intracellular, nuclear_only, **spARC** | 4 |
-| **Segmentation** | provided_cells, fov_cell_id, **(cellpose)** | 3 |
-| **Spatial Domain** | spatial_leiden, spatial_kmeans, **GraphST**, **STAGATE**, **SpaGCN** | 5 |
-| **Subcellular Domain** | hdbscan, dbscan, leiden_spatial, **(PhenoGraph)**, none | 5 |
-| **Analysis** | leiden, kmeans, **scVI** | 3 |
-| **Annotation** | cluster_label, rank_marker, **CellTypist** | 3 |
-
-> **粗体** = 需要安装第三方工具的后端
+所有单后端变体在 CosMx 1000-cell 数据上均通过验证（PASS），仅 cellpose/baysor 因缺少依赖而标记为 FAIL。
 
 ---
 
-## ⚠️ 不足之处与改进方向
+## ✅ 架构亮点（已验证真实存在）
 
-### 1. 🧪 代码层面的问题
+### 1. 插件式管线引擎 (`pipeline_engine.py`)
+- `@register_backend` + `@register_runner` 装饰器实现完全数据驱动的步骤调度
+- `ExecutionContext` 上下文对象在步骤间传递数据，每个步骤只声明输入/输出契约
+- 引擎通过 `_run_step()` 统一分发，无硬编码 if/elif 链
 
-#### 1a. 第三方后端无导入保护（已修复 ✅）
-`src/steps/spatial_domain.py` / `annotation.py` / `segmentation.py` / `subcellular_spatial_domain.py` 中的第三方 import 已加 try/except 保护。
+### 2. 分层错误体系 (`errors.py`)
+- `PipelineError` → `PipelineStepError / PipelineContractError / PipelineDataError / PipelineConfigError / PipelineRuntimeError`
+- 每个异常携带 `step_name`, `backend`, `original`, `context` 结构化信息
 
-#### 1b. 硬编码的文件名和路径（待修复 🔧）
-- `pipeline_engine.py` 中 `cosmx_minimal_report.json`、`cosmx_minimal.h5ad`、`cosmx_minimal_transcripts.parquet` 是硬编码字符串
-- 输出文件命名与 CosMx 管线绑定，限制了跨平台复用
+### 3. 三层配置覆盖 (`config.py`)
+- YAML（最低）→ 环境变量 `SUBCELLSPACE_*`（中）→ 代码参数（最高）
 
-#### 1c. 管线名称与 CosMx 耦合（待修复 🔧）
-虽然 I/O 层已通过 `DataLoader` 抽象解耦，但：
-- 管线入口叫 `run_cosmx_minimal()`（`cosmx_minimal.py`）
-- CLI 命令叫 `run-cosmx` 和 `benchmark-cosmx`
-- API 端点叫 `/api/cosmx/report`、`/api/cosmx/run`
-- 报告文件名叫 `cosmx_minimal_report.json`
+### 4. 数据契约验证 (`validation.py`)
+- 步骤间自动校验 DataFrame 列、AnnData.obs/obsm 键
 
-这阻碍了 Xenium/MERFISH/Stereo-seq 等平台的端到端使用。
+### 5. 多平台 I/O 抽象 (`io/base.py`)
+- `BaseDataLoader` 抽象类，CosMx/Xenium/MERFISH/Stereo-seq 四个子类均已实现（但仅 CosMx 接入管线）
 
-#### 1d. PhenoGraph 已安装（已修复 ✅）
-`tools/PhenoGraph/` 已存在并已 pip install，subcellular domain 的 phenograph 后端可用。
+### 6. 分层评估框架 (`evaluation/metrics.py`)
+- 9 维度评估：ingestion/denoise/segmentation/expression/clustering/annotation/spatial_domain/subcellular/spatial
 
-#### 1e. 步骤代码有轻微重复
-`analysis.py` 中的 spatial 邻接图构建与 `subcellular_spatial_domain.py` 中的空间 k-NN 图有部分代码重复。
-
-### 2. 🏗️ 架构可改进点
-
-| 问题 | 详情 | 建议 |
-|------|------|------|
-| **I/O 模块未完全集成到管线** | Xenium/MERFISH/Stereo-seq 的 loader 已存在但 pipeline_engine 未用它们 | 为每个平台准备测试数据并跑通端到端流程 |
-| **无异步任务队列** | API 的管线执行是同步的，CosMx 完整管线可能运行数分钟，会阻塞请求 | 引入 Celery / asyncio 任务队列 |
-| **无鉴权/限流** | API 完全开放，无认证、无速率限制 | 添加基本鉴权和速率限制 |
-| **无超时控制** | 长时间运行的管线没有超时保护 | 添加超时机制防止资源泄露 |
-
-### 3. 🎨 前端局限性
-
-| 问题 | 详情 |
-|------|------|
-| **无实时管线进度** | 用户触发运行后只能等待，无进度反馈 |
-| **散点图性能瓶颈** | SVG circle 渲染数千点，大数据集会卡顿（可考虑 Canvas/WebGL） |
-| **无数据筛选** | 无法按基因、细胞类型、空间域交互式筛选 |
-| **无细胞详情面板** | 点击细胞后无详情面板展示该细胞的转录本分布 |
-| **无多 run 对比** | 不能并排比较不同参数/后端的结果 |
-| **无错误展示** | 后端错误在前端无优雅展示 |
-
-### 4. 🧪 测试覆盖缺口
-
-| 缺失的测试 | 影响 |
-|-----------|------|
-| 无 Xenium/MERFISH/Stereo-seq 集成测试 | 多平台支持无法验证 |
-| 无 benchmark 测试 | 基准框架可能回归 |
-| 无前端测试 | 前端无任何自动化测试 |
-| 无 API 端到端测试 | API 路径安全、参数校验无自动化覆盖 |
-| `test_io.py` 仅覆盖 CosMx | 其他平台 loader 未测试 |
-
-### 5. 📦 工程化缺失
-
-| 问题 | 详情 |
-|------|------|
-| **无 CI/CD** | 无 GitHub Actions 或其他 CI 配置 |
-| **无 pre-commit / lint 配置** | 尽管 `ruff` 已安装，但无 `.pre-commit-config.yaml` 或 `ruff.toml` |
-| **无 requirements.txt** | 只有 `pyproject.toml` 和 `uv.lock`，缺少非 uv 用户的兼容锁文件 |
-| **测试数据缺失** | `data/test/` 下的 CSV 不在仓库中，新人无法直接运行 |
+### 7. 前端 (React + TypeScript + Vite)
+- TypeScript 零错误，Vite build 成功
+- 交互式散点图、PipelineFlowChart、BenchmarkPage、HomePage 均已完成
 
 ---
 
-## 🔍 Conda 环境 `subcellspace` 实际状态
+## ⚠️ 真实不足（未粉饰）
 
-### Python 版本
-`Python 3.12.13` ✅
+### 代码层面
 
-### 📦 包安装状态（pip list + import 双重验证）
+1. **管线命名与 CosMx 深度耦合**（最严重）
+   - `run_cosmx_minimal()`、CLI `run-cosmx`、API `/api/cosmx/*`、输出文件 `cosmx_minimal.*`
+   - 虽然 `DataLoader` 抽象已存在，但 `pipeline_engine.py` 中 `_resolve_platform_loader()` 始终返回 None（走 legacy CosMx 路径）
 
-| 包 | pip 版本 | import 验证 | 说明 |
-|---|:--------:|:----------:|------|
-| **SubCellSpace (本包)** | 0.1.0 | ✅ | `pip install -e .` 已安装 |
-| **scanpy** | 1.12.1 | ✅ | 核心表达分析 |
-| **squidpy** | 1.8.1 | ✅ | 空间分析 |
-| **anndata** | 0.12.11 | ✅ | 数据载体 |
-| **spatialdata** | 0.7.2 | ✅ | 多模态数据管理 |
-| **spatialdata-io** | 0.6.0 | ✅ | 多平台 I/O |
-| **spatialdata-plot** | 0.3.3 | ✅ | 空间数据可视化 |
-| **fastapi** | 0.136.1 | ✅ | API 框架 |
-| **uvicorn** | 0.46.0 | ✅ | ASGI 服务器 |
-| **scikit-learn** | 1.8.0 | ✅ | KMeans, DBSCAN, silhouette |
-| **hdbscan** | 0.8.42 | ✅ | 子细胞密度聚类 |
-| **leidenalg** | 0.11.0 | ✅ | Leiden 聚类 |
-| **python-igraph** | 0.11.9 | ✅ | 图处理 |
-| **tensorflow** | 2.21.0 | ✅ | STAGATE, SpaGCN 依赖 |
-| **torch** | 2.11.0 | ✅ | GraphST, scVI 依赖 |
-| **scvi-tools** | 1.4.2 | ✅ | scVI 聚类 |
-| **cellpose** | 4.1.1 | ✅ | 细胞分割 |
-| **celltypist** | 1.7.1 | ✅ (tools/celltypist) | 自动注释 |
-| **GraphST** | 1.1.1 | ✅ (tools/GraphST) | 空间域 |
-| **STAGATE** | 1.0.1 | ✅ | 空间域 |
-| **SpaGCN** | 1.2.7 | ✅ | 空间域 |
-| **SPARC** | 0.1 | ✅ (tools/spARC) | 去噪 |
-| **sopa** | 2.2.6 | ✅ | 管线备选 |
-| **scArches** | 0.6.1 | ✅ | 注释备选 |
-| **ruff** | 0.15.12 | ✅ | 代码检查 |
-| **pytest** | 9.0.3 | ✅ | 测试框架 |
-| **coverage** | 7.13.5 | ✅ | 覆盖率 |
-| **PhenoGraph** | 1.2.1 | ✅ | 已安装 (tools/PhenoGraph) |
+2. **硬编码文件名**：`pipeline_engine.py` 中 `cosmx_minimal_report.json`、`cosmx_minimal.h5ad` 等是字符串常量
 
-### ✅ 可用的后端（22/22 全功能）
+3. **步骤代码轻微重复**：`analysis.py` 与 `subcellular_spatial_domain.py` 的空间图构建有部分重复
 
-| 步骤 | 可用后端 | 状态 |
-|------|---------|:----:|
-| **Denoise** | none, intracellular, nuclear_only, **spARC** | **4/4 可用** |
-| **Segmentation** | provided_cells, fov_cell_id, **(cellpose 已装但未注册为后端)** | 2/3 注册可用 |
-| **Spatial Domain** | spatial_leiden, spatial_kmeans, **GraphST**, **STAGATE**, **SpaGCN** | **5/5 可用** |
-| **Subcellular Domain** | hdbscan, dbscan, leiden_spatial, **PhenoGraph**, none | **5/5 可用** |
-| **Analysis** | leiden, kmeans, **scVI** | **3/3 可用** |
-| **Annotation** | cluster_label, rank_marker, **CellTypist** | **3/3 可用** |
+### 架构层面
 
-### 📊 测试结果
-```
-180 passed ✓（全部通过，0 failures）
-```
+| 问题 | 严重程度 |
+|------|:--------:|
+| I/O loader 未接入管线引擎 | 🔴 阻塞多平台扩展 |
+| API 同步执行管线，无异步任务队列 | 🟡 阻塞生产部署 |
+| 无鉴权/限流 | 🟡 安全风险 |
+| 无超时控制 | 🟡 资源泄露风险 |
+
+### 工程化缺失
+
+| 缺失项 | 状态 |
+|--------|:----:|
+| CI/CD（GitHub Actions） | ❌ |
+| `.pre-commit-config.yaml` | ✅（已存在，ruff + mypy + prettier + markdownlint） |
+| `requirements.txt`（非 uv 用户兼容） | ❌ |
+| 测试数据在仓库中 | ❌（`data/` 被 `.gitignore` 排除） |
+| 前端自动化测试 | ❌ |
+| Xenium/MERFISH/Stereo-seq 集成测试 | ❌ |
 
 ---
 
-## 📈 当前状态总结
+## 🗺️ 短期目标（建议优先级）
 
-### 已完成的工作 ✅
-1. ✅ 完成全面分析报告（plan.md 初版）
-2. ✅ 为 spatial_domain.py / annotation.py / subcellular_spatial_domain.py / segmentation.py 添加 import 保护
-3. ✅ 安装 PhenoGraph（`tools/PhenoGraph/` 已存在并已 pip install）
-4. ✅ 添加 ruff + pre-commit 配置（`.pre-commit-config.yaml` + `ruff.toml`）
-5. ✅ registry.py 增加 `check_backend_available()` 方法
-6. ✅ 修复 cellpose 测试跳过逻辑（使用 `_CELLPOSE_AVAILABLE` 标志）
-7. ✅ 运行完整测试套件验证：180 passed, 0 failures
+1. **解耦管线命名**：将 `run_cosmx_minimal` → 通用的 `run_pipeline`，平台参数驱动 I/O 层
+2. **接入已有 I/O loader**：修复 `_resolve_platform_loader` 使其真正调用多平台 loader
+3. **为 Xenium 等准备最小测试数据**并跑通端到端
+4. **添加异步任务支持**（Celery 或 asyncio 后台任务）
+5. **添加 CI/CD**（GitHub Actions: pytest + ruff + mypy）
+6. **前端实时进度 + 细胞详情面板**
 
-### ✅ 全部 Bug 已修复 — 180 tests PASS
-| 修复的 Bug | 修复方式 | 影响文件 |
-|-----------|---------|:--------:|
-| **denoise=sparc crosstab** | `columns=df["target"].astype(str)` 强制转 str | `src/steps/denoise.py` |
-| **denoise=sparc bool graph** | `use_graph=False` 避免 sparc 默认 `embed=True` 传入布尔值 | `src/steps/denoise.py` |
-| **annotation=celltypist** | 从 `lognorm` layer 恢复表达矩阵；修复 `conf_score` 缺失时使用 `probability_matrix` | `src/steps/annotation.py` |
-| **spatial_domain=graphst** | 多 key 探测 (`emb`, `GraphST`, `embedding`, `latent`, `graphst_emb`) + 优雅降级 | `src/steps/spatial_domain.py` |
-| **spatial_domain=stagate** | shape 守卫 + 多 key 探测 + 优雅降级 | `src/steps/spatial_domain.py` |
-| **GraphST import** | 改用 `import GraphST; _GraphST = GraphST.GraphST` 兼容 mock | `src/steps/spatial_domain.py` |
+## 🗺️ 长期目标
+
+1. 真正的多平台统一（CosMx / Xenium / MERFISH / Stereo-seq / Pixel-seq）
+2. RNA 共定位分析（SCRIN 模块）
+3. 生产化部署（鉴权、限流、Docker、监控）
+4. 大规模数据支持（Canvas/WebGL 渲染）
+5. 发表级 benchmark（系统化对比各工具在不同平台上的表现）
+
+---
+
+## 📈 当前状态总结（2026-05-02）
+
+### ✅ 已验证可用
+1. ✅ 插件式管线引擎 — `pipeline_engine.py` 完全数据驱动
+2. ✅ 180 个测试全部通过（2026-05-02 运行验证）
+3. ✅ 20/22 后端在 CosMx 1000-cell 数据上通过 benchmark 验证（PASS）
+4. ✅ `.pre-commit-config.yaml` 已配置（ruff + mypy + prettier + markdownlint）
+5. ✅ 前端 TypeScript 零错误，Vite build 成功
+6. ✅ 分层评估框架 9 维度完整
+7. ✅ `check_backend_available()` 动态后端可用性检测
+
+### ⚠️ 已验证有问题的后端
+| 后端 | 问题 |
+|------|------|
+| `cellpose` | 需要外部 DAPI 显微图像路径（功能代码存在但需要用户提供图像） |
+| `baysor` | Julia CLI 不可用（已从 Python 工具链移除） |
+
+### 🔴 待解决的关键问题
+1. 管线命名与 CosMx 深度耦合（阻碍多平台扩展）
+2. I/O loader（Xenium/MERFISH/Stereo-seq）未接入管线引擎
+3. 无 CI/CD、无异步任务队列、无鉴权/限流
+4. 测试数据不在仓库中（`data/` 被 `.gitignore` 排除）
+5. 前端无实时进度、无细胞详情面板
 
 
 ---

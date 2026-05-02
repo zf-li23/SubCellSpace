@@ -7,12 +7,14 @@ SubCellSpace 提供一个轻量的 HTTP API，用于：
 - 读取 benchmark 汇总
 - 获取可用后端列表
 
+> ⚠️ **当前限制**：API 端点（`/api/cosmx/*`）与 CosMx 平台深度耦合。Xenium/MERFISH/Stereo-seq 的 I/O loader 已实现但尚未通过 API 暴露。管线执行是**同步的**——完整 CosMx 管线耗时 40-90 秒，期间会阻塞请求线程。
+
 ## 启动服务
 
 先安装依赖，再启动 API：
 
 ```bash
-conda activate zf-li23
+conda activate subcellspace
 pip install -e .
 subcellspace-api
 ```
@@ -23,6 +25,8 @@ subcellspace-api
 
 - `http://127.0.0.1:5173`
 - `http://localhost:5173`
+- `http://127.0.0.1:5174`
+- `http://localhost:5174`
 
 可通过环境变量 `SUBCELLSPACE_ALLOWED_ORIGINS` 覆盖（逗号分隔）。
 
@@ -32,6 +36,7 @@ subcellspace-api
 - 前端开发环境通过 Vite proxy 把 `/api` 转发到后端。
 - CosMx 示例数据默认使用 `data/test/Mouse_brain_CosMX_1000cells.csv`。
 - 路径安全约束：路径参数必须在仓库目录内，且输出目录必须位于 `outputs/` 下。
+- ⚠️ **无鉴权/限流/超时控制**：当前 API 仅供本地开发使用，不适合直接暴露到公网。
 
 ## 健康检查
 

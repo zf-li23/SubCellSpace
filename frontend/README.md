@@ -1,13 +1,24 @@
 # SubCellSpace Frontend (Vite + React)
 
-This is a minimal frontend skeleton for SubCellSpace providing:
+This is the frontend for SubCellSpace providing:
 
-- Data Browser (reads report JSON)
-- Layer Viewer (renders real UMAP and spatial scatter plots)
-- Benchmark Dashboard (reads benchmark JSON)
-- Backend switch controls and a parameterized rerun button for CosMx.
+- **HomePage** — Hero section, navigation cards, pipeline overview
+- **ReportPage** — Run CosMx pipeline with backend switches, view UMAP & spatial scatter plots
+- **DataBrowser** — Browse reports and benchmark data from `outputs/`
+- **BenchmarkPage** — Multi-run comparison with silhouette bar chart, backend filters, validation panel
 
-Quick start:
+## Current Status
+
+All 6 phases from `frontend/plan.md` have been implemented. TypeScript: zero errors. Vite build: successful.
+
+## Known Limitations
+
+- No real-time pipeline progress (synchronous POST blocks until completion)
+- SVG scatter plot rendering (performance bottleneck for >10k points)
+- No cell detail panel on click
+- No multi-run side-by-side comparison view
+
+## Quick Start
 
 1. From repository root, create a symlink so frontend can access `outputs/` during dev:
 
@@ -24,9 +35,11 @@ npm install
 npm run dev
 ```
 
-The `npm run dev` command now auto-starts the backend if port 8000 is free, then launches Vite. If the backend is already running, it reuses the existing service.
+The `npm run dev` command auto-starts the backend if port 8000 is free, then launches Vite. If the backend is already running, it reuses the existing service.
 
-Notes:
+## Architecture Notes
+
 - The app uses `/api` for live data. Vite proxies those requests to `http://127.0.0.1:8000`.
-- The pages now render structured cards/tables and plot layers instead of raw JSON dumps.
-- `npm run dev` will auto-start backend via `frontend/scripts/dev.mjs` when port 8000 is free.
+- All visualization data comes from `GET /outputs/{run_name}/...` JSON files.
+- `frontend/scripts/dev.mjs` auto-detects Python environment and starts the API backend.
+- Components: `InteractiveScatterPlot`, `DonutChart`, `PipelineFlowChart`, `RunSelector`, `BackendSwitch`, `ErrorBoundary`, `LoadingSkeleton`.

@@ -1,18 +1,19 @@
 # environment.yml
 # SubCellSpace Conda 环境定义
 #
-# 这个文件只做一件事：创建一个只带 Python 的空 conda 环境。
+# 这个文件只做一件事：创建一个只带 Python 3.12 和 pip 的空 conda 环境。
 # 所有 Python 包的安装全部委托给 pyproject.toml 的 pip install -e .[extras]
 #
 # 使用方式：
 #   conda env create -f environment.yml
 #   conda activate subcellspace
-#   pip install -e ".[hdbscan,dev]"        # Step 1: 核心依赖
-#   pip install -e ".[all]"                # Step 3: 全部可选后端
+#   pip install -e ".[hdbscan,dev]"        # Step 1: 核心依赖 + 测试
+#   pip install -e ".[cellpose,scvi]"       # Step 3a: 可选后端
+#   bash scripts/setup-step3.sh             # Step 3b: 克隆并安装第三方工具
 
 name: subcellspace
 channels:
   - conda-forge
 dependencies:
-  - python>=3.11,<3.13
+  - python=3.12
   - pip
