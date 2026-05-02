@@ -234,8 +234,8 @@ function withBackendQuery(url: string, backendConfig?: BackendConfig): string {
 
 export async function loadPipelineReport(backendConfig?: BackendConfig): Promise<PipelineReport | null> {
   return (
-    (await fetchJson<PipelineReport>(withBackendQuery('/api/reports/cosmx_try_again_round', backendConfig))) ||
-    (await fetchJson<PipelineReport>('/outputs/cosmx_try_again_round/cosmx_minimal_report.json'))
+    (await fetchJson<PipelineReport>(withBackendQuery('/api/reports/default_test', backendConfig))) ||
+    (await fetchJson<PipelineReport>('/outputs/default_test/cosmx_minimal_report.json'))
   )
 }
 
@@ -259,8 +259,8 @@ export async function loadRuns(): Promise<RunListItem[]> {
 
 export async function loadBenchmarkSummary(): Promise<BenchmarkSummary | null> {
   return (
-    (await fetchJson<BenchmarkSummary>('/api/benchmarks/cosmx_benchmark_round')) ||
-    (await fetchJson<BenchmarkSummary>('/outputs/cosmx_benchmark_round/benchmark_summary.json'))
+    (await fetchJson<BenchmarkSummary>('/api/benchmarks/backend_validation')) ||
+    (await fetchJson<BenchmarkSummary>('/outputs/backend_validation/benchmark_summary.json'))
   )
 }
 
@@ -379,4 +379,50 @@ export async function runCosmxPipeline(
   } catch {
     return null
   }
+}
+
+/* ── Phase 1: Static file-based data loading ──────────────────────────── */
+
+export async function loadReportFromPath(runName: string): Promise<PipelineReport | null> {
+  return await fetchJson<PipelineReport>(`/outputs/${runName}/cosmx_minimal_report.json`)
+}
+
+export async function loadPipelineConfig(): Promise<Record<string, unknown> | null> {
+  return await fetchJson<Record<string, unknown>>('/config/pipeline.yaml')
+}
+
+export type BackendMeta = {
+  name: string
+  type: string
+}
+
+export type PipelineMeta = {
+  steps: Array<{
+    name: string
+    label: string
+    backends: string[]
+  }>
+}
+
+export async function loadPipelineMeta(): Promise<PipelineMeta | null> {
+  return await fetchJson<PipelineMeta>('/api/meta/pipeline')
+}
+
+/* ── Phase 2: Run comparison data ────────────────────────────────────── */
+
+export type RunCompareData = {
+  runs: Array<{
+    run_name: string
+    report: PipelineReport | null
+  }>
+}
+
+export async function loadRunCompareData(runNames: string[]): Promise<RunCompareData> {
+  const results = await Promise.all(
+    runNames.map(async (name) => ({
+      run_name: name,
+      report: await loadReportFromPath(name),
+    }))
+  )
+  return { runs: results }
 }

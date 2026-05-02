@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import anndata as ad
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -20,7 +20,7 @@ from .registry import get_available_backends
 # ── Configurable defaults (from centralized configuration system) ─────────
 DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMX_1000cells.csv"))
 DEFAULT_OUTPUT_DIR = Path(_settings.get("output_dir", "outputs/api_runs"))
-DEFAULT_REPORT_RUN = _settings.get("report_run", "cosmx_try_again_round")
+DEFAULT_REPORT_RUN = _settings.get("report_run", "default_test")
 DEFAULT_BENCHMARK_RUN = _settings.get("benchmark_run", "cosmx_benchmark_round")
 DEFAULT_BENCHMARK_VALIDATION_DIR = _settings.get("benchmark_validation_dir", "outputs/backend_validation")
 DEFAULT_API_HOST = _settings.get("api_host", "0.0.0.0")
@@ -47,7 +47,7 @@ def _sanitise_cell_id(cell_id: str) -> str:
 
 
 def _parse_allowed_origins() -> list[str]:
-    raw = _settings.get("allowed_origins", "http://127.0.0.1:5173,http://localhost:5173")
+    raw = _settings.get("allowed_origins", "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:5174,http://localhost:5174")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
@@ -193,6 +193,16 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
 # ── Endpoints ─────────────────────────────────────────────────────────────
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "SubCellSpace API", "docs": "/docs", "health": "/api/health"}
+
+
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    return Response(status_code=204)
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -307,20 +317,39 @@ def get_benchmark(run_name: str) -> dict[str, Any]:
 
     benchmark_dir = _ensure_under_outputs(OUTPUTS_ROOT / run_name)
     benchmark_path = benchmark_dir / "benchmark_summary.json"
-    if not benchmark_path.exists():
+
+    if benchmark_path.exists():
+        benchmark = _load_json(benchmark_path)
+        summary_csv = benchmark_dir / "benchmark_summary.csv"
+        # Return relative path to avoid leaking absolute filesystem paths
+        try:
+            rel_csv_path = str(summary_csv.relative_to(REPO_ROOT))
+        except ValueError:
+            rel_csv_path = str(summary_csv)
+        return {
+            "summary": benchmark,
+            "summary_csv": rel_csv_path if summary_csv.exists() else None,
+        }
+
+    # Fallback: construct rows from individual cosmx_minimal_report.json files in subdirectories
+    rows: list[dict[str, Any]] = []
+    if benchmark_dir.is_dir():
+        for child in sorted(benchmark_dir.iterdir()):
+            if not child.is_dir():
+                continue
+            report_path = child / "cosmx_minimal_report.json"
+            if not report_path.exists():
+                continue
+            try:
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+                rows.append(report)
+            except (json.JSONDecodeError, OSError):
+                continue
+
+    if not rows:
         raise HTTPException(status_code=404, detail=f"Benchmark not found for run: {run_name}")
 
-    benchmark = _load_json(benchmark_path)
-    summary_csv = benchmark_dir / "benchmark_summary.csv"
-    # Return relative path to avoid leaking absolute filesystem paths
-    try:
-        rel_csv_path = str(summary_csv.relative_to(REPO_ROOT))
-    except ValueError:
-        rel_csv_path = str(summary_csv)
-    return {
-        "summary": benchmark,
-        "summary_csv": rel_csv_path if summary_csv.exists() else None,
-    }
+    return {"rows": rows}
 
 
 @app.get("/api/benchmark-validation")
