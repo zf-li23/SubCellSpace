@@ -1,10 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import BackendSwitch, { type BackendConfig } from '../components/BackendSwitch'
+import BackendSwitch from '../components/BackendSwitch'
+import { type BackendConfig } from '../api'
 import {
   loadPipelineReport,
   loadPlotData,
   loadCellTranscripts,
   loadPerBackendStats,
+  fetchBackendMeta,
+  STEP_LABELS,
+  FALLBACK_BACKENDS,
   type CellTranscripts,
   type CellTranscriptPoint,
   type PlotData,
@@ -30,27 +34,6 @@ import InteractiveScatterPlot from '../components/InteractiveScatterPlot'
 import DonutChart from '../components/DonutChart'
 import LoadingSkeleton, { SkeletonCard } from '../components/LoadingSkeleton'
 
-/** All backends per step — mirrors BackendSwitch.BACKENDS */
-const STEP_BACKENDS: Record<string, string[]> = {
-  denoise: ['intracellular', 'none', 'nuclear_only', 'sparc'],
-  segmentation: ['provided_cells', 'fov_cell_id', 'cellpose', 'baysor'],
-  spatial_domain: ['spatial_leiden', 'spatial_kmeans', 'graphst'],
-  subcellular_spatial_domain: ['hdbscan', 'dbscan', 'leiden_spatial', 'phenograph', 'none'],
-  analysis: ['leiden', 'kmeans', 'scvi'],
-  annotation: ['rank_marker', 'cluster_label', 'celltypist'],
-  spatial_analysis: ['squidpy', 'scfates'],
-}
-
-const STEP_LABELS: Record<string, string> = {
-  denoise: '去噪',
-  segmentation: '分割',
-  spatial_domain: '空间域',
-  subcellular_spatial_domain: '亚细胞域',
-  analysis: '聚类',
-  annotation: '注释',
-  spatial_analysis: '空间分析',
-}
-
 type ReportPageProps = {
   backendConfig: BackendConfig
   onBackendChange: (config: BackendConfig) => void
@@ -61,6 +44,23 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
   const [plotData, setPlotData] = useState<PlotData | null>(null)
   const [perBackendStats, setPerBackendStats] = useState<PerBackendStats | null>(null)
   const [selectedCell, setSelectedCell] = useState<string | null>(null)
+  const [backendOptions, setBackendOptions] = useState<Record<string, string[]>>(FALLBACK_BACKENDS)
+
+  // Fetch backend options dynamically
+  useEffect(() => {
+    let cancelled = false
+    fetchBackendMeta().then((meta) => {
+      if (cancelled) return
+      if (meta) {
+        const converted: Record<string, string[]> = {}
+        for (const step of Object.keys(meta)) {
+          converted[step] = Object.keys(meta[step])
+        }
+        setBackendOptions(converted)
+      }
+    })
+    return () => { cancelled = true }
+  }, [])
 
   // Load main report & plot data when backendConfig changes
   useEffect(() => {
@@ -156,7 +156,7 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           <StepSection title="Step 1: Filtering / Denoise" stepIndex={1} totalSteps={5}
             stepName="denoise"
             currentBackend={currentStepBackend('denoise')}
-            allBackends={STEP_BACKENDS.denoise ?? []}
+            allBackends={backendOptions.denoise ?? []}
             stepStats={stepStats('denoise', currentStepBackend('denoise'))}
             onBackendChange={(b) => stepBackendChange('denoise', b)}
           >
@@ -184,7 +184,7 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           <StepSection title="Step 2: Segmentation" stepIndex={2} totalSteps={5}
             stepName="segmentation"
             currentBackend={currentStepBackend('segmentation')}
-            allBackends={STEP_BACKENDS.segmentation ?? []}
+            allBackends={backendOptions.segmentation ?? []}
             stepStats={stepStats('segmentation', currentStepBackend('segmentation'))}
             onBackendChange={(b) => stepBackendChange('segmentation', b)}
           >
@@ -226,7 +226,7 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           <StepSection title="Step 3: Spatial Domain Identification" stepIndex={3} totalSteps={5}
             stepName="spatial_domain"
             currentBackend={currentStepBackend('spatial_domain')}
-            allBackends={STEP_BACKENDS.spatial_domain ?? []}
+            allBackends={backendOptions.spatial_domain ?? []}
             stepStats={stepStats('spatial_domain', currentStepBackend('spatial_domain'))}
             onBackendChange={(b) => stepBackendChange('spatial_domain', b)}
           >
@@ -283,7 +283,7 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           <StepSection title="Step 4: Clustering & Expression Analysis" stepIndex={4} totalSteps={5}
             stepName="analysis"
             currentBackend={currentStepBackend('analysis')}
-            allBackends={STEP_BACKENDS.analysis ?? []}
+            allBackends={backendOptions.analysis ?? []}
             stepStats={stepStats('analysis', currentStepBackend('analysis'))}
             onBackendChange={(b) => stepBackendChange('analysis', b)}
           >
@@ -317,7 +317,7 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
           <StepSection title="Step 5: Cell-type Annotation" stepIndex={5} totalSteps={5}
             stepName="annotation"
             currentBackend={currentStepBackend('annotation')}
-            allBackends={STEP_BACKENDS.annotation ?? []}
+            allBackends={backendOptions.annotation ?? []}
             stepStats={stepStats('annotation', currentStepBackend('annotation'))}
             onBackendChange={(b) => stepBackendChange('annotation', b)}
           >

@@ -1,0 +1,80 @@
+"""Snakemake workflow for parallel patchify segmentation."""
+config_sdata = config.get("sdata_path", "")
+config_output = config.get("output_dir", "outputs/patchify_run")
+config_seg = config.get("segmentation_backend", "provided_cells")
+config_denoise = config.get("denoise_backend", "intracellular")
+config_pw = config.get("patch_width_um", 500)
+config_po = config.get("patch_overlap_um", 50)
+config_min_tx = config.get("min_transcripts", 10)
+config_min_gn = config.get("min_genes", 10)
+
+CACHE = f"{config_output}/.snakemake_cache"
+PATCH_DIR = f"{CACHE}/patches"
+COUNT_FILE = f"{CACHE}/n_patches.txt"
+
+rule split_patches:
+    output:
+        COUNT_FILE,
+        touch(f"{CACHE}/split_done.txt"),
+    params:
+        sdata = config_sdata, cache = CACHE,
+        pw = config_pw, po = config_po, denoise = config_denoise,
+    shell:
+        """
+        subcellspace patchify-split {params.sdata} \
+            --cache-dir {params.cache} \
+            --patch-width {params.pw} --patch-overlap {params.po} \
+            --denoise-backend {params.denoise}
+        """
+
+checkpoint discover_patches:
+    input:
+        COUNT_FILE,
+    output:
+        f"{CACHE}/discover_done.txt",
+    shell:
+        "touch {output}"
+
+def _read_n_patches():
+    return int(open(COUNT_FILE).read().strip())
+
+# Returns list of (patch_index,) tuples for the resolve_patches rule
+def get_patch_indices(wildcards):
+    checkpoints.discover_patches.get(**wildcards)
+    return [f"{CACHE}/segmented/{i}.done" for i in range(_read_n_patches())]
+
+rule segment_patch:
+    input:
+        lambda wildcards: f"{PATCH_DIR}/{wildcards.patch_index}.csv",
+    output:
+        touch(f"{CACHE}/segmented/{{patch_index}}.done"),
+    params:
+        output_dir = config_output, seg_backend = config_seg,
+        min_tx = config_min_tx, min_gn = config_min_gn,
+    threads: 1
+    shell:
+        """
+        subcellspace patchify-segment \
+            --patch-csv {input} --patch-index {wildcards.patch_index} \
+            --output-dir {params.output_dir}/patch_{wildcards.patch_index} \
+            --segmentation-backend {params.seg_backend} \
+            --min-transcripts {params.min_tx} --min-genes {params.min_gn}
+        """
+
+rule resolve_patches:
+    input:
+        get_patch_indices,
+    output:
+        f"{config_output}/patchify_resolved.parquet",
+    params:
+        output_dir = config_output, cache = CACHE,
+    shell:
+        """
+        subcellspace patchify-resolve \
+            --patch-dir {PATCH_DIR} \
+            --output {params.output_dir}/patchify_resolved.parquet
+        """
+
+rule all:
+    input:
+        f"{config_output}/patchify_resolved.parquet",

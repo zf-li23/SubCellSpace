@@ -3,7 +3,8 @@ import DataBrowser from './pages/DataBrowser'
 import ReportPage from './pages/ReportPage'
 import BenchmarkPage from './pages/BenchmarkPage'
 import ErrorBoundary from './components/ErrorBoundary'
-import { type BackendConfig } from './components/BackendSwitch'
+import BackendSwitch from './components/BackendSwitch'
+import { type BackendConfig } from './api'
 
 type Route = 'home' | 'report' | 'browser' | 'benchmark'
 

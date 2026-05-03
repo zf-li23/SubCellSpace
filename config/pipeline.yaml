@@ -13,6 +13,7 @@ pipeline:
   # The pipeline runner will execute steps in this order.
   steps:
     - denoise
+    - patchify                # ← optional spatial grid patching (for large tissues)
     - segmentation
     - spatial_domain          # ← cell-level spatial domain (before clustering)
     - subcellular_spatial_domain  # ← subcellular domain grouping
@@ -33,6 +34,14 @@ pipeline:
         - intracellular: "Keep Nuclear & Cytoplasm transcripts only"
         - nuclear_only: "Keep Nuclear transcripts only"
         - sparc: "Spatially-aware expression denoising (spARC)"
+
+    patchify:
+      module: "src.steps.patchify"
+      default_backend: "none"
+      description: "Spatial grid patching for large tissues"
+      available_backends:
+        - none: "Pass-through (no patching, default)"
+        - grid: "Split into overlapping grid patches, segment each, resolve boundaries"
 
     segmentation:
       module: "src.steps.segmentation"
@@ -97,4 +106,4 @@ pipeline:
       description: "Subcellular RNA analysis"
       available_backends:
         - rna_localization: "RNA radial distance and localization metrics"
-        - scrin_stub: "SCRIN co-localization network stub"
+        - scrin: "SCRIN co-localization network (CPU-intensive, default not run)"

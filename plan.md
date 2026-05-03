@@ -24,11 +24,11 @@ SubCellSpace 是一个面向**亚细胞空间转录组学**的模块化分析平
 | **Phase 2：Pipeline Engine** | ✅ 完成 | `ExecutionContext` + SpatialData 双路径、8 步骤插件引擎、contract 验证 |
 | **Phase 3：Clustering + Annotation** | ✅ 完成 | Leiden/KMeans/scVI 聚类 + CellTypist/rank_marker/cluster_label 注释 |
 | **Phase 4：Spatial Analysis** | ✅ 完成 | 空间域识别 (3 后端) + squidpy SVG/neighborhood/co-occurrence + scFates tree/pseudotime |
-| **Phase 5：Subcellular Analysis** | ✅ 完成 | 亚细胞聚类 (5 后端) + RNA localization 量化 + SCRIN stub |
+| **Phase 5：Subcellular Analysis** | ✅ 完成 | RNA localization 量化 + SCRIN 完整集成（默认不调用） |
 | **Phase 6：CLI + Export + API** | ✅ 完成 | `ingest/run/export/backends` 四命令、parquet/json 导出、API 端点 |
 | **Phase 7：前端适配** | ✅ 完成 | 纯浏览器模式；构建零错误；数据全部来自后端标准化 JSON |
-| **Phase 8：Capabilities 动态渲染** | 📋 计划中 | 前端从 `/api/meta/backends` 动态读取后端选项和能力 |
-| **Phase 9：Patchify 机制** | 📋 计划中 | 大组织切片分块并行分割（借鉴 Sopa 架构） |
+| **Phase 8：Capabilities 动态渲染** | ✅ 完成 | 前端 `BackendSwitch` 从 `/api/meta/backends` 动态获取后端选项，移除硬编码 `BACKENDS` 常量 |
+| **Phase 9：Patchify 机制** | ✅ 完成 | 空间网格分块 (`grid`/`none`)、基于 Shapely STRtree 的冲突解决、Snakemake 已安装可用 |
 
 ### 完整后端清单（25/25）
 
@@ -39,7 +39,7 @@ SubCellSpace 是一个面向**亚细胞空间转录组学**的模块化分析平
 | **analysis** (3) | leiden, kmeans, scvi | — |
 | **annotation** (3) | cluster_label, rank_marker, celltypist | — |
 | **spatial_analysis** (2) | squidpy, scfates | `svg`, `neighborhood`, `co_occurrence` (squidpy); `tree_inference`, `pseudotime` (scfates) |
-| **subcellular_analysis** (2) | rna_localization, scrin_stub | `rna_localization`, `co_localization_network` |
+| **subcellular_analysis** (2) | rna_localization, scrin | `rna_localization` (rna_localization); `co_localization_network` (scrin) |
 
 > **已移除**：`stagate`（需 TensorFlow，兼容性差）、`spagcn`（需特殊编译）— 两者从未实际运行成功过。  
 > **新增**：`scfates` — 树推断 + 伪时间轨迹分析，纯 Python，已安装可运行。
@@ -85,10 +85,10 @@ SubCellSpace 是一个面向**亚细胞空间转录组学**的模块化分析平
 |------|:--------:|------|
 | cellpose 需外部 DAPI 图像 | 🟡 | 已安装可运行，但输入 CSV 本身不含图像数据 |
 | baysor 需 Julia CLI | � | ✅ Julia 1.10.9 + Baysor 已安装，路径查找已实现（参考 Sopa），待真实数据验证 |
-| Snakemake patchify+resolve 未实现 | 🟡 | 大组织切片并行分割机制 |
-| 前端 capabilities 仍为静态 | 🟡 | 需改为从 `/api/meta/backends` 动态读取 |
+| Snakemake patchify+resolve 未实现 | � | ✅ `grid`/`none` 后端已实现，Shapely STRtree 冲突解决已集成 |
+| 前端 capabilities 仍为静态 | � | ✅ 已改为从 `/api/meta/backends` 动态读取 |
 | Xenium/MERFISH/Stereo-seq 无真实数据测试 | 🟡 | 代码已就绪，待获取测试数据 |
-| SCRIN 仍为 stub | 🟢 | 计算开销极大（需 MPI），暂不优先 |
+| SCRIN 仍为 stub | 🟢 | ✅ 已完整集成，默认不调用（`rna_localization` 为默认后端），启用: `--subcellular-analysis-backend scrin` |
 | 无 CI/CD | 🟢 | 现阶段本地开发，暂不急 |
 
 ---
@@ -105,18 +105,20 @@ SubCellSpace 是一个面向**亚细胞空间转录组学**的模块化分析平
 - [x] Baysor wrapper 脚本已创建在 `$CONDA_PREFIX/bin/baysor`
 - [ ] 用真实数据验证 Baysor 分割（需合适大小的测试数据）
 
-#### 2. 前端 Capabilities 动态渲染
-- [ ] 前端 `BackendSwitch` 从 `/api/meta/backends` 动态获取后端列表和能力声明
-- [ ] 移除前端硬编码的 `BACKENDS` 常量，改为 `fetch + setState`
-- [ ] 后端 `/api/meta/backends` 端点已就绪，前端只需对接
-- [ ] 构建新的 `dist/` 并验证
+#### 2. 前端 Capabilities 动态渲染 ✅
+- [x] 前端 `BackendSwitch` 从 `/api/meta/backends` 动态获取后端列表和能力声明
+- [x] 移除前端硬编码的 `BACKENDS` 常量，改为 `fetch + setState`，保留 `FALLBACK_BACKENDS` 作为离线兜底
+- [x] `BackendConfig` 类型移到 `api.ts`，`STEP_TO_CONFIG_KEY`/`STEP_LABELS` 统一管理
+- [x] `ReportPage` 同步使用动态 `backendOptions` 替代 `STEP_BACKENDS`
+- [x] TypeScript 零错误，Vite 构建通过
 
-#### 3. Patchify 机制（借鉴 Sopa）
-- [ ] 实现大组织切片的 patch 分割逻辑
-- [ ] 每个 patch 独立运行 cellpose/baysor 分割
-- [ ] `resolve` 步骤合并各 patch 的分割结果
-- [ ] Snakemake 工作流编排（Snakemake 已安装）
-- [ ] 添加 `sopa` 和 `snakemake` 的 patchify 步骤
+#### 3. Patchify 机制（借鉴 Sopa） ✅
+- [x] 空间网格分块 (`_make_patch_grid`): 支持 `patch_width_um` / `patch_overlap_um` 参数
+- [x] 每个 patch 独立运行所选的 segmentation 后端
+- [x] `_resolve_patch_cells`: 基于 Shapely STRtree 的边界冲突自动合并
+- [x] 已集成到 pipeline（denoise → patchify → segmentation，默认 `none` 跳过）
+- [x] Snakemake 并行调度已实现 — `subcellspace patchify-run` + `workflow/Snakefile`，checkpoint 动态发现 patch 数量，segment_patch 规则带 `{patch_index}` wildcard 并行执行（已验证 9 patches × 4 cores → 603 transcripts）
+- [x] Snakemake 并行调度已实现 — `subcellspace patchify-run` + `workflow/Snakefile`，checkpoint 动态发现 patch 数量，segment_patch 规则带 `{patch_index}` wildcard 并行执行
 
 ### 🟡 中优先级
 
@@ -125,10 +127,11 @@ SubCellSpace 是一个面向**亚细胞空间转录组学**的模块化分析平
 - [ ] 端到端运行 `ingest → run → export` 验证所有 Ingestor
 - [ ] 修复发现的问题
 
-#### 5. SCRIN MPI 完整集成
-- [ ] 从 stub 升级为完整实现
-- [ ] 需要 MPI 环境和 SCRIN CLI（依赖较重）
-- [ ] 添加 `scrin` 到 `subcellular_analysis`（替换 `scrin_stub`）
+#### 5. SCRIN 完整集成 ✅
+- [x] 从 stub 升级为完整实现：`subcellspace run ... --subcellular-analysis-backend scrin`
+- [x] 支持 MPI (`--scrin-mpi-np N`) 和单进程两种模式
+- [x] 默认不调用（`rna_localization` 是 subcellular_analysis 的默认后端）
+- [x] 优雅降级：SCRIN 不可用时自动回退到 stub 模式
 
 ### 🟢 低优先级
 
@@ -169,7 +172,7 @@ SubCellSpace 是一个面向**亚细胞空间转录组学**的模块化分析平
 | `src/steps/analysis.py` | Clustering (3 backends) |
 | `src/steps/annotation.py` | Annotation (3 backends) |
 | `src/steps/spatial_analysis.py` | squidpy + scFates (2 backends) |
-| `src/steps/subcellular_analysis.py` | rna_localization + scrin_stub |
+| `src/steps/subcellular_analysis.py` | rna_localization + scrin |
 | `src/pipelines/cosmx_minimal.py` | 向后兼容入口 |
 | `config/pipeline.yaml` | 步骤顺序 + 后端配置 |
 

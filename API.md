@@ -7,7 +7,7 @@ SubCellSpace 提供 HTTP API，用于：
 - 获取后端列表与能力声明
 - 查询细胞级转录本数据
 
-> ⚠️ 管线执行是**同步的**，完整 8 步耗时约 70-90 秒。无鉴权/限流，仅适合本地开发。
+> ⚠️ 管线执行是**同步的**，完整 6 步耗时约 70-90 秒。无鉴权/限流，仅适合本地开发。
 
 ## 启动服务
 
@@ -22,7 +22,7 @@ subcellspace-api                 # 默认 http://127.0.0.1:8000
 健康检查。返回 `{"status":"ok"}`。
 
 ### `GET /api/meta/backends`
-返回所有 27 个后端及其 capabilities。示例返回：
+返回所有 25 个后端及其 capabilities。前端动态渲染的数据源。示例返回：
 
 ```json
 {
@@ -102,7 +102,7 @@ curl "http://127.0.0.1:8000/api/plots?report_path=outputs/cosmx_try_again_round/
 - `clustering_backend` (`leiden`, `kmeans`, `scvi`)
 - `leiden_resolution`
 - `annotation_backend` (`cluster_label`, `rank_marker`, `celltypist`)
-- `spatial_domain_backend` (`spatial_leiden`, `spatial_kmeans`, `graphst`, `stagate`, `spagcn`)
+- `spatial_domain_backend` (`spatial_leiden`, `spatial_kmeans`, `graphst`)
 - `spatial_domain_resolution`
 - `n_spatial_domains`
 - `subcellular_domain_backend` (`hdbscan`, `dbscan`, `leiden_spatial`, `phenograph`, `none`)

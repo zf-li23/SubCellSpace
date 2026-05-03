@@ -701,6 +701,12 @@ select {
 	min-width: 116px;
 }
 
+.backend-switch-loading {
+	font-size: 11px;
+	color: #7a9eb1;
+	width: 100%;
+}
+
 /* ===== Loading Skeleton ===== */
 .skeleton-grid {
   display: grid;

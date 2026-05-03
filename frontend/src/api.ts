@@ -165,6 +165,54 @@ export type BackendConfig = {
   spatialAnalysis: string
 }
 
+// ── Dynamic backend metadata from /api/meta/backends ──────────────
+
+export type BackendMetaEntry = {
+  available: boolean
+  capabilities: string[]
+}
+
+/** { step_name: { backend_name: BackendMetaEntry } } */
+export type BackendMeta = Record<string, Record<string, BackendMetaEntry>>
+
+/** Fetch backend options & capabilities dynamically from the API server. */
+export async function fetchBackendMeta(): Promise<BackendMeta | null> {
+  return await fetchJson<BackendMeta>('/api/meta/backends')
+}
+
+/** Mapping from API step names to BackendConfig keys (for the per-step dropdown). */
+export const STEP_TO_CONFIG_KEY: Record<string, keyof BackendConfig> = {
+  denoise: 'denoise',
+  segmentation: 'segmentation',
+  analysis: 'clustering',
+  annotation: 'annotation',
+  spatial_domain: 'spatialDomain',
+  subcellular_spatial_domain: 'subcellularDomain',
+  spatial_analysis: 'spatialAnalysis',
+}
+
+/** Mapping from API step names to display labels. */
+export const STEP_LABELS: Record<string, string> = {
+  denoise: '去噪',
+  segmentation: '分割',
+  analysis: '聚类',
+  annotation: '注释',
+  spatial_domain: '空间域',
+  subcellular_spatial_domain: '亚细胞域',
+  spatial_analysis: '空间分析',
+}
+
+/** Fallback default backends used when the API is unreachable. */
+export const FALLBACK_BACKENDS: Record<string, string[]> = {
+  denoise: ['intracellular', 'none', 'nuclear_only', 'sparc'],
+  segmentation: ['provided_cells', 'fov_cell_id', 'cellpose', 'baysor'],
+  analysis: ['leiden', 'kmeans', 'scvi'],
+  annotation: ['rank_marker', 'cluster_label', 'celltypist'],
+  spatial_domain: ['spatial_leiden', 'spatial_kmeans', 'graphst'],
+  subcellular_spatial_domain: ['hdbscan', 'dbscan', 'leiden_spatial', 'phenograph', 'none'],
+  spatial_analysis: ['squidpy', 'scfates'],
+}
+
 export type CosmxRunOptions = {
   inputCsv?: string
   outputDir?: string
@@ -397,7 +445,7 @@ export async function loadPipelineConfig(): Promise<Record<string, unknown> | nu
   return await fetchJson<Record<string, unknown>>('/config/pipeline.yaml')
 }
 
-export type BackendMeta = {
+export type BackendMetaLegacy = {
   name: string
   type: string
 }

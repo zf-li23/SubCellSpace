@@ -1,59 +1,56 @@
-import React from 'react'
-
-export type BackendConfig = {
-  denoise: string
-  segmentation: string
-  clustering: string
-  annotation: string
-  spatialDomain: string
-  subcellularDomain: string
-  spatialAnalysis: string
-}
+import React, { useEffect, useState } from 'react'
+import { type BackendConfig, fetchBackendMeta, STEP_TO_CONFIG_KEY, STEP_LABELS, FALLBACK_BACKENDS } from '../api'
 
 type BackendSwitchProps = {
   value: BackendConfig
   onChange: (next: BackendConfig) => void
 }
 
-/** All registered backends, matching the Python pipeline config.
- *
- *  Maintained manually — when the Python side adds/removes a backend,
- *  update these lists to keep the frontend in sync.
- *
- *  See: config/pipeline.yaml and src/steps/*.py
- */
-const BACKENDS = {
-  denoise: ['intracellular', 'none', 'nuclear_only', 'sparc'],
-  segmentation: ['provided_cells', 'fov_cell_id', 'cellpose', 'baysor'],
-  clustering: ['leiden', 'kmeans', 'scvi'],
-  annotation: ['rank_marker', 'cluster_label', 'celltypist'],
-  spatialDomain: ['spatial_leiden', 'spatial_kmeans', 'graphst'],
-  subcellularDomain: ['hdbscan', 'dbscan', 'leiden_spatial', 'phenograph', 'none'],
-  spatialAnalysis: ['squidpy', 'scfates'],
-} as const
-
-const LABELS: Record<string, string> = {
-  denoise: '去噪',
-  segmentation: '分割',
-  clustering: '聚类',
-  annotation: '注释',
-  spatialDomain: '空间域',
-  subcellularDomain: '亚细胞域',
-  spatialAnalysis: '空间分析',
-}
-
+/** All backends per step, fetched dynamically from /api/meta/backends. */
 export default function BackendSwitch({ value, onChange }: BackendSwitchProps) {
+  const [backends, setBackends] = useState<Record<string, string[]> | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchBackendMeta().then((meta) => {
+      if (cancelled) return
+      if (meta) {
+        const converted: Record<string, string[]> = {}
+        for (const step of Object.keys(meta)) {
+          converted[step] = Object.keys(meta[step])
+        }
+        setBackends(converted)
+      } else {
+        setBackends(FALLBACK_BACKENDS)
+      }
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [])
+
   const update = (key: keyof BackendConfig, nextValue: string) => {
     onChange({ ...value, [key]: nextValue })
   }
 
+  const steps = backends ?? FALLBACK_BACKENDS
+  const entries = Object.keys(steps)
+    .map((step) => {
+      const configKey = STEP_TO_CONFIG_KEY[step]
+      const label = STEP_LABELS[step]
+      if (!configKey || !label) return null
+      return { step, configKey, label }
+    })
+    .filter(Boolean) as Array<{ step: string; configKey: keyof BackendConfig; label: string }>
+
   return (
     <div className="backend-switch">
-      {(Object.keys(BACKENDS) as Array<keyof typeof BACKENDS>).map((key) => (
-        <label key={key}>
-          {LABELS[key]}
-          <select value={value[key]} onChange={(e) => update(key, e.target.value)}>
-            {BACKENDS[key].map((opt) => (
+      {loading && <div className="backend-switch-loading">Loading backends…</div>}
+      {entries.map(({ step, configKey, label }) => (
+        <label key={step}>
+          {label}
+          <select value={value[configKey]} onChange={(e) => update(configKey, e.target.value)}>
+            {steps[step].map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>

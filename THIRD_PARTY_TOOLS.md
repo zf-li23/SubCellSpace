@@ -34,10 +34,8 @@ bash scripts/setup-tools.sh install --all
 | Tool | Category | Install Method | Status |
 |------|----------|---------------|--------|
 | spARC | denoise | `pip install -e tools/spARC/` | ✅ 已验证 |
-| GraphST | spatial_domain | `pip install -e tools/GraphST/` | ✅ 已验证 |
-| STAGATE | spatial_domain | `pip install git+https://github.com/RucDongLab/STAGATE.git` | ✅ 已验证 |
-| SpaGCN | spatial_domain | Manual | ⚠️ 已安装 |
-| PhenoGraph | subcellular_spatial_domain | `pip install -e tools/PhenoGraph/` | ✅ 已验证 |
+| GraphST | spatial_analysis | `pip install -e tools/GraphST/` | ✅ 已验证 |
+| PhenoGraph | subcellular_analysis | `pip install -e tools/PhenoGraph/` | ✅ 已验证 |
 | CellTypist | annotation | `pip install -e tools/celltypist/` | ✅ 已验证 |
 | cellpose | segmentation | `pip install cellpose` | ⚠️ 需外部 DAPI 图像 |
 | scArches | annotation | `pip install scarches` | ✅ 备选 |
@@ -50,20 +48,17 @@ bash scripts/setup-tools.sh install --all
 
 > 验证状态基于 2026-05-03 实际运行结果。
 
-## Non-Python Tools (Removed)
+## Non-Python Tools
 
-The following tools are not Python-based and are **no longer tracked** in this repository.
-They are not integrated into the SubCellSpace pipeline:
+| Tool | Category | Runtime | Status |
+|------|----------|---------|--------|
+| BayesSpace | deprecated | R package | Not integrated (R dependency) |
+| BANKSY | deprecated | R package | Not integrated (R dependency) |
+| Baysor | segmentation | Julia | ✅ Julia 1.10.9 + Baysor 已安装 |
+| Proseg | deprecated | Rust build | Not integrated |
 
-| Tool | Category | Runtime | Reason for Removal |
-|------|----------|---------|-------------------|
-| BayesSpace | spatial_domain | R package | R dependency, not pip-compatible |
-| BANKSY | spatial_domain | R package | R dependency, not pip-compatible |
-| Baysor | segmentation | Julia | Julia runtime required |
-| Proseg | segmentation | Rust build | Requires manual Rust compilation |
-
-If you wish to use any of these tools, install them separately per their respective documentation.
-They can be used as preprocessing steps before running the SubCellSpace pipeline.
+Baysor is now installed via Julia Pkg in the conda environment.
+Other non-Python tools are not integrated.
 
 ## Local usage recommendation
 
