@@ -21,12 +21,12 @@ class TestHealthAndMeta:
         data = response.json()
         assert "denoise" in data
         assert "segmentation" in data
-        assert "clustering" in data
-        assert "annotation" in data
         assert "spatial_domain" in data
         assert "subcellular_spatial_domain" in data
+        assert "spatial_analysis" in data
+        assert "subcellular_analysis" in data
         for key in data:
-            assert isinstance(data[key], list)
+            assert isinstance(data[key], dict)
             assert len(data[key]) > 0
 
 

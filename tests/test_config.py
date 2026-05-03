@@ -185,7 +185,7 @@ class TestSettings:
         settings = Settings(config_path="/nonexistent/path.yaml")
         cfg = settings.pipeline
         assert cfg.name == "cosmx_minimal"
-        assert len(cfg.steps) == 6
+        assert len(cfg.steps) == 8
         step_names = cfg.get_step_names()
         assert "denoise" in step_names
         assert "segmentation" in step_names
@@ -193,6 +193,8 @@ class TestSettings:
         assert "subcellular_spatial_domain" in step_names
         assert "analysis" in step_names
         assert "annotation" in step_names
+        assert "spatial_analysis" in step_names
+        assert "subcellular_analysis" in step_names
 
     def test_get_method(self):
         settings = Settings(config_path="/nonexistent/path.yaml")

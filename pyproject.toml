@@ -39,8 +39,6 @@ baysor = []  # NOT available: requires Julia runtime; not tracked in Python tool
 
 # Spatial domain backends
 graphst = ["pot"]
-stagate = []  # needs tensorflow
-spagcn = []   # needs compilation
 
 # Spatial analysis backends (Phase 6)
 scfates = []  # installed via -e tools/scFates/ (tree inference + pseudotime)

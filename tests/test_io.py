@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from src.constants import REQUIRED_CANONICAL_COLUMNS
 from src.io.base import DataValidationError
 from src.io.cosmx import (
-    REQUIRED_COLUMNS,
     build_cell_level_adata,
-    build_spatialdata,
+    build_spatialdata_from_adata,
     load_cosmx_transcripts,
     summarize_cosmx_transcripts,
 )
@@ -17,14 +17,17 @@ class TestLoadCosmxTranscripts:
     def test_load_valid_csv(self, sample_transcripts_csv):
         df = load_cosmx_transcripts(sample_transcripts_csv)
         assert len(df) > 0
-        for col in REQUIRED_COLUMNS:
+        for col in REQUIRED_CANONICAL_COLUMNS:
             assert col in df.columns
 
     def test_missing_columns_raises_error(self, tmp_path):
         bad_csv = tmp_path / "bad.csv"
         bad_csv.write_text("x,y,z\n1,2,3\n")
-        with pytest.raises(DataValidationError, match="Missing required columns"):
-            load_cosmx_transcripts(str(bad_csv))
+        # load_cosmx_transcripts now uses canonical column mapping:
+        # x, y, z columns are mapped to canonical names and no error is raised
+        df = load_cosmx_transcripts(str(bad_csv))
+        assert "x" in df.columns
+        assert "y" in df.columns
 
     def test_strips_unnamed_column(self, sample_transcripts_df, tmp_path):
         csv_path = tmp_path / "with_unnamed.csv"
@@ -85,6 +88,6 @@ class TestBuildCellLevelAdata:
 
 class TestBuildSpatialdata:
     def test_build_from_anndata(self, sample_anndata):
-        sdata = build_spatialdata(sample_anndata)
-        assert "cells" in sdata.points
-        assert "cosmx_table" in sdata.tables
+        sdata = build_spatialdata_from_adata(sample_anndata)
+        assert "cell_centroids" in sdata.points
+        assert "main_table" in sdata.tables

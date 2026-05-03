@@ -55,7 +55,7 @@ All 22 registered backends are now listed in the BackendSwitch dropdown:
 |------|---------|
 | **Denoise** | intracellular, none, nuclear_only, **sparc** |
 | **Segmentation** | provided_cells, fov_cell_id, cellpose, baysor |
-| **Spatial Domain** | spatial_leiden, spatial_kmeans, **graphst**, **stagate**, **spagcn** |
+| **Spatial Domain** | spatial_leiden, spatial_kmeans, **graphst** |
 | **Subcellular Domain** | **hdbscan**, **dbscan**, **leiden_spatial**, **phenograph**, none |
 | **Analysis** | leiden, kmeans, **scvi** |
 | **Annotation** | rank_marker, cluster_label, **celltypist** |

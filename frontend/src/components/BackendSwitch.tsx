@@ -7,6 +7,7 @@ export type BackendConfig = {
   annotation: string
   spatialDomain: string
   subcellularDomain: string
+  spatialAnalysis: string
 }
 
 type BackendSwitchProps = {
@@ -26,8 +27,9 @@ const BACKENDS = {
   segmentation: ['provided_cells', 'fov_cell_id', 'cellpose', 'baysor'],
   clustering: ['leiden', 'kmeans', 'scvi'],
   annotation: ['rank_marker', 'cluster_label', 'celltypist'],
-  spatialDomain: ['spatial_leiden', 'spatial_kmeans', 'graphst', 'stagate', 'spagcn'],
+  spatialDomain: ['spatial_leiden', 'spatial_kmeans', 'graphst'],
   subcellularDomain: ['hdbscan', 'dbscan', 'leiden_spatial', 'phenograph', 'none'],
+  spatialAnalysis: ['squidpy', 'scfates'],
 } as const
 
 const LABELS: Record<string, string> = {
@@ -37,6 +39,7 @@ const LABELS: Record<string, string> = {
   annotation: '注释',
   spatialDomain: '空间域',
   subcellularDomain: '亚细胞域',
+  spatialAnalysis: '空间分析',
 }
 
 export default function BackendSwitch({ value, onChange }: BackendSwitchProps) {

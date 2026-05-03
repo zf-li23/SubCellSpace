@@ -1,22 +1,29 @@
 # SubCellSpace：亚细胞空间转录组学分析平台
 
-SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台，支持 CosMx / Xenium / MERFISH / Stereo-seq 四个平台，27 个后端，8 步骤全链路从原始数据到生物学解释。
+SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台，支持 CosMx / Xenium / MERFISH / Stereo-seq 四个平台，25 个后端，8 步骤全链路从原始数据到生物学解释。
 
 - 统一数据层：SpatialData (.zarr) 为中心容器
-- 插件式管线：8 步骤、27 后端、每个后端可独立替换
+- 插件式管线：8 步骤、25 后端、每个后端可独立替换
 - 能力声明：后端通过 `@declare_capabilities` 声明支持的分析，前端动态渲染
 - 静态导出：`subcellspace export` 将 Zarr 导出为前端友好的 parquet/JSON
 - 平台感知：根据测序平台自动选择解析器、列名映射和空间分析策略
+- **CLI 优先**：所有分析通过命令行执行，适合计算集群；前端是纯数据浏览器
+
+## 设计哲学
+
+- **后端 = 计算核心**：Python CLI (`subcellspace ingest/run/export`) 负责所有分析逻辑，设计用于计算集群批量运行
+- **前端 = 纯浏览器**：React 前端不含任何业务逻辑，仅读取后端产出的标准化 JSON/parquet 进行渲染
+- **典型工作流**：集群运行 `subcellspace run ...` → `subcellspace export ...` → 拷贝 `outputs/` 到前端 → 浏览结果
 
 ## 当前管线步骤 (8 步)
 
 1. **Denoise** — 转录本去噪（4: none / intracellular / nuclear_only / sparc）
 2. **Segmentation** — 细胞分割（4: provided_cells / fov_cell_id / cellpose / baysor）
-3. **Spatial Domain** — 组织级空间域识别（5: spatial_leiden / spatial_kmeans / graphst / stagate / spagcn）
+3. **Spatial Domain** — 组织级空间域识别（3: spatial_leiden / spatial_kmeans / graphst）
 4. **Subcellular Spatial Domain** — 亚细胞聚类（5: hdbscan / dbscan / leiden_spatial / phenograph / none）
 5. **Analysis** — 表达聚类（3: leiden / kmeans / scvi）
 6. **Annotation** — 细胞注释（3: cluster_label / rank_marker / celltypist）
-7. **Spatial Analysis** — 空间分析（1: squidpy - SVG/邻域/共定位）
+7. **Spatial Analysis** — 空间分析（2: squidpy - SVG/邻域/共定位, scfates - 树推断/伪时间）
 8. **Subcellular Analysis** — 亚细胞分析（2: rna_localization / scrin_stub）
 
 ## 快速开始

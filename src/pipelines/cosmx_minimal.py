@@ -20,6 +20,7 @@ def run_cosmx_minimal(
     spatial_domain_resolution: float = 1.0,
     n_spatial_domains: int | None = None,
     subcellular_domain_backend: str = "hdbscan",
+    spatial_analysis_backend: str = "squidpy",
 ) -> PipelineResult:
     """Run the full CosMx minimal analysis pipeline.
 
@@ -55,6 +56,8 @@ def run_cosmx_minimal(
         Number of spatial domains (for k-means based backends).
     subcellular_domain_backend : str
         Backend for subcellular spatial domain identification.
+    spatial_analysis_backend : str
+        Backend for spatial analysis (squidpy or scfates).
 
     Returns
     -------
@@ -75,4 +78,5 @@ def run_cosmx_minimal(
         spatial_domain_resolution=spatial_domain_resolution,
         n_spatial_domains=n_spatial_domains,
         subcellular_domain_backend=subcellular_domain_backend,
+        spatial_analysis_backend=spatial_analysis_backend,
     )

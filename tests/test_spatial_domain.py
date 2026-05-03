@@ -77,10 +77,9 @@ class TestRunSpatialDomainIdentification:
         assert "spatial_leiden" in backends
         assert "spatial_kmeans" in backends
         assert "graphst" in backends
-        assert "stagate" in backends
-        assert "spagcn" in backends
+        assert len(backends) == 3
 
-    # ── GraphST / STAGATE embedding key probing ─────────────────────────────
+    # ── GraphST embedding key probing ─────────────────────────────────────
 
     @pytest.mark.parametrize(
         "emb_key",

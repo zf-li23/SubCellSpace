@@ -135,9 +135,52 @@ def _seg_cellpose(
 # ── Backend: baysor (transcript-coordinate-based) ───────────────────
 
 
+def _find_baysor_executable() -> str:
+    """Find the Baysor executable, following the same lookup pattern as Sopa.
+
+    Search order:
+    1. ``baysor`` on ``$PATH``
+    2. ``~/.julia/bin/baysor`` (Julia depot bin)
+    3. ``$CONDA_PREFIX/bin/baysor`` (conda env wrapper)
+
+    Returns the path to the baysor executable.
+
+    Raises
+    ------
+    RuntimeError
+        If baysor cannot be found.
+    """
+    import os
+    import shutil
+
+    # 1. PATH lookup
+    path_baysor = shutil.which("baysor")
+    if path_baysor:
+        return path_baysor
+
+    # 2. Julia depot bin
+    julia_bin = Path.home() / ".julia" / "bin" / "baysor"
+    if julia_bin.exists():
+        return str(julia_bin)
+
+    # 3. Conda env wrapper
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        conda_baysor = Path(conda_prefix) / "bin" / "baysor"
+        if conda_baysor.exists():
+            return str(conda_baysor)
+
+    raise RuntimeError(
+        "Baysor CLI not found. Install it via:\n"
+        "  conda activate subcellspace\n"
+        "  julia -e 'using Pkg; Pkg.add(url=\"https://github.com/kharchenkolab/Baysor.git\")'\n"
+        "Or download from https://github.com/kharchenkolab/Baysor"
+    )
+
+
 def _seg_baysor(
     df: pd.DataFrame,
-    baysor_cmd: str = "baysor",
+    baysor_cmd: str | None = None,
     config: str | None = None,
     scale: float | None = None,
     prior_segmentation_confidence: float = 0.5,
@@ -152,6 +195,9 @@ def _seg_baysor(
 
     _validate_columns(df, {x_col, y_col, gene_col, fov_col}, "baysor")
 
+    # Resolve baysor executable
+    baysor_exe = baysor_cmd or _find_baysor_executable()
+
     with tempfile.TemporaryDirectory(prefix="baysor_") as tmpdir:
         tmpdir_path = Path(tmpdir)
         input_csv = tmpdir_path / "transcripts.csv"
@@ -161,7 +207,7 @@ def _seg_baysor(
         baysor_df.to_csv(input_csv, index=False)
 
         cmd = [
-            baysor_cmd, "run", str(input_csv), str(output_dir),
+            baysor_exe, "run", str(input_csv), str(output_dir),
             "--no-plot",
             f"--prior-segmentation-confidence={prior_segmentation_confidence}",
             f"--min-molecules-per-cell={min_molecules_per_cell}",
@@ -184,7 +230,7 @@ def _seg_baysor(
             )
         except FileNotFoundError:
             raise RuntimeError(
-                f"Baysor CLI '{baysor_cmd}' not found. "
+                f"Baysor CLI '{baysor_exe}' not found. "
                 "Please install Baysor from https://github.com/kharchenkolab/Baysor "
                 "and ensure it is on your PATH."
             ) from None

@@ -34,10 +34,11 @@ import LoadingSkeleton, { SkeletonCard } from '../components/LoadingSkeleton'
 const STEP_BACKENDS: Record<string, string[]> = {
   denoise: ['intracellular', 'none', 'nuclear_only', 'sparc'],
   segmentation: ['provided_cells', 'fov_cell_id', 'cellpose', 'baysor'],
-  spatial_domain: ['spatial_leiden', 'spatial_kmeans', 'graphst', 'stagate', 'spagcn'],
+  spatial_domain: ['spatial_leiden', 'spatial_kmeans', 'graphst'],
   subcellular_spatial_domain: ['hdbscan', 'dbscan', 'leiden_spatial', 'phenograph', 'none'],
   analysis: ['leiden', 'kmeans', 'scvi'],
   annotation: ['rank_marker', 'cluster_label', 'celltypist'],
+  spatial_analysis: ['squidpy', 'scfates'],
 }
 
 const STEP_LABELS: Record<string, string> = {
@@ -47,6 +48,7 @@ const STEP_LABELS: Record<string, string> = {
   subcellular_spatial_domain: '亚细胞域',
   analysis: '聚类',
   annotation: '注释',
+  spatial_analysis: '空间分析',
 }
 
 type ReportPageProps = {
@@ -99,6 +101,7 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
         annotation: 'annotation',
         spatial_domain: 'spatialDomain',
         subcellular_spatial_domain: 'subcellularDomain',
+        spatial_analysis: 'spatialAnalysis',
       }
       const key = mapping[stepName]
       if (key) {
@@ -118,6 +121,7 @@ export default function ReportPage({ backendConfig, onBackendChange }: ReportPag
         annotation: 'annotation',
         spatial_domain: 'spatialDomain',
         subcellular_spatial_domain: 'subcellularDomain',
+        spatial_analysis: 'spatialAnalysis',
       }
       const key = mapping[stepName]
       return key ? backendConfig[key] : ''

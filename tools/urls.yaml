@@ -25,20 +25,20 @@ tools:
     category: "spatial_domain"
 
   STAGATE:
-    description: "Spatially-Aware Graph Attention Autoencoder (spatial domain)"
+    description: "[DEPRECATED] Spatially-Aware Graph Attention Autoencoder — removed (requires TensorFlow)"
     https: "https://github.com/RucDongLab/STAGATE.git"
     ssh: "git@github.com:RucDongLab/STAGATE.git"
     pip_install: "git+https://github.com/RucDongLab/STAGATE.git"
-    category: "spatial_domain"
-    notes: "No git clone needed; install directly via pip"
+    category: "deprecated"
+    notes: "Removed in 2026-05-03: never worked reliably, requires TensorFlow which conflicts"
 
   SpaGCN:
-    description: "Spatial Graph Convolutional Network (spatial domain)"
+    description: "[DEPRECATED] Spatial Graph Convolutional Network — removed (requires C/C++ compilation)"
     https: "https://github.com/jianhuupenn/SpaGCN.git"
     ssh: "git@github.com:jianhuupenn/SpaGCN.git"
     pip_install: "git+https://github.com/jianhuupenn/SpaGCN.git#subdirectory=SpaGCN_package"
-    category: "spatial_domain"
-    notes: "setup.py is under SpaGCN_package/ subdirectory; needs C/C++ compiler and cmake for louvain"
+    category: "deprecated"
+    notes: "Removed in 2026-05-03: requires cmake + C/C++ compiler, never worked"
     dependencies: ["cmake", "gcc_linux-64", "gxx_linux-64"]
 
   PhenoGraph:
@@ -84,6 +84,14 @@ tools:
     ssh: "git@github.com:prism-oncology/sopa.git"
     pip_install: "sopa"
     category: "pipeline"
+
+  Baysor:
+    description: "Bayesian segmentation of spatial transcriptomics (Julia)"
+    https: "https://github.com/kharchenkolab/Baysor.git"
+    ssh: "git@github.com:kharchenkolab/Baysor.git"
+    category: "segmentation"
+    notes: "Julia package. Install Julia first (conda install -c conda-forge julia), then: julia -e 'using Pkg; Pkg.add(url=\"https://github.com/kharchenkolab/Baysor.git\")'"
+    julia_pkg: "https://github.com/kharchenkolab/Baysor.git"
 
 # Tools installed directly from PyPI (no git clone needed)
 pypi_tools:

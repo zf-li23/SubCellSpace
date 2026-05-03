@@ -53,8 +53,6 @@ pipeline:
         - spatial_leiden: "Leiden clustering on spatial neighbors graph"
         - spatial_kmeans: "KMeans clustering on spatial coordinates"
         - graphst: "Graph-guided Spatial Transformer (GraphST)"
-        - stagate: "Spatially-Aware Graph Attention Autoencoder (STAGATE)"
-        - spagcn: "Spatial Graph Convolutional Network (SpaGCN)"
 
     subcellular_spatial_domain:
       module: "src.steps.subcellular_spatial_domain"
@@ -91,6 +89,7 @@ pipeline:
       description: "Multi-faceted spatial analysis"
       available_backends:
         - squidpy: "Spatially variable genes, neighbourhood enrichment, cell co-occurrence"
+        - scfates: "Tree inference and pseudotime trajectory analysis"
 
     subcellular_analysis:
       module: "src.steps.subcellular_analysis"

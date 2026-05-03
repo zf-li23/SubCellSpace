@@ -114,6 +114,7 @@ export default function App() {
     annotation: 'rank_marker',
     spatialDomain: 'spatial_leiden',
     subcellularDomain: 'hdbscan',
+    spatialAnalysis: 'squidpy',
   })
 
   const navItems: Array<{ route: Route; label: string; icon: string }> = [

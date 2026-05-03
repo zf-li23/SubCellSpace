@@ -162,6 +162,7 @@ export type BackendConfig = {
   annotation: string
   spatialDomain: string
   subcellularDomain: string
+  spatialAnalysis: string
 }
 
 export type CosmxRunOptions = {
@@ -229,6 +230,7 @@ function withBackendQuery(url: string, backendConfig?: BackendConfig): string {
     annotation: backendConfig.annotation,
     spatial_domain: backendConfig.spatialDomain,
     subcellular_domain: backendConfig.subcellularDomain,
+    spatial_analysis: backendConfig.spatialAnalysis,
   })
 
   return `${url}?${searchParams.toString()}`
@@ -371,6 +373,7 @@ export async function runCosmxPipeline(
         spatial_domain_resolution: options.spatialDomainResolution ?? 1.0,
         n_spatial_domains: options.nSpatialDomains ?? null,
         subcellular_domain_backend: backendConfig.subcellularDomain,
+        spatial_analysis_backend: backendConfig.spatialAnalysis,
       }),
     })
 

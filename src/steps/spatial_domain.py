@@ -19,24 +19,10 @@ logger = logging.getLogger(__name__)
 # ── Backend availability flags ─────────────────────────────────────────────
 
 _GRAPHST_AVAILABLE: bool = False
-_STAGATE_AVAILABLE: bool = False
-_SPAGCN_AVAILABLE: bool = False
 
 try:
     import GraphST  # noqa: F401
     _GRAPHST_AVAILABLE = True
-except ImportError:
-    pass
-
-try:
-    import STAGATE  # noqa: F401
-    _STAGATE_AVAILABLE = True
-except ImportError:
-    pass
-
-try:
-    import SpaGCN  # noqa: F401
-    _SPAGCN_AVAILABLE = True
 except ImportError:
     pass
 
@@ -249,192 +235,21 @@ def _domain_graphst(
     return "graphst"
 
 
-def _domain_stagate(
-    adata: sc.AnnData,
-    _domain_resolution: float = 1.0,
-    n_spatial_domains: int | None = None,  # noqa: ARG001
-) -> str:
-    """STAGATE: Spatially-Aware Graph Attention Autoencoder.
-
-    Learns latent representations using a graph attention autoencoder
-    that incorporates spatial information. Then clusters embeddings
-    with KMeans to identify spatial domains.
-
-    All failures (import, preprocessing, training, shape mismatches)
-    degrade gracefully to spatial_leiden fallback.
-    """
-    try:
-        import STAGATE
-    except ImportError as exc:
-        raise ImportError(
-            "STAGATE backend requires 'STAGATE' to be installed. "
-            "Run: pip install -e tools/STAGATE/"
-        ) from exc
-
-    # Preprocess
-    adata_tmp = adata.copy()
-    sc.pp.normalize_total(adata_tmp, target_sum=1e4)
-    sc.pp.log1p(adata_tmp)
-    sc.pp.highly_variable_genes(adata_tmp, flavor="seurat_v3", n_top_genes=min(2000, adata_tmp.n_vars))
-    if "highly_variable" in adata_tmp.var and adata_tmp.var["highly_variable"].any():
-        adata_tmp = adata_tmp[:, adata_tmp.var.highly_variable].copy()
-    else:
-        logger.warning("STAGATE: HVG selection produced no genes, using all genes.")
-    sc.pp.scale(adata_tmp, max_value=10)
-
-    # Calculate spatial network from coordinates
-    coords = adata.obsm["spatial"]
-    adata_tmp.obsm["spatial"] = coords.copy()
-    STAGATE.Cal_Spatial_Net(adata_tmp, rad_cutoff=None, k_cutoff=None, model="Radius", verbose=False)
-
-    # Train STAGATE to get embeddings
-    try:
-        adata_tmp, _ = STAGATE.train_STAGATE(
-            adata_tmp,
-            hidden_dims=[512, 30],
-            alpha=0,
-            n_epochs=500,
-            lr=0.0001,
-            key_added="STAGATE",
-            verbose=False,
-        )
-    except Exception as exc:
-        logger.warning("STAGATE training failed: %s. Falling back to spatial_leiden.", exc)
-        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
-
-    # Debug: probe STAGATE output
-    logger.info("STAGATE: adata_tmp.obsm keys = %s", list(adata_tmp.obsm.keys()))
-    logger.info("STAGATE: adata_tmp.n_obs = %d, adata.n_obs = %d", adata_tmp.n_obs, adata.n_obs)
-
-    # Guard: empty return
-    if adata_tmp.n_obs == 0:
-        logger.warning("STAGATE returned empty adata. Falling back to spatial_leiden.")
-        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
-
-    # Probe for the correct embedding key
-    known_emb_keys = {"STAGATE", "embedding", "latent", "stagate_emb"}
-    emb_key: str | None = None
-    for k in known_emb_keys:
-        if k in adata_tmp.obsm:
-            emb_key = k
-            break
-    if emb_key is None and adata_tmp.obsm:
-        emb_key = list(adata_tmp.obsm.keys())[0]
-        logger.info("STAGATE: No known embedding key found, using '%s' as fallback.", emb_key)
-
-    if emb_key is None or emb_key not in adata_tmp.obsm:
-        logger.warning("STAGATE: No embeddings found. Falling back to spatial_leiden.")
-        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
-
-    embed = adata_tmp.obsm[emb_key]
-
-    # Guard: embedding shape mismatch (e.g. STAGATE filtered cells)
-    if embed.shape[0] != adata.n_obs or embed.shape[0] != adata_tmp.n_obs:
-        logger.warning(
-            "STAGATE: embedding shape mismatch — embed=%s, adata_tmp.n_obs=%d, adata.n_obs=%d. "
-            "Falling back to spatial_leiden.",
-            embed.shape,
-            adata_tmp.n_obs,
-            adata.n_obs,
-        )
-        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
-
-    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(
-        2, int(np.sqrt(adata.n_obs) // 2 + 2)
-    )
-    n_clusters = max(2, min(int(n_clusters), adata_tmp.n_obs))
-
-    labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(embed)
-
-    # Final guard: label count mismatch
-    if len(labels) != adata.n_obs:
-        logger.warning(
-            "STAGATE: label count mismatch (%d vs %d). Falling back to spatial_leiden.",
-            len(labels),
-            adata.n_obs,
-        )
-        return _domain_spatial_leiden(adata, _domain_resolution, n_spatial_domains)
-
-    adata.obs["spatial_domain"] = labels.astype(str)
-    return "stagate"
-
-
-def _domain_spagcn(
-    adata: sc.AnnData,
-    _domain_resolution: float = 1.0,
-    n_spatial_domains: int | None = None,
-) -> str:
-    """SpaGCN: Spatial Graph Convolutional Network.
-
-    Constructs a spatial adjacency graph and uses a GCN to assign
-    spatial domains. For CosMx transcript-only data (no image),
-    it runs with histology=False.
-    """
-    try:
-        import SpaGCN
-    except ImportError as exc:
-        raise ImportError(
-            "SpaGCN backend requires 'SpaGCN' to be installed. "
-            "Run: pip install -e tools/SpaGCN/"
-        ) from exc
-
-    coords = adata.obsm["spatial"]
-    x_array = coords[:, 0].tolist()
-    y_array = coords[:, 1].tolist()
-
-    n_clusters = n_spatial_domains if n_spatial_domains is not None else max(
-        2, int(np.sqrt(adata.n_obs) // 2 + 2)
-    )
-    n_clusters = max(2, min(int(n_clusters), adata.n_obs))
-
-    # Preprocess adata
-    adata_tmp = adata.copy()
-    sc.pp.normalize_total(adata_tmp, target_sum=1e4)
-    sc.pp.log1p(adata_tmp)
-
-    # Run SpaGCN's easy-mode detection (no image)
-    y_pred = SpaGCN.detect_spatial_domains_ez_mode(
-        adata_tmp,
-        img=None,
-        x_array=x_array,
-        y_array=y_array,
-        x_pixel=x_array,
-        y_pixel=y_array,
-        n_clusters=n_clusters,
-        histology=False,
-        s=1,
-        b=49,
-        p=0.5,
-        r_seed=100,
-        t_seed=100,
-        n_seed=100,
-    )
-
-    adata.obs["spatial_domain"] = y_pred.astype(str)
-    return "spagcn"
-
-
 # Register backends
 register_backend("spatial_domain", "spatial_leiden")(_domain_spatial_leiden)
 register_backend("spatial_domain", "spatial_kmeans")(_domain_spatial_kmeans)
 register_backend("spatial_domain", "graphst")(_domain_graphst)
-register_backend("spatial_domain", "stagate")(_domain_stagate)
-register_backend("spatial_domain", "spagcn")(_domain_spagcn)
 
 # Declare capabilities
 declare_capabilities("spatial_domain", "spatial_leiden", ["spatial_domains"])
 declare_capabilities("spatial_domain", "spatial_kmeans", ["spatial_domains"])
 declare_capabilities("spatial_domain", "graphst", ["spatial_domains"])
-declare_capabilities("spatial_domain", "stagate", ["spatial_domains"])
-declare_capabilities("spatial_domain", "spagcn", ["spatial_domains"])
 
 # Dispatch table
 _SPATIAL_DOMAIN_FUNCS = {
     "spatial_leiden": _domain_spatial_leiden,
     "spatial_kmeans": _domain_spatial_kmeans,
     "graphst": _domain_graphst,
-    "stagate": _domain_stagate,
-    "spagcn": _domain_spagcn,
 }
 
 

@@ -79,6 +79,7 @@ class CosmxRunRequest(BaseModel):
     spatial_domain_resolution: float = 1.0
     n_spatial_domains: int | None = None
     subcellular_domain_backend: str = "hdbscan"
+    spatial_analysis_backend: str = "squidpy"
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────
@@ -137,6 +138,7 @@ def _resolve_output_dir(request: CosmxRunRequest) -> Path:
                 request.annotation_backend,
                 request.spatial_domain_backend,
                 request.subcellular_domain_backend,
+                request.spatial_analysis_backend,
                 str(request.min_transcripts),
                 str(request.min_genes),
                 str(request.leiden_resolution),
@@ -161,6 +163,11 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
         request.subcellular_domain_backend,
         get_available_backends("subcellular_spatial_domain"),
     )
+    _validate_backend(
+        "spatial_analysis_backend",
+        request.spatial_analysis_backend,
+        get_available_backends("spatial_analysis"),
+    )
 
     input_csv_path = _resolve_under_repo(request.input_csv)
     if not input_csv_path.exists():
@@ -180,6 +187,7 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
         spatial_domain_resolution=request.spatial_domain_resolution,
         n_spatial_domains=request.n_spatial_domains,
         subcellular_domain_backend=request.subcellular_domain_backend,
+        spatial_analysis_backend=request.spatial_analysis_backend,
     )
 
     report = json.loads(result.report_path.read_text(encoding="utf-8"))

@@ -21,7 +21,7 @@
 
 All 6 phases implemented. TypeScript: zero errors. Vite build: successful.
 
-All 22 registered backends are listed in BackendSwitch (including sparc, scvi, celltypist, graphst, stagate, spagcn, hdbscan, phenograph, etc.).
+All 23 registered backends are listed in BackendSwitch (including sparc, scvi, celltypist, graphst, scfates, hdbscan, phenograph, etc.).
 
 ## Known Limitations
 
