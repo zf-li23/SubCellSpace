@@ -9,6 +9,8 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 
+from ..constants import COL_CELL_ID, COL_CELLCOMP, COL_FOV, COL_GENE, resolve_col, resolve_col_strict
+
 
 def _safe_ratio(numerator: float, denominator: float) -> float:
     if denominator == 0:
@@ -74,8 +76,13 @@ def build_layer_evaluation(
     segmented_df: pd.DataFrame,
     adata: ad.AnnData,
 ) -> dict[str, Any]:
+    cell_col = resolve_col_strict(raw_df.columns, COL_CELL_ID)
+    gene_col = resolve_col_strict(raw_df.columns, COL_GENE)
+    cc_col = resolve_col_strict(raw_df.columns, COL_CELLCOMP)
+    fov_col = resolve_col(raw_df.columns, COL_FOV)
+
     transcripts_per_cell = (
-        segmented_df.groupby("cell")["target"].size() if len(segmented_df) else pd.Series(dtype=float)
+        segmented_df.groupby(cell_col)[gene_col].size() if len(segmented_df) else pd.Series(dtype=float)
     )
     n_clusters = int(adata.obs["cluster"].nunique()) if "cluster" in adata.obs else 0
     n_cell_types = int(adata.obs["cell_type"].nunique()) if "cell_type" in adata.obs else 0
@@ -94,21 +101,21 @@ def build_layer_evaluation(
     evaluation = {
         "ingestion": {
             "n_transcripts": int(len(raw_df)),
-            "n_cells_raw": int(raw_df["cell"].astype(str).nunique()),
-            "n_genes_raw": int(raw_df["target"].astype(str).nunique()),
-            "n_fovs": int(raw_df["fov"].nunique()),
-            "cellcomp_distribution": _series_distribution(raw_df["CellComp"]),
-            "missing_cell_ratio": _safe_ratio(float(raw_df["cell"].isna().sum()), float(len(raw_df))),
+            "n_cells_raw": int(raw_df[cell_col].astype(str).nunique()),
+            "n_genes_raw": int(raw_df[gene_col].astype(str).nunique()),
+            "n_fovs": int(raw_df[fov_col].nunique()) if fov_col else 1,
+            "cellcomp_distribution": _series_distribution(raw_df[cc_col]),
+            "missing_cell_ratio": _safe_ratio(float(raw_df[cell_col].isna().sum()), float(len(raw_df))),
         },
         "denoise": {
             "n_transcripts_before": int(len(raw_df)),
             "n_transcripts_after": int(len(denoised_df)),
             "retained_ratio": _safe_ratio(float(len(denoised_df)), float(len(raw_df))),
-            "cellcomp_distribution_after": _series_distribution(denoised_df["CellComp"]) if len(denoised_df) else {},
+            "cellcomp_distribution_after": _series_distribution(denoised_df[cc_col]) if len(denoised_df) and cc_col in denoised_df.columns else {},
         },
         "segmentation": {
             "n_transcripts_assigned": int(len(segmented_df)),
-            "n_cells_assigned": int(segmented_df["cell"].nunique()) if len(segmented_df) else 0,
+            "n_cells_assigned": int(segmented_df[cell_col].nunique()) if len(segmented_df) and cell_col in segmented_df.columns else 0,
             "assignment_ratio": _safe_ratio(float(len(segmented_df)), float(len(denoised_df))),
             "mean_transcripts_per_cell": float(transcripts_per_cell.mean()) if len(transcripts_per_cell) else 0.0,
             "median_transcripts_per_cell": float(transcripts_per_cell.median()) if len(transcripts_per_cell) else 0.0,
@@ -117,7 +124,7 @@ def build_layer_evaluation(
             "n_cells_after_qc": int(adata.n_obs),
             "n_genes_after_hvg": int(adata.n_vars),
             "qc_pass_ratio_vs_segmented": _safe_ratio(
-                float(adata.n_obs), float(segmented_df["cell"].nunique() if len(segmented_df) else 0)
+                float(adata.n_obs), float(segmented_df[cell_col].nunique() if len(segmented_df) and cell_col in segmented_df.columns else 0)
             ),
             "median_total_counts": float(adata.obs["total_counts"].median()) if "total_counts" in adata.obs else 0.0,
             "median_n_genes_by_counts": float(adata.obs["n_genes_by_counts"].median())
@@ -159,7 +166,7 @@ def build_layer_evaluation(
             else 1.0,
             "n_transcripts_in_multi_domain_cells": int(
                 segmented_df[
-                    segmented_df["cell"].isin(adata.obs_names[adata.obs["n_subcellular_domains"].gt(1)])
+                    segmented_df[cell_col].isin(adata.obs_names[adata.obs["n_subcellular_domains"].gt(1)])
                 ].shape[0]
             )
             if (

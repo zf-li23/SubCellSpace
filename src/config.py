@@ -213,6 +213,8 @@ class Settings:
                         "subcellular_spatial_domain",
                         "analysis",
                         "annotation",
+                        "spatial_analysis",
+                        "subcellular_analysis",
                     ],
                     "steps_config": {
                         "denoise": {
@@ -244,6 +246,16 @@ class Settings:
                             "module": "src.steps.annotation",
                             "default_backend": "rank_marker",
                             "description": "Cell-type annotation",
+                        },
+                        "spatial_analysis": {
+                            "module": "src.steps.spatial_analysis",
+                            "default_backend": "squidpy",
+                            "description": "Multi-faceted spatial analysis",
+                        },
+                        "subcellular_analysis": {
+                            "module": "src.steps.subcellular_analysis",
+                            "default_backend": "rna_localization",
+                            "description": "Subcellular RNA analysis",
                         },
                     },
                 }

@@ -9,7 +9,7 @@ import squidpy as sq
 from sklearn.cluster import KMeans
 
 from ..models import StepResult
-from ..registry import register_backend, register_runner
+from ..registry import declare_capabilities, register_backend, register_runner
 
 if TYPE_CHECKING:
     from ..pipeline_engine import ExecutionContext
@@ -420,6 +420,13 @@ register_backend("spatial_domain", "spatial_kmeans")(_domain_spatial_kmeans)
 register_backend("spatial_domain", "graphst")(_domain_graphst)
 register_backend("spatial_domain", "stagate")(_domain_stagate)
 register_backend("spatial_domain", "spagcn")(_domain_spagcn)
+
+# Declare capabilities
+declare_capabilities("spatial_domain", "spatial_leiden", ["spatial_domains"])
+declare_capabilities("spatial_domain", "spatial_kmeans", ["spatial_domains"])
+declare_capabilities("spatial_domain", "graphst", ["spatial_domains"])
+declare_capabilities("spatial_domain", "stagate", ["spatial_domains"])
+declare_capabilities("spatial_domain", "spagcn", ["spatial_domains"])
 
 # Dispatch table
 _SPATIAL_DOMAIN_FUNCS = {

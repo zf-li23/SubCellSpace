@@ -31,6 +31,24 @@ class DatasetSummary:
 
 
 @dataclass(slots=True)
+class IngestResult:
+    """Result of Phase 0: Data Ingestion.
+
+    Attributes
+    ----------
+    sdata : SpatialData
+        The standardised spatial data object.
+    summary : DatasetSummary
+        Dataset-level summary statistics.
+    platform : str
+        Platform identifier string.
+    """
+    sdata: SpatialData
+    summary: DatasetSummary
+    platform: str
+
+
+@dataclass(slots=True)
 class StepResult:
     """Standardised return value for every pipeline step.
 

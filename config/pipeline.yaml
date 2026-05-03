@@ -18,6 +18,8 @@ pipeline:
     - subcellular_spatial_domain  # ← subcellular domain grouping
     - analysis                 # ← clustering & expression
     - annotation               # ← cell-type annotation
+    - spatial_analysis         # ← multi-faceted spatial analysis (SVG, neighborhood, etc.)
+    - subcellular_analysis     # ← RNA localization, co-localization network
 
   # Step definitions
   # Each step specifies its module and default backend.
@@ -82,3 +84,18 @@ pipeline:
         - cluster_label: "Map cluster IDs to cell type labels"
         - rank_marker: "Annotate based on top differentially expressed genes"
         - celltypist: "Automated cell-type annotation using CellTypist reference models"
+
+    spatial_analysis:
+      module: "src.steps.spatial_analysis"
+      default_backend: "squidpy"
+      description: "Multi-faceted spatial analysis"
+      available_backends:
+        - squidpy: "Spatially variable genes, neighbourhood enrichment, cell co-occurrence"
+
+    subcellular_analysis:
+      module: "src.steps.subcellular_analysis"
+      default_backend: "rna_localization"
+      description: "Subcellular RNA analysis"
+      available_backends:
+        - rna_localization: "RNA radial distance and localization metrics"
+        - scrin_stub: "SCRIN co-localization network stub"

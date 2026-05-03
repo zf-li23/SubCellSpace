@@ -15,7 +15,8 @@ from .benchmark import run_cosmx_backend_benchmark
 from .config import settings as _settings
 from .io import get_available_platforms
 from .pipelines.cosmx_minimal import run_cosmx_minimal
-from .registry import get_available_backends
+from .pipeline_engine import run_pipeline
+from .registry import get_all_capabilities, get_available_backends
 
 # ── Configurable defaults (from centralized configuration system) ─────────
 DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMX_1000cells.csv"))
@@ -209,24 +210,76 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/meta/backends")
-def backends() -> dict[str, list[str]]:
-    return {
-        "denoise": get_available_backends("denoise"),
-        "segmentation": get_available_backends("segmentation"),
-        "clustering": get_available_backends("analysis"),
-        "annotation": get_available_backends("annotation"),
-        "spatial_domain": get_available_backends("spatial_domain"),
-        "subcellular_spatial_domain": get_available_backends("subcellular_spatial_domain"),
-    }
+def backends() -> dict[str, Any]:
+    """Return all backends with capabilities."""
+    caps = get_all_capabilities()
+    result: dict[str, Any] = {}
+    for step_name in ["denoise", "segmentation", "spatial_domain",
+                       "subcellular_spatial_domain", "analysis",
+                       "annotation", "spatial_analysis", "subcellular_analysis"]:
+        available = get_available_backends(step_name)
+        step_caps = caps.get(step_name, {})
+        backends_info: dict[str, Any] = {}
+        for b in available:
+            backends_info[b] = {"available": True, "capabilities": step_caps.get(b, [])}
+        if backends_info:
+            result[step_name] = backends_info
+    return result
 
 
 @app.get("/api/meta/platforms")
 def platforms() -> dict[str, list[str]]:
-    """Return the list of supported data platforms (CosMx, Xenium, MERFISH, Stereo-seq, …)."""
+    """Return the list of supported data platforms."""
     return {"platforms": get_available_platforms()}
 
 
-# ── Per-backend statistics (static-first: one load, client-side filtering) ─
+@app.post("/api/pipeline/run")
+def pipeline_run(
+    sdata_path: str = Body(default="outputs/ingested/experiment.zarr"),
+    output_dir: str = Body(default="outputs/api_runs"),
+    min_transcripts: int = Body(default=10),
+    min_genes: int = Body(default=10),
+    denoise_backend: str = Body(default="intracellular"),
+    segmentation_backend: str = Body(default="provided_cells"),
+    clustering_backend: str = Body(default="leiden"),
+    leiden_resolution: float = Body(default=1.0),
+    annotation_backend: str = Body(default="rank_marker"),
+    spatial_domain_backend: str = Body(default="spatial_leiden"),
+    spatial_domain_resolution: float = Body(default=1.0),
+    n_spatial_domains: int | None = Body(default=None),
+    subcellular_domain_backend: str = Body(default="hdbscan"),
+    spatial_analysis_backend: str = Body(default="squidpy"),
+    subcellular_analysis_backend: str = Body(default="rna_localization"),
+) -> dict[str, Any]:
+    """Run the full pipeline from a pre-ingested .zarr file."""
+    import spatialdata
+    sdata_path_obj = _resolve_under_repo(sdata_path)
+    if not sdata_path_obj.exists():
+        raise HTTPException(status_code=404, detail=f"SpatialData not found: {sdata_path_obj}")
+    output_dir_obj = _ensure_under_outputs(_resolve_under_repo(output_dir))
+
+    sdata = spatialdata.read_zarr(sdata_path_obj)
+    result = run_pipeline(
+        sdata=sdata, output_dir=output_dir_obj,
+        min_transcripts=min_transcripts, min_genes=min_genes,
+        denoise_backend=denoise_backend,
+        segmentation_backend=segmentation_backend,
+        clustering_backend=clustering_backend,
+        leiden_resolution=leiden_resolution,
+        annotation_backend=annotation_backend,
+        spatial_domain_backend=spatial_domain_backend,
+        spatial_domain_resolution=spatial_domain_resolution,
+        n_spatial_domains=n_spatial_domains,
+        subcellular_domain_backend=subcellular_domain_backend,
+        spatial_analysis_backend=spatial_analysis_backend,
+        subcellular_analysis_backend=subcellular_analysis_backend,
+    )
+    report = json.loads(result.report_path.read_text(encoding="utf-8"))
+    report["api"] = {"sdata_path": sdata_path, "output_dir": str(output_dir_obj)}
+    return report
+
+
+# ── Per-backend statistics ────────────────────────────────────────────────
 
 
 @app.get("/api/stats/by-backend")

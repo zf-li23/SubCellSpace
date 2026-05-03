@@ -20,6 +20,8 @@ dependencies = [
   "scipy>=1.13",
   "spatialdata>=0.3",
   "squidpy>=1.7",
+  "geopandas>=1.0",
+  "shapely>=2.0",
   "uvicorn[standard]>=0.30",
   "igraph>=0.11",
   "leidenalg>=0.10",
@@ -36,9 +38,13 @@ cellpose = ["cellpose>=3.0"]  # requires external microscopy image (DAPI) for se
 baysor = []  # NOT available: requires Julia runtime; not tracked in Python toolchain
 
 # Spatial domain backends
-graphst = ["pot"]  # GraphST installed via -e tools/GraphST/; pot is an extra pip dependency
-stagate = []  # installed manually (needs tensorflow)
-spagcn = []   # installed manually (needs compilation); ⚠️ installed but not fully benchmark-verified
+graphst = ["pot"]
+stagate = []  # needs tensorflow
+spagcn = []   # needs compilation
+
+# Spatial analysis backends (Phase 6)
+scfates = []  # installed via -e tools/scFates/ (tree inference + pseudotime)
+snakemake = ["snakemake>=9.0"]  # workflow engine for patchify scheduling
 
 # Subcellular spatial domain backends
 phenograph = []  # installed via -e tools/PhenoGraph/

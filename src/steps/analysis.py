@@ -8,6 +8,7 @@ import scanpy as sc
 import squidpy as sq
 from sklearn.cluster import KMeans
 
+from ..constants import COL_CELL_ID, COL_GENE, resolve_col_strict
 from ..models import StepResult
 from ..registry import register_backend, register_runner
 

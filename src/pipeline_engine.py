@@ -25,8 +25,8 @@ import pandas as pd
 from .config import PipelineConfig, Settings
 from .errors import PipelineContractError, PipelineDataError, PipelineStepError
 from .evaluation import build_layer_evaluation
-from .io import get_loader
-from .io.cosmx import build_cell_level_adata, build_spatialdata, load_cosmx_transcripts, summarize_cosmx_transcripts
+from .io import get_ingestor
+from .io.cosmx import build_cell_level_adata, build_spatialdata_from_adata, load_cosmx_transcripts, summarize_cosmx_transcripts
 from .models import PipelineResult, StepResult
 from .registry import get_available_backends, get_runner, load_backends
 from .validation import validate_contract
@@ -49,7 +49,7 @@ class ExecutionContext:
     denoised_df: pd.DataFrame | None = None
     segmented_df: pd.DataFrame | None = None
     adata: Any = None  # AnnData
-    sdata: Any = None  # SpatialData
+    sdata: Any = None  # SpatialData — Phase 0+ canonical container
 
     # Optional: denoised expression matrix (e.g., from spARC backend)
     denoised_expression: Any = None  # np.ndarray | pd.DataFrame | None
@@ -140,45 +140,25 @@ def _run_step(
     return result
 
 
-def _resolve_platform_loader(platform: str | None, _input_csv: Path) -> Any:
-    """Return a loader for *platform*, falling back to CosMx.
-
-    If *platform* is None or ``"cosmx"``, the CosMx legacy module-level
-    functions are returned.  Otherwise ``get_loader(platform)`` is used.
-    """
-    if platform is None or platform == "cosmx":
-        return None  # signal: use legacy CosMx functions
-    return get_loader(platform)
-
-
 # ── Main pipeline runner ───────────────────────────────────────────
 
 
 def run_pipeline(
     settings: Settings | None = None,
+    sdata: Any = None,   # ← NEW: pre-ingested SpatialData (Phase 0)
     **overrides: Any,
 ) -> PipelineResult:
     """Run the full pipeline with plugin-style step execution.
 
-    Unified error handling wraps step failures in ``PipelineStepError``.
-    Inter-step data contracts are validated after each step via
-    ``validate_contract``.
-
     Parameters
     ----------
     settings : Settings or None
-        Configuration settings.  If None, the global ``settings``
-        singleton is used.
+        Configuration settings.
+    sdata : SpatialData or None
+        Pre-ingested spatial data object (from Phase 0).  If provided,
+        the pipeline skips data loading and uses this directly.
     **overrides
-        Any keyword argument overrides the corresponding configuration
-        value (highest priority).  Supported keys match the pipeline
-        function parameters in ``cosmx_minimal.py``:
-        ``input_csv``, ``output_dir``, ``min_transcripts``,
-        ``min_genes``, ``denoise_backend``, ``segmentation_backend``,
-        ``clustering_backend``, ``leiden_resolution``,
-        ``annotation_backend``, ``spatial_domain_backend``,
-        ``spatial_domain_resolution``, ``n_spatial_domains``,
-        ``subcellular_domain_backend``.
+        Any keyword argument overrides configuration values.
 
     Raises
     ------
@@ -189,6 +169,7 @@ def run_pipeline(
     PipelineDataError
         If data loading fails.
     """
+    from .constants import KEY_RAW_TRANSCRIPTS
     from .config import settings as default_settings
 
     settings = settings or default_settings
@@ -206,7 +187,6 @@ def run_pipeline(
     )
 
     # Resolve input / output
-    input_csv = Path(str(settings.get("input_csv", "data/sample_transcripts.csv")))
     output_dir = Path(str(settings.get("output_dir", "outputs")))
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -217,29 +197,68 @@ def run_pipeline(
     ctx = ExecutionContext(
         settings=settings,
         pipeline_config=cfg,
-        input_csv=input_csv,
         output_dir=output_dir,
+        sdata=sdata,
     )
 
-    # ── Data loading (always the first step) ─────────────────────────
-    logger.info("Loading transcripts from %s", input_csv)
-    platform = str(settings.get("platform", "cosmx"))
-    loader = _resolve_platform_loader(platform, input_csv)
-    try:
-        if loader is None:
-            # Legacy CosMx path (backward compatible)
-            ctx.transcripts = load_cosmx_transcripts(input_csv)
-            summary_ds = summarize_cosmx_transcripts(ctx.transcripts, input_csv)
-        else:
-            # Multi-platform path
-            ctx.transcripts = loader.load(input_csv)
-            summary_ds = loader.summarize(ctx.transcripts, input_csv)
-    except Exception as exc:
-        raise PipelineDataError(
-            f"Failed to load data for platform '{platform}' from {input_csv}: {exc}",
-            original=exc,
-            context={"platform": platform, "path": str(input_csv)},
-        ) from exc
+    # ── Data loading (Phase 0 or legacy) ────────────────────────────
+    if sdata is not None:
+        # ── Phase 0+ path: data already ingested as SpatialData ────
+        logger.info("Using pre-ingested SpatialData (Phase 0 path)")
+        ctx.sdata = sdata
+
+        # Extract transcripts from SpatialData points layer
+        points_key = sdata.attrs.get("raw_transcripts_key", KEY_RAW_TRANSCRIPTS)
+        if points_key not in sdata.points:
+            raise PipelineDataError(
+                f"SpatialData does not contain '{points_key}' in points layer.",
+                context={"available_points": list(sdata.points.keys())},
+            )
+        ctx.transcripts = sdata.points[points_key].compute()
+
+        # Build summary from attrs
+        summary_dict = sdata.attrs.get("ingestion_summary", {})
+        from .models import DatasetSummary
+        summary_ds = DatasetSummary(
+            source_path=Path(str(settings.get("input_csv", "unknown"))),
+            n_transcripts=summary_dict.get("n_transcripts", len(ctx.transcripts)),
+            n_cells=summary_dict.get("n_cells", 0),
+            n_genes=summary_dict.get("n_genes", 0),
+            n_fovs=summary_dict.get("n_fovs", 1),
+            extra={k: v for k, v in summary_dict.items()
+                   if k not in ("n_transcripts", "n_cells", "n_genes", "n_fovs")},
+        )
+    else:
+        # ── Legacy path: load CSV directly (backward compat) ────────
+        input_csv = Path(str(settings.get("input_csv", "data/sample_transcripts.csv")))
+        ctx.input_csv = input_csv
+        logger.info("Loading transcripts from %s (legacy path)", input_csv)
+        platform = str(settings.get("platform", "cosmx"))
+        try:
+            if platform == "cosmx":
+                ctx.transcripts = load_cosmx_transcripts(input_csv)
+                summary_ds = summarize_cosmx_transcripts(ctx.transcripts, input_csv)
+            else:
+                sd = get_ingestor(platform).ingest(input_csv)
+                ctx.sdata = sd
+                pts_key = sd.attrs.get("raw_transcripts_key", KEY_RAW_TRANSCRIPTS)
+                ctx.transcripts = sd.points[pts_key].compute()
+                summary_dict = sd.attrs.get("ingestion_summary", {})
+                from .models import DatasetSummary
+                summary_ds = DatasetSummary(
+                    source_path=input_csv,
+                    n_transcripts=summary_dict.get("n_transcripts", 0),
+                    n_cells=summary_dict.get("n_cells", 0),
+                    n_genes=summary_dict.get("n_genes", 0),
+                    n_fovs=summary_dict.get("n_fovs", 1),
+                    extra={},
+                )
+        except Exception as exc:
+            raise PipelineDataError(
+                f"Failed to load data for platform '{platform}' from {input_csv}: {exc}",
+                original=exc,
+                context={"platform": platform, "path": str(input_csv)},
+            ) from exc
 
     # ── Dynamic step execution ───────────────────────────────────────
     step_names = cfg.get_step_names()
@@ -308,7 +327,13 @@ def run_pipeline(
     # ── Build final outputs ──────────────────────────────────────────
     if ctx.adata is None:
         ctx.adata = build_cell_level_adata(ctx.segmented_df)
-    sdata = build_spatialdata(ctx.adata)
+
+    # Use existing SpatialData if available (Phase 0+), otherwise build
+    if ctx.sdata is not None:
+        sdata = ctx.sdata
+    else:
+        sdata = build_spatialdata_from_adata(ctx.adata)
+        ctx.sdata = sdata
 
     layer_evaluation = build_layer_evaluation(
         raw_df=ctx.transcripts,
@@ -317,17 +342,21 @@ def run_pipeline(
         adata=ctx.adata,
     )
 
-    adata_path = output_dir / "cosmx_minimal.h5ad"
-    report_path = output_dir / "cosmx_minimal_report.json"
-    transcripts_path = output_dir / "cosmx_minimal_transcripts.parquet"
+    cfg_name = cfg.name or "pipeline"
+    adata_path = output_dir / f"{cfg_name}.h5ad"
+    report_path = output_dir / f"{cfg_name}_report.json"
+    transcripts_path = output_dir / f"{cfg_name}_transcripts.parquet"
 
     ctx.adata.write_h5ad(adata_path)
     if ctx.segmented_df is not None:
-        ctx.segmented_df.to_parquet(transcripts_path)
+        # Strip non-JSON-serializable attrs before writing parquet
+        clean_df = ctx.segmented_df.copy()
+        clean_df.attrs = {}
+        clean_df.to_parquet(transcripts_path)
 
     # Build report
     report = {
-        "input_csv": str(input_csv),
+        "input_csv": str(ctx.input_csv or settings.get("input_csv", "unknown")),
         "pipeline_name": cfg.name,
         "pipeline_version": cfg.version,
         "n_obs": int(ctx.adata.n_obs),
@@ -349,12 +378,14 @@ def run_pipeline(
             "adata": str(adata_path),
             "report": str(report_path),
             "transcripts": str(transcripts_path),
-            "spatialdata_points": list(sdata.points.keys()),
-            "spatialdata_tables": list(sdata.tables.keys()),
+            "spatialdata_points": list(sdata.points.keys()) if sdata.points else [],
+            "spatialdata_tables": list(sdata.tables.keys()) if sdata.tables else [],
+            "spatialdata_images": list(sdata.images.keys()) if sdata.images else [],
+            "spatialdata_shapes": list(sdata.shapes.keys()) if sdata.shapes else [],
         },
     }
     report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2),
+        json.dumps(report, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
 

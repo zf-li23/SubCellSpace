@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from ..constants import COL_CELL_ID, COL_CELLCOMP, COL_GENE, COL_X, COL_Y, resolve_col_strict
 from ..models import StepResult
 from ..registry import register_backend, register_runner
 
@@ -19,48 +20,34 @@ def _denoise_none(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _denoise_intracellular(df: pd.DataFrame) -> pd.DataFrame:
-    return df[df["CellComp"].isin(["Nuclear", "Cytoplasm"])].copy()
+    cc = resolve_col_strict(df.columns, COL_CELLCOMP)
+    return df[df[cc].isin(["Nuclear", "Cytoplasm"])].copy()
 
 
 def _denoise_nuclear_only(df: pd.DataFrame) -> pd.DataFrame:
-    return df[df["CellComp"] == "Nuclear"].copy()
+    cc = resolve_col_strict(df.columns, COL_CELLCOMP)
+    return df[df[cc] == "Nuclear"].copy()
 
 
 def _denoise_sparc(df: pd.DataFrame) -> pd.DataFrame:
-    """spARC (Spatially-Aware Regularized Clustering) denoising.
-
-    Builds a cell×gene expression matrix from the transcript DataFrame,
-    runs spARC to denoise the expression matrix (smoothing expression
-    values based on spatial and expression neighbourhoods), and stores
-    the denoised matrix for downstream use.
-
-    The transcript-level DataFrame is returned unchanged (all transcripts
-    pass through), because spARC operates at the expression level, not
-    the transcript level.
-    """
+    """spARC (Spatially-Aware Regularized Clustering) denoising."""
     from SPARC import spARC
 
-    # Build cell×gene expression matrix using crosstab (avoids pivot_table
-    # issues with string columns and newer pandas versions)
-    # Ensure `target` column values are 1D scalars to avoid crosstab
-    # errors when encountering non-scalar (e.g., nested) values.
+    cell_col = resolve_col_strict(df.columns, COL_CELL_ID)
+    gene_col = resolve_col_strict(df.columns, COL_GENE)
+    x_col = resolve_col_strict(df.columns, COL_X)
+    y_col = resolve_col_strict(df.columns, COL_Y)
+
     expr_matrix = pd.crosstab(
-        index=df["cell"],
-        columns=df["target"].astype(str),
+        index=df[cell_col],
+        columns=df[gene_col].astype(str),
     ).astype(np.float64)
     cells = expr_matrix.index.tolist()
     genes = expr_matrix.columns.tolist()
     X = expr_matrix.to_numpy()
 
-    # Build cell-level spatial coordinates (mean per cell)
-    spatial_coords = df.groupby("cell")[["x_global_px", "y_global_px"]].mean().to_numpy()
+    spatial_coords = df.groupby(cell_col)[[x_col, y_col]].mean().to_numpy()
 
-    # Run spARC
-    # NOTE: Do NOT pass expression_graph=True / spatial_graph=True here.
-    # spARC's fit() checks `if self.expression_graph is None:` to decide
-    # whether to build the graph; passing a bool (True) skips graph
-    # construction, and then accessing .diff_op on a bool fails with
-    # "'bool' object has no attribute 'diff_op'".
     model = spARC(
         expression_knn=15,
         spatial_knn=15,
@@ -69,14 +56,7 @@ def _denoise_sparc(df: pd.DataFrame) -> pd.DataFrame:
     )
     X_denoised = model.fit_transform(X, spatial_X=spatial_coords)
 
-
-    # Store denoised matrix as DataFrame for downstream use
-    denoised_expr_df = pd.DataFrame(
-        X_denoised,
-        index=cells,
-        columns=genes,
-    )
-    # Attach to DataFrame as an attribute so the step runner can extract it
+    denoised_expr_df = pd.DataFrame(X_denoised, index=cells, columns=genes)
     df.attrs["denoised_expression"] = denoised_expr_df
     df.attrs["denoised_backend"] = "sparc"
     return df

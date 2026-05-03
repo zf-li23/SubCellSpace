@@ -1,105 +1,57 @@
 # ─────────────────────────────────────────────────────────────────────
-# SubCellSpace Stereo-seq Data Loader (stub)
+# SubCellSpace Stereo-seq Data Ingestor
 #
-# Implements ``BaseDataLoader`` for the Stereo-seq (spatial enhanced
-# resolution omics-sequencing) platform developed by BGI / MGI.
+# Implements ``BaseIngestor`` for BGI / MGI Stereo-seq data.
+# Stereo-seq GEM / CSV input → canonical transcript table → SpatialData.
 # ─────────────────────────────────────────────────────────────────────
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import anndata as ad
-import numpy as np
 import pandas as pd
-from spatialdata import SpatialData
 
-from ..models import DatasetSummary
-from .base import BaseDataLoader
+from ..constants import (
+    COL_CELL_ID,
+    COL_GENE,
+    COL_X,
+    COL_Y,
+    PLATFORM_STEREOSEQ,
+)
+from .base import BaseIngestor, register_ingestor
 
-# Typical Stereo-seq output columns (SSAM format / BGI standard).
-STEREO_REQUIRED_COLUMNS = {"cell_id", "x", "y", "gene"}
 
+@register_ingestor(PLATFORM_STEREOSEQ)
+class StereoSeqIngestor(BaseIngestor):
+    """Ingestor for BGI / MGI Stereo-seq data.
 
-class StereoSeqDataLoader(BaseDataLoader):
-    """Data loader for BGI Stereo-seq data.
-
-    .. note::
-        This is a **stub** implementation.  Real parsing logic should
-        be added once the exact input data format is determined.
+    Stereo-seq uses a regular grid layout (bin-based, not cell-based by
+    default).  The ``cell_id`` may not be present — in that case, cells
+    will be defined by the segmentation step later.
     """
 
-    platform: str = "stereoseq"
-    required_columns: set[str] = STEREO_REQUIRED_COLUMNS
+    platform: str = PLATFORM_STEREOSEQ
 
-    def load(self, path: str | Path) -> pd.DataFrame:
-        resolved = self._validate_file_exists(path)
-        df = pd.read_csv(resolved)
-        self._validate_columns(df, path)
-        # Map Stereo-seq column names to internal schema
-        df = df.rename(
-            columns={
-                "cell_id": "cell",
-                "gene": "target",
-                "x": "x_global_px",
-                "y": "y_global_px",
-            }
-        )
-        if "CellComp" not in df.columns:
-            df["CellComp"] = "Cytoplasm"
-        if "cell_ID" not in df.columns:
-            df["cell_ID"] = df["cell"].astype(str)
-        if "fov" not in df.columns:
-            df["fov"] = 0
+    def _parse_transcripts(self, input_path: str | Path) -> pd.DataFrame:
+        resolved = self._resolve_path(input_path)
+        sep = "\t" if resolved.suffix == ".gem" else ","
+        df = pd.read_csv(resolved, sep=sep)
+
+        # geneID is preferred; fall back to gene
+        if "geneID" in df.columns:
+            required = {"x", "y", "geneID"}
+        else:
+            required = {"x", "y", "gene"}
+        self._validate_raw_columns(df, required)
         return df
 
-    def summarize(self, df: pd.DataFrame, source_path: str | Path) -> DatasetSummary:
-        source_path = Path(source_path)
-        return DatasetSummary(
-            source_path=source_path,
-            n_transcripts=int(len(df)),
-            n_cells=int(df["cell"].nunique()),
-            n_genes=int(df["target"].nunique()),
-            n_fovs=int(df["fov"].nunique()),
-            extra={"platform": "stereoseq"},
-        )
+    def _column_mapping(self) -> list[tuple[str, str]]:
+        return [
+            ("x", COL_X),
+            ("y", COL_Y),
+            ("geneID", COL_GENE),
+            ("gene", COL_GENE),
+            ("cell_id", COL_CELL_ID),
+            ("MIDCounts", "mid_counts"),
+        ]
 
-    def build_adata(self, df: pd.DataFrame) -> ad.AnnData:
-        cell_index = df["cell"].astype(str)
-        gene_index = df["target"].astype(str)
-        counts = pd.crosstab(cell_index, gene_index)
-        counts = counts.sort_index(axis=0).sort_index(axis=1)
-
-        grouped = df.groupby("cell", sort=True)
-        obs = grouped.agg(
-            n_transcripts=("target", "size"),
-            n_genes=("target", "nunique"),
-            x_global_px=("x_global_px", "mean"),
-            y_global_px=("y_global_px", "mean"),
-        )
-
-        adata = ad.AnnData(X=counts.to_numpy(dtype=np.int32), obs=obs, var=pd.DataFrame(index=counts.columns))
-        adata.obs_names = counts.index.astype(str)
-        adata.var_names = counts.columns.astype(str)
-        adata.obsm["spatial"] = obs[["x_global_px", "y_global_px"]].to_numpy(dtype=np.float32)
-        adata.layers["counts"] = adata.X.copy()
-        adata.uns["stereoseq"] = {"cell_level_source": "transcript aggregation"}
-        return adata
-
-    def build_spatialdata(self, adata: ad.AnnData) -> SpatialData:
-        from spatialdata import SpatialData, sanitize_table
-        from spatialdata.models import PointsModel
-
-        if "spatial" in adata.obsm:
-            coords = adata.obsm["spatial"]
-        else:
-            raise KeyError("No spatial coordinates in adata.obsm['spatial']")
-
-        points_frame = pd.DataFrame(
-            {"x": coords[:, 0], "y": coords[:, 1], "cell": adata.obs_names.to_numpy()},
-            index=adata.obs_names,
-        )
-        points = PointsModel.parse(points_frame)
-        table = adata.copy()
-        sanitize_table(table)
-        return SpatialData(points={"cells": points}, tables={"stereoseq_table": table})

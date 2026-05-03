@@ -1,20 +1,18 @@
 # ─────────────────────────────────────────────────────────────────────
 # SubCellSpace Data Validation Layer
-# Pydantic-based schema validation for pipeline step inputs/outputs.
 # ─────────────────────────────────────────────────────────────────────
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-import pandas as pd
+from .constants import COL_CELL_ID, COL_GENE, COL_X, COL_Y, COL_CELLCOMP, COL_FOV
 
 # ── Required column schemas per step ─────────────────────────────────
 
-DENOISE_REQUIRED_COLUMNS = {"CellComp"}
-SEGMENTATION_REQUIRED_COLUMNS = {"cell", "fov", "cell_ID"}
-SUBCELLULAR_REQUIRED_COLUMNS = {"cell", "x_global_px", "y_global_px"}
+DENOISE_REQUIRED_COLUMNS = {COL_CELLCOMP}
+SEGMENTATION_REQUIRED_COLUMNS = {COL_CELL_ID, COL_FOV}
+SUBCELLULAR_REQUIRED_COLUMNS = {COL_CELL_ID, COL_X, COL_Y}
 ANALYSIS_REQUIRED_OBSM = {"X_pca", "spatial"}
 ANNOTATION_REQUIRED_OBS = {"cluster"}
 
@@ -157,21 +155,24 @@ STEP_CONTRACTS: list[StepContract] = [
         "source": "denoise",
         "target": "segmentation",
         "checks": [
-            {"type": "df_columns", "attr": "denoised_df", "required": {"cell", "fov", "cell_ID", "target", "x_global_px", "y_global_px", "CellComp"}},
+            {"type": "df_columns", "attr": "denoised_df",
+             "required": {COL_CELL_ID, COL_FOV, COL_GENE, COL_X, COL_Y, COL_CELLCOMP}},
         ],
     },
     {
         "source": "segmentation",
         "target": "spatial_domain",
         "checks": [
-            {"type": "df_columns", "attr": "segmented_df", "required": {"cell", "fov", "cell_ID"}},
+            {"type": "df_columns", "attr": "segmented_df",
+             "required": {COL_CELL_ID, COL_FOV}},
         ],
     },
     {
         "source": "segmentation",
         "target": "subcellular_spatial_domain",
         "checks": [
-            {"type": "df_columns", "attr": "segmented_df", "required": {"cell", "x_global_px", "y_global_px"}},
+            {"type": "df_columns", "attr": "segmented_df",
+             "required": {COL_CELL_ID, COL_X, COL_Y}},
         ],
     },
     {
@@ -255,7 +256,9 @@ def validate_contract(
                         f"context.{attr_name} is not a DataFrame"
                     )
                     continue
-                missing = required - set(obj.columns)
+                # Use resolve_col to support legacy aliases
+                from .constants import resolve_col as _rc
+                missing = {c for c in required if _rc(obj.columns, c) is None}
                 if missing:
                     msgs.append(
                         f"Contract [{source_step} → {target_step}]: "

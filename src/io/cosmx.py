@@ -1,8 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────
-# SubCellSpace CosMx Data Loader
+# SubCellSpace CosMx Data Ingestor
 #
-# Implements ``BaseDataLoader`` for the NanoString CosMx platform.
-# Also exposes legacy module-level functions for backward compatibility.
+# Implements ``BaseIngestor`` for NanoString CosMx SMI data.
+# CosMx CSV input → canonical transcript table → SpatialData.
+#
+# Also provides helper functions for building AnnData and SpatialData
+# from transcript-level DataFrames that use the canonical column schema.
 # ─────────────────────────────────────────────────────────────────────
 
 from __future__ import annotations
@@ -15,128 +18,174 @@ import pandas as pd
 from spatialdata import SpatialData, sanitize_table
 from spatialdata.models import PointsModel
 
+from ..constants import (
+    COL_CELL_ID,
+    COL_CELLCOMP,
+    COL_FOV,
+    COL_GENE,
+    COL_X,
+    COL_Y,
+    KEY_MAIN_TABLE,
+    PLATFORM_COSMX,
+)
 from ..models import DatasetSummary
-from .base import BaseDataLoader
-
-REQUIRED_COLUMNS = {"fov", "cell_ID", "x_global_px", "y_global_px", "target", "CellComp", "cell"}
+from .base import BaseIngestor, register_ingestor
 
 
-class CosMxDataLoader(BaseDataLoader):
-    """Data loader for NanoString CosMx Spatial Molecular Imager data."""
-
-    platform: str = "cosmx"
-    required_columns: set[str] = REQUIRED_COLUMNS
-
-    def load(self, path: str | Path) -> pd.DataFrame:
-        resolved = self._validate_file_exists(path)
-        df = pd.read_csv(resolved)
-        self._validate_columns(df, path)
-        if "Unnamed: 0" in df.columns:
-            df = df.drop(columns=["Unnamed: 0"])
-        return df
-
-    def summarize(self, df: pd.DataFrame, source_path: str | Path) -> DatasetSummary:
-        source_path = Path(source_path)
-        return DatasetSummary(
-            source_path=source_path,
-            n_transcripts=int(len(df)),
-            n_cells=int(df["cell"].nunique()),
-            n_genes=int(df["target"].nunique()),
-            n_fovs=int(df["fov"].nunique()),
-            extra={
-                "cell_id_unique": int(df["cell_ID"].nunique()),
-                "nuclear_fraction": float((df["CellComp"] == "Nuclear").mean()),
-            },
-        )
-
-    def build_adata(self, df: pd.DataFrame) -> ad.AnnData:
-        cell_index = df["cell"].astype(str)
-        gene_index = df["target"].astype(str)
-
-        counts = pd.crosstab(cell_index, gene_index)
-        counts = counts.sort_index(axis=0).sort_index(axis=1)
-
-        grouped = df.groupby("cell", sort=True)
-        obs = grouped.agg(
-            fov=("fov", "first"),
-            cell_ID=("cell_ID", "first"),
-            n_transcripts=("target", "size"),
-            n_genes=("target", "nunique"),
-            x_global_px=("x_global_px", "mean"),
-            y_global_px=("y_global_px", "mean"),
-            x_local_px=("x_local_px", "mean"),
-            y_local_px=("y_local_px", "mean"),
-            nuclear_fraction=("CellComp", lambda values: float((values == "Nuclear").mean())),
-        )
-
-        adata = ad.AnnData(X=counts.to_numpy(dtype=np.int32), obs=obs, var=pd.DataFrame(index=counts.columns))
-        adata.obs_names = counts.index.astype(str)
-        adata.var_names = counts.columns.astype(str)
-        adata.obsm["spatial"] = obs[["x_global_px", "y_global_px"]].to_numpy(dtype=np.float32)
-        adata.layers["counts"] = adata.X.copy()
-        adata.uns["cosmx"] = {
-            "cell_level_source": "transcript aggregation",
-        }
-        return adata
-
-    def build_spatialdata(self, adata: ad.AnnData) -> SpatialData:
-        # Use spatial coordinates from obsm["spatial"] as primary source;
-        # fall back to x_global_px / y_global_px in obs for CosMx data.
-        if "spatial" in adata.obsm:
-            coords = adata.obsm["spatial"]
-            x = coords[:, 0]
-            y = coords[:, 1]
-        elif "x_global_px" in adata.obs and "y_global_px" in adata.obs:
-            x = adata.obs["x_global_px"].to_numpy()
-            y = adata.obs["y_global_px"].to_numpy()
-        else:
-            raise KeyError("No spatial coordinates found in adata.obsm['spatial'] or adata.obs['x_global_px']")
-
-        points_frame = pd.DataFrame(
-            {
-                "x": x,
-                "y": y,
-                "cell": adata.obs_names.to_numpy(),
-            },
-            index=adata.obs_names,
-        )
-        points = PointsModel.parse(points_frame)
-
-        table = adata.copy()
-        sanitize_table(table)
-
-        return SpatialData(points={"cells": points}, tables={"cosmx_table": table})
+# ── Helper: build cell-level AnnData from canonical transcripts ──────
 
 
-# ── Module-level singleton loader ───────────────────────────────────
-_singleton_loader: CosMxDataLoader | None = None
+def build_cell_level_adata(
+    df: pd.DataFrame,
+    min_transcripts: int = 0,
+    min_genes: int = 0,
+) -> ad.AnnData:
+    """Build a cell-level AnnData from a transcript DataFrame.
+
+    Works with BOTH canonical columns (gene, cell_id, x, y) and legacy
+    CosMx-native columns (target, cell, x_global_px, y_global_px).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transcript-level DataFrame.
+    min_transcripts : int
+        Minimum transcripts per cell (QC filter).
+    min_genes : int
+        Minimum genes per cell (QC filter).
+
+    Returns
+    -------
+    AnnData
+    """
+    from ..constants import COL_CELL_ID, COL_GENE, COL_X, COL_Y, COL_FOV, resolve_col_strict, resolve_col
+
+    gene_col = resolve_col_strict(df.columns, COL_GENE)
+    cell_col = resolve_col_strict(df.columns, COL_CELL_ID)
+    x_col = resolve_col_strict(df.columns, COL_X)
+    y_col = resolve_col_strict(df.columns, COL_Y)
+    fov_col = resolve_col(df.columns, COL_FOV)
+
+    cell_index = df[cell_col].astype(str)
+    gene_index = df[gene_col].astype(str)
+
+    counts = pd.crosstab(cell_index, gene_index)
+    counts = counts.sort_index(axis=0).sort_index(axis=1)
+
+    grouped = df.groupby(cell_col, sort=True)
+    obs = grouped.agg(
+        n_transcripts=(gene_col, "size"),
+        n_genes=(gene_col, "nunique"),
+        x=(x_col, "mean"),
+        y=(y_col, "mean"),
+    )
+
+    if fov_col and fov_col in df.columns:
+        obs[fov_col] = grouped[fov_col].first()
+
+    adata = ad.AnnData(
+        X=counts.to_numpy(dtype=np.float32),
+        obs=obs.loc[counts.index],
+        var=pd.DataFrame(index=counts.columns),
+    )
+    adata.obs_names = counts.index.astype(str)
+    adata.var_names = counts.columns.astype(str)
+    adata.obsm["spatial"] = obs[["x", "y"]].to_numpy(dtype=np.float32)
+    adata.layers["counts"] = adata.X.copy()
+
+    if min_transcripts > 0 or min_genes > 0:
+        adata = adata[
+            (adata.obs["n_transcripts"] >= min_transcripts)
+            & (adata.obs["n_genes"] >= min_genes)
+        ].copy()
+
+    return adata
 
 
-def _get_loader() -> CosMxDataLoader:
-    global _singleton_loader
-    if _singleton_loader is None:
-        _singleton_loader = CosMxDataLoader()
-    return _singleton_loader
+def build_spatialdata_from_adata(adata: ad.AnnData) -> SpatialData:
+    """Build a SpatialData from a cell-level AnnData."""
+    if "spatial" not in adata.obsm:
+        raise KeyError("No 'spatial' in adata.obsm")
+    coords = adata.obsm["spatial"]
+
+    points_frame = pd.DataFrame(
+        {"x": coords[:, 0], "y": coords[:, 1], "cell_id": adata.obs_names.to_numpy()},
+        index=adata.obs_names,
+    )
+    points = PointsModel.parse(points_frame)
+    table = adata.copy()
+    sanitize_table(table)
+
+    sdata = SpatialData(
+        points={"cell_centroids": points},
+        tables={KEY_MAIN_TABLE: table},
+    )
+    sdata.attrs["main_table_key"] = KEY_MAIN_TABLE
+    return sdata
 
 
-# ── Legacy module-level functions (backward compat) ─────────────────
+# ── Legacy backward-compat functions ─────────────────────────────────
+# These preserve the OLD CosMx-native column names (target, cell,
+# x_global_px, y_global_px) for backward compatibility with existing
+# step modules.  Phase 1 will migrate all steps to canonical names.
 
 
 def load_cosmx_transcripts(path: str | Path) -> pd.DataFrame:
-    """Legacy wrapper — delegates to CosMxDataLoader.load()."""
-    return _get_loader().load(path)
+    """Legacy: load CosMx CSV, return CANONICAL column names."""
+    resolved = Path(path)
+    df = pd.read_csv(resolved)
+    if "Unnamed: 0" in df.columns:
+        df = df.drop(columns=["Unnamed: 0"])
+    # Map to canonical columns
+    ingestor = CosMxIngestor()
+    df = ingestor._standardise_columns(df)
+    return df
 
 
 def summarize_cosmx_transcripts(df: pd.DataFrame, source_path: str | Path) -> DatasetSummary:
-    """Legacy wrapper — delegates to CosMxDataLoader.summarize()."""
-    return _get_loader().summarize(df, source_path)
+    """Legacy: summarize a transcript DataFrame (any column scheme)."""
+    from ..constants import COL_CELL_ID, COL_GENE, COL_FOV, resolve_col, resolve_col_strict
+    cell_col = resolve_col_strict(df.columns, COL_CELL_ID)
+    gene_col = resolve_col_strict(df.columns, COL_GENE)
+    fov_col = resolve_col(df.columns, COL_FOV)
+    return DatasetSummary(
+        source_path=Path(source_path),
+        n_transcripts=len(df),
+        n_cells=df[cell_col].dropna().nunique(),
+        n_genes=df[gene_col].nunique(),
+        n_fovs=df[fov_col].nunique() if fov_col else 1,
+        extra={},
+    )
 
 
-def build_cell_level_adata(df: pd.DataFrame) -> ad.AnnData:
-    """Legacy wrapper — delegates to CosMxDataLoader.build_adata()."""
-    return _get_loader().build_adata(df)
+# ── Ingestor ─────────────────────────────────────────────────────────
 
 
-def build_spatialdata(adata: ad.AnnData) -> SpatialData:
-    """Legacy wrapper — delegates to CosMxDataLoader.build_spatialdata()."""
-    return _get_loader().build_spatialdata(adata)
+@register_ingestor(PLATFORM_COSMX)
+class CosMxIngestor(BaseIngestor):
+    """Ingestor for NanoString CosMx Spatial Molecular Imager data.
+
+    Expected input: CSV with columns ``fov, cell_ID, x_global_px,
+    y_global_px, target, CellComp, cell``.
+    """
+
+    platform: str = PLATFORM_COSMX
+
+    def _parse_transcripts(self, input_path: str | Path) -> pd.DataFrame:
+        resolved = self._resolve_path(input_path)
+        df = pd.read_csv(resolved)
+        if "Unnamed: 0" in df.columns:
+            df = df.drop(columns=["Unnamed: 0"])
+        self._validate_raw_columns(df, {"x_global_px", "y_global_px", "target"})
+        return df
+
+    def _column_mapping(self) -> list[tuple[str, str]]:
+        return [
+            ("x_global_px", COL_X),
+            ("y_global_px", COL_Y),
+            ("target", COL_GENE),
+            ("cell", COL_CELL_ID),
+            ("fov", COL_FOV),
+            ("CellComp", COL_CELLCOMP),
+        ]
+

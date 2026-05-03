@@ -1,103 +1,81 @@
 # SubCellSpace API
 
-SubCellSpace 提供一个轻量的 HTTP API，用于：
+SubCellSpace 提供 HTTP API，用于：
 
-- 读取已生成的报告
-- 运行带参数的 CosMx 管线并返回结果
-- 读取 benchmark 汇总
-- 获取可用后端列表
+- 读取已生成的报告和统计数据
+- 运行参数化管线（从预摄取的 .zarr）
+- 获取后端列表与能力声明
+- 查询细胞级转录本数据
 
-> ⚠️ **当前限制**：API 端点（`/api/cosmx/*`）与 CosMx 平台深度耦合。Xenium/MERFISH/Stereo-seq 的 I/O loader 已实现但尚未通过 API 暴露。管线执行是**同步的**——完整 CosMx 管线耗时 40-90 秒，期间会阻塞请求线程。
+> ⚠️ 管线执行是**同步的**，完整 8 步耗时约 70-90 秒。无鉴权/限流，仅适合本地开发。
 
 ## 启动服务
 
-先安装依赖，再启动 API：
-
 ```bash
 conda activate subcellspace
-pip install -e .
-subcellspace-api
+subcellspace-api                 # 默认 http://127.0.0.1:8000
 ```
 
-默认地址：`http://127.0.0.1:8000`
-
-默认 CORS 允许来源：
-
-- `http://127.0.0.1:5173`
-- `http://localhost:5173`
-- `http://127.0.0.1:5174`
-- `http://localhost:5174`
-
-可通过环境变量 `SUBCELLSPACE_ALLOWED_ORIGINS` 覆盖（逗号分隔）。
-
-## 通用约定
-
-- 报告数据会写到 `outputs/`。
-- 前端开发环境通过 Vite proxy 把 `/api` 转发到后端。
-- CosMx 示例数据默认使用 `data/test/Mouse_brain_CosMX_1000cells.csv`。
-- 路径安全约束：路径参数必须在仓库目录内，且输出目录必须位于 `outputs/` 下。
-- ⚠️ **无鉴权/限流/超时控制**：当前 API 仅供本地开发使用，不适合直接暴露到公网。
-
-## 健康检查
+## 核心端点
 
 ### `GET /api/health`
-
-返回服务状态。
-
-示例：
-
-```bash
-curl http://127.0.0.1:8000/api/health
-```
-
-返回：
-
-```json
-{"status":"ok"}
-```
-
-## 后端枚举
+健康检查。返回 `{"status":"ok"}`。
 
 ### `GET /api/meta/backends`
+返回所有 27 个后端及其 capabilities。示例返回：
 
-返回当前可用的去噪、分割、聚类、注释和空间域后端。
-
-示例：
-
-```bash
-curl http://127.0.0.1:8000/api/meta/backends
+```json
+{
+  "spatial_analysis": {
+    "squidpy": { "available": true, "capabilities": ["svg", "neighborhood", "co_occurrence"] }
+  },
+  "subcellular_analysis": {
+    "rna_localization": { "available": true, "capabilities": ["rna_localization"] }
+  }
+}
 ```
 
-## 已有报告
+### `GET /api/meta/platforms`
+返回支持的平台列表：`{"platforms": ["cosmx","merfish","stereoseq","xenium"]}`.
+
+### `POST /api/pipeline/run`
+从预摄取的 .zarr 运行全链路管线。请求体：
+
+```json
+{
+  "sdata_path": "outputs/ingested/experiment.zarr",
+  "output_dir": "outputs/run_001",
+  "min_transcripts": 10,
+  "min_genes": 10,
+  "denoise_backend": "intracellular",
+  "segmentation_backend": "provided_cells",
+  "clustering_backend": "leiden",
+  "annotation_backend": "rank_marker",
+  "spatial_domain_backend": "spatial_leiden",
+  "spatial_analysis_backend": "squidpy",
+  "subcellular_analysis_backend": "rna_localization"
+}
+```
+
+返回完整 pipeline report JSON。
+
+### `GET /api/runs`
+列出 outputs/ 下所有已完成的 run。每个 run 包含 name、n_cells、n_genes、backend 选择等。
 
 ### `GET /api/reports/{run_name}`
-
-从 `outputs/{run_name}/cosmx_minimal_report.json` 读取报告。
-
-示例：
-
-```bash
-curl http://127.0.0.1:8000/api/reports/cosmx_try_again_round
-```
-
-## 绘图数据
+读取 `outputs/{run_name}/cosmx_minimal_report.json`。
 
 ### `GET /api/plots/{run_name}`
+返回 UMAP 和空间散点图数据（从 h5ad 读取）。
 
-按 run 名读取报告并返回 UMAP 与空间点图数据。
+### `GET /api/stats/by-backend`
+遍历 `outputs/backend_validation/` 下的所有 run，按步骤+后端聚合统计。
 
-示例：
+### `GET /api/cells/{cell_id}/transcripts?run_name=xxx`
+返回指定细胞的转录本坐标、基因和子细胞域信息。
 
-```bash
-curl http://127.0.0.1:8000/api/plots/cosmx_try_again_round
-```
-
-### `GET /api/plots`
-
-按查询参数读取绘图数据：
-
-- `report_path`：指定报告 JSON 路径
-- `output_dir`：指定输出目录（会自动读取其中的 `cosmx_minimal_report.json`）
+### Legacy endpoints (向后兼容)
+`POST /api/cosmx/run`、`GET /api/cosmx/report`、`POST /api/benchmarks/cosmx/run` 仍可用，但推荐使用新的 `/api/pipeline/run`。
 
 未提供参数时默认读取 `cosmx_try_again_round`。
 
@@ -132,71 +110,3 @@ curl "http://127.0.0.1:8000/api/plots?report_path=outputs/cosmx_try_again_round/
 示例：
 
 ```bash
-curl "http://127.0.0.1:8000/api/cosmx/report?input_csv=data/test/Mouse_brain_CosMX_1000cells.csv&denoise_backend=sparc&segmentation_backend=provided_cells&clustering_backend=scvi&annotation_backend=celltypist&spatial_domain_backend=graphst&subcellular_domain_backend=phenograph"
-```
-
-### `POST /api/cosmx/run`
-
-以 JSON 请求体运行 CosMx 管线。更适合前端按钮触发或脚本调用。
-
-请求体示例：
-
-```json
-{
-  "input_csv": "data/test/Mouse_brain_CosMX_1000cells.csv",
-  "output_dir": "outputs/api_runs/demo",
-  "min_transcripts": 10,
-  "min_genes": 10,
-  "denoise_backend": "intracellular",
-  "segmentation_backend": "provided_cells",
-  "clustering_backend": "leiden",
-  "leiden_resolution": 1.0,
-  "annotation_backend": "rank_marker",
-  "spatial_domain_backend": "spatial_leiden",
-  "spatial_domain_resolution": 1.0,
-  "n_spatial_domains": null,
-  "subcellular_domain_backend": "hdbscan"
-}
-```
-
-示例：
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/cosmx/run \
-  -H 'Content-Type: application/json' \
-  -d '{"input_csv":"data/test/Mouse_brain_CosMX_1000cells.csv","output_dir":"outputs/api_runs/demo","denoise_backend":"intracellular","segmentation_backend":"provided_cells","clustering_backend":"leiden","annotation_backend":"rank_marker","spatial_domain_backend":"spatial_leiden"}'
-```
-
-返回值包含：
-
-- `summary`
-- `step_summary`
-- `layer_evaluation`
-- `outputs`
-- `api.parameters`
-
-## Benchmark 汇总
-
-### `GET /api/benchmarks/{run_name}`
-
-读取 `outputs/{run_name}/benchmark_summary.json` 和对应 CSV 路径。
-
-示例：
-
-```bash
-curl http://127.0.0.1:8000/api/benchmarks/cosmx_benchmark_round
-```
-
-### `POST /api/benchmarks/cosmx/run`
-
-触发 CosMx benchmark 网格运行。
-
-## 前端联调
-
-前端默认请求：
-
-- `GET /api/reports/cosmx_try_again_round`
-- `POST /api/cosmx/run`
-- `GET /api/benchmarks/cosmx_benchmark_round`
-
-如果你在本地开发前端，请先启动 API，再启动 Vite dev server。

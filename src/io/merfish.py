@@ -1,106 +1,65 @@
 # ─────────────────────────────────────────────────────────────────────
-# SubCellSpace MERFISH Data Loader (stub)
+# SubCellSpace MERFISH Data Ingestor
 #
-# Implements ``BaseDataLoader`` for the MERFISH (multiplexed error-robust
-# fluorescence in situ hybridization) platform.
+# Implements ``BaseIngestor`` for MERFISH / Vizgen MERSCOPE data.
+# MERFISH CSV input → canonical transcript table → SpatialData.
 # ─────────────────────────────────────────────────────────────────────
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import anndata as ad
-import numpy as np
 import pandas as pd
-from spatialdata import SpatialData
 
-from ..models import DatasetSummary
-from .base import BaseDataLoader
+from ..constants import (
+    COL_CELL_ID,
+    COL_FOV,
+    COL_GENE,
+    COL_X,
+    COL_Y,
+    COL_Z,
+    PLATFORM_MERFISH,
+)
+from .base import BaseIngestor, register_ingestor
 
-# Typical MERFISH output columns (Vizgen MERSCOPE format).
-MERFISH_REQUIRED_COLUMNS = {"cell_id", "x", "y", "gene", "global_x", "global_y"}
 
+@register_ingestor(PLATFORM_MERFISH)
+class MERFISHIngestor(BaseIngestor):
+    """Ingestor for MERFISH / Vizgen MERSCOPE data.
 
-class MERFISHDataLoader(BaseDataLoader):
-    """Data loader for MERFISH / Vizgen MERSCOPE data.
-
-    .. note::
-        This is a **stub** implementation.  Real parsing logic should
-        be added once the exact input data format is determined.
+    Expected columns: ``global_x, global_y, gene, cell_id`` (or short
+    names ``x, y``).
     """
 
-    platform: str = "merfish"
-    required_columns: set[str] = MERFISH_REQUIRED_COLUMNS
+    platform: str = PLATFORM_MERFISH
 
-    def load(self, path: str | Path) -> pd.DataFrame:
-        resolved = self._validate_file_exists(path)
+    def _parse_transcripts(self, input_path: str | Path) -> pd.DataFrame:
+        resolved = self._resolve_path(input_path)
         df = pd.read_csv(resolved)
-        # Be lenient: accept either "_required" columns or the common format
-        self._validate_columns(df, path)
-        # Map MERFISH column names to internal schema
-        df = df.rename(
-            columns={
-                "cell_id": "cell",
-                "gene": "target",
-                "global_x": "x_global_px",
-                "global_y": "y_global_px",
-            }
-        )
-        if "CellComp" not in df.columns:
-            df["CellComp"] = "Cytoplasm"
-        if "cell_ID" not in df.columns:
-            df["cell_ID"] = df["cell"].astype(str)
-        if "fov" not in df.columns:
-            df["fov"] = 0
+
+        # Accept either long or short coordinate column names
+        has_long = {"global_x", "global_y"}.issubset(df.columns)
+        has_short = {"x", "y"}.issubset(df.columns)
+        if has_long:
+            required = {"global_x", "global_y", "gene"}
+        elif has_short:
+            required = {"x", "y", "gene"}
+        else:
+            required = {"global_x", "global_y"}
+
+        self._validate_raw_columns(df, required)
         return df
 
-    def summarize(self, df: pd.DataFrame, source_path: str | Path) -> DatasetSummary:
-        source_path = Path(source_path)
-        return DatasetSummary(
-            source_path=source_path,
-            n_transcripts=int(len(df)),
-            n_cells=int(df["cell"].nunique()),
-            n_genes=int(df["target"].nunique()),
-            n_fovs=int(df["fov"].nunique()),
-            extra={"platform": "merfish"},
-        )
+    def _column_mapping(self) -> list[tuple[str, str]]:
+        return [
+            ("global_x", COL_X),
+            ("x", COL_X),
+            ("global_y", COL_Y),
+            ("y", COL_Y),
+            ("gene", COL_GENE),
+            ("cell_id", COL_CELL_ID),
+            ("fov", COL_FOV),
+            ("global_z", COL_Z),
+            ("z", COL_Z),
+        ]
 
-    def build_adata(self, df: pd.DataFrame) -> ad.AnnData:
-        cell_index = df["cell"].astype(str)
-        gene_index = df["target"].astype(str)
-        counts = pd.crosstab(cell_index, gene_index)
-        counts = counts.sort_index(axis=0).sort_index(axis=1)
-
-        grouped = df.groupby("cell", sort=True)
-        obs = grouped.agg(
-            n_transcripts=("target", "size"),
-            n_genes=("target", "nunique"),
-            x_global_px=("x_global_px", "mean"),
-            y_global_px=("y_global_px", "mean"),
-        )
-
-        adata = ad.AnnData(X=counts.to_numpy(dtype=np.int32), obs=obs, var=pd.DataFrame(index=counts.columns))
-        adata.obs_names = counts.index.astype(str)
-        adata.var_names = counts.columns.astype(str)
-        adata.obsm["spatial"] = obs[["x_global_px", "y_global_px"]].to_numpy(dtype=np.float32)
-        adata.layers["counts"] = adata.X.copy()
-        adata.uns["merfish"] = {"cell_level_source": "transcript aggregation"}
-        return adata
-
-    def build_spatialdata(self, adata: ad.AnnData) -> SpatialData:
-        from spatialdata import SpatialData, sanitize_table
-        from spatialdata.models import PointsModel
-
-        if "spatial" in adata.obsm:
-            coords = adata.obsm["spatial"]
-        else:
-            raise KeyError("No spatial coordinates in adata.obsm['spatial']")
-
-        points_frame = pd.DataFrame(
-            {"x": coords[:, 0], "y": coords[:, 1], "cell": adata.obs_names.to_numpy()},
-            index=adata.obs_names,
-        )
-        points = PointsModel.parse(points_frame)
-        table = adata.copy()
-        sanitize_table(table)
-        return SpatialData(points={"cells": points}, tables={"merfish_table": table})

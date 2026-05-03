@@ -1,68 +1,59 @@
 # ─────────────────────────────────────────────────────────────────────
 # SubCellSpace I/O module
-# Platform-specific data loaders for spatial transcriptomics data.
+# Platform-specific data ingestors for spatial transcriptomics data.
+#
+# Usage::
+#
+#     from subcellspace.io import ingest
+#     sdata = ingest("cosmx", "data/test/Mouse_brain_CosMX_1000cells.csv")
+#
+# Each platform ingestor produces a standardised ``SpatialData`` object.
 # ─────────────────────────────────────────────────────────────────────
 
-from .base import BaseDataLoader, DataLoadError, DataValidationError
-from .cosmx import (
-    CosMxDataLoader,
-    build_cell_level_adata,
-    load_cosmx_transcripts,
-    summarize_cosmx_transcripts,
+from __future__ import annotations
+
+from pathlib import Path
+
+from .base import (
+    BaseIngestor,
+    DataLoadError,
+    DataValidationError,
+    get_available_platforms,
+    get_ingestor,
+    register_ingestor,
 )
-from .merfish import MERFISHDataLoader
-from .stereoseq import StereoSeqDataLoader
-from .xenium import XeniumDataLoader
 
-__all__ = [
-    # Base abstractions
-    "BaseDataLoader",
-    "DataLoadError",
-    "DataValidationError",
-    # CosMx
-    "CosMxDataLoader",
-    "load_cosmx_transcripts",
-    "summarize_cosmx_transcripts",
-    "build_cell_level_adata",
-    # Xenium
-    "XeniumDataLoader",
-    # MERFISH
-    "MERFISHDataLoader",
-    # Stereo-seq
-    "StereoSeqDataLoader",
-]
-
-# ── Loader registry: platform name → loader class ─────────────────────
-PLATFORM_LOADERS: dict[str, type[BaseDataLoader]] = {
-    "cosmx": CosMxDataLoader,
-    "xenium": XeniumDataLoader,
-    "merfish": MERFISHDataLoader,
-    "stereoseq": StereoSeqDataLoader,
-}
+# Import platform modules to trigger @register_ingestor decorators
+from . import cosmx   # noqa: F401
+from . import merfish  # noqa: F401
+from . import stereoseq  # noqa: F401
+from . import xenium   # noqa: F401
 
 
-def get_loader(platform: str) -> BaseDataLoader:
-    """Return a singleton loader instance for the given *platform*.
+def ingest(platform: str, input_path: str | Path) -> Any:
+    """Run data ingestion for *platform* and return a SpatialData object.
 
     Parameters
     ----------
     platform : str
         One of ``"cosmx"``, ``"xenium"``, ``"merfish"``, ``"stereoseq"``.
+    input_path : str or Path
+        Path to the input data file or directory.
 
     Returns
     -------
-    BaseDataLoader
-        An instance of the corresponding platform data loader.
+    SpatialData
+        Standardised spatial data object.
     """
-    cls = PLATFORM_LOADERS.get(platform)
-    if cls is None:
-        raise DataLoadError(
-            f"Unknown platform '{platform}'. Available: {sorted(PLATFORM_LOADERS)}",
-            platform=platform,
-        )
-    return cls()
+    return get_ingestor(platform).ingest(Path(input_path))
 
 
-def get_available_platforms() -> list[str]:
-    """Return sorted list of supported platform names."""
-    return sorted(PLATFORM_LOADERS)
+__all__ = [
+    "BaseIngestor",
+    "DataLoadError",
+    "DataValidationError",
+    "get_ingestor",
+    "get_available_platforms",
+    "register_ingestor",
+    "ingest",
+]

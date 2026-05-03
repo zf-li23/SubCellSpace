@@ -40,6 +40,7 @@ class _BackendRegistry:
     def __init__(self) -> None:
         self._backends: dict[StepName, dict[BackendName, BackendFunc]] = {}
         self._defaults: dict[StepName, BackendName] = {}
+        self._capabilities: dict[StepName, dict[BackendName, list[str]]] = {}
         self._config: dict[str, Any] = {}
         self._config_loaded = False
         self._runners: dict[StepName, StepRunner] = {}
@@ -182,7 +183,30 @@ class _BackendRegistry:
         """Return list of step names that have registered runners."""
         return list(self._runners)
 
-        # ── Internal helpers ────────────────────────────────────────
+    # ── Capabilities API ─────────────────────────────────────────
+
+    def declare_capabilities(self, step_name: str, backend_name: str, caps: list[str]) -> None:
+        """Declare the analysis capabilities of a backend.
+
+        Called inside step modules to register what analyses a backend
+        can perform.  Used by the frontend to dynamically render UI.
+
+        Example::
+
+            registry.declare_capabilities("spatial_analysis", "squidpy",
+                                         ["svg", "neighborhood", "co_occurrence"])
+        """
+        self._capabilities.setdefault(step_name, {})[backend_name] = list(caps)
+
+    def get_capabilities(self, step_name: str) -> dict[str, list[str]]:
+        """Return ``{backend_name: [capability, ...]}`` for *step_name*."""
+        return dict(self._capabilities.get(step_name, {}))
+
+    def get_all_capabilities(self) -> dict[str, dict[str, list[str]]]:
+        """Return all capabilities: ``{step: {backend: [caps]}}``."""
+        return {s: dict(b) for s, b in self._capabilities.items()}
+
+    # ── Internal helpers ────────────────────────────────────────
 
     def _ensure_config_loaded(self) -> None:
         if self._config_loaded:
@@ -225,3 +249,6 @@ load_backends = registry.load_backends
 register_runner = registry.register_runner
 get_runner = registry.get_runner
 get_available_runners = registry.get_available_runners
+declare_capabilities = registry.declare_capabilities
+get_capabilities = registry.get_capabilities
+get_all_capabilities = registry.get_all_capabilities
