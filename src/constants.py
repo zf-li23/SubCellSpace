@@ -43,7 +43,7 @@ _LEGACY_ALIASES: dict[str, list[str]] = {
     COL_X:        ["x_global_px", "x_location"],
     COL_Y:        ["y_global_px", "y_location"],
     COL_GENE:     ["target", "feature_name", "geneID"],
-    COL_CELL_ID:  ["cell", "cell_id"],
+    COL_CELL_ID:  ["cell", "cell_id", "cell_ID"],
     COL_FOV:      ["fov", "fov_name"],
     COL_CELLCOMP: ["CellComp"],
     COL_QV:       ["qv"],

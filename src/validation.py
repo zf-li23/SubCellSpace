@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .constants import COL_CELL_ID, COL_GENE, COL_X, COL_Y, COL_CELLCOMP, COL_FOV
+from .constants import COL_CELL_ID, COL_GENE, COL_X, COL_Y, COL_CELLCOMP, COL_FOV, resolve_col
 
 # ── Required column schemas per step ─────────────────────────────────
 
@@ -29,12 +29,14 @@ def validate_dataframe(
 ) -> list[str]:
     """Validate that a DataFrame has all required columns.
 
+    Uses ``resolve_col`` to accept legacy column-name aliases.
+
     Parameters
     ----------
     df : pd.DataFrame
         The DataFrame to validate.
     required_columns : set[str]
-        Set of column names that must be present.
+        Set of canonical column names that must be present.
     name : str
         A human-readable name for error messages.
     allow_extra : bool
@@ -47,7 +49,10 @@ def validate_dataframe(
         A list of validation messages (empty if all checks pass).
     """
     messages: list[str] = []
-    missing = required_columns - set(df.columns)
+    missing: list[str] = []
+    for col in required_columns:
+        if resolve_col(df.columns, col) is None:
+            missing.append(col)
     if missing:
         messages.append(f"{name}: missing required columns: {sorted(missing)}")
     return messages

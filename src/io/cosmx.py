@@ -92,6 +92,7 @@ def build_cell_level_adata(
     adata.var_names = counts.columns.astype(str)
     adata.obsm["spatial"] = obs[["x", "y"]].to_numpy(dtype=np.float32)
     adata.layers["counts"] = adata.X.copy()
+    adata.uns["cosmx"] = {"pipeline": "cosmx_minimal", "version": "0.1.0"}
 
     if min_transcripts > 0 or min_genes > 0:
         adata = adata[
@@ -144,17 +145,26 @@ def load_cosmx_transcripts(path: str | Path) -> pd.DataFrame:
 
 def summarize_cosmx_transcripts(df: pd.DataFrame, source_path: str | Path) -> DatasetSummary:
     """Legacy: summarize a transcript DataFrame (any column scheme)."""
-    from ..constants import COL_CELL_ID, COL_GENE, COL_FOV, resolve_col, resolve_col_strict
+    from ..constants import COL_CELL_ID, COL_GENE, COL_FOV, COL_CELLCOMP, resolve_col, resolve_col_strict
     cell_col = resolve_col_strict(df.columns, COL_CELL_ID)
     gene_col = resolve_col_strict(df.columns, COL_GENE)
     fov_col = resolve_col(df.columns, COL_FOV)
+    cc_col = resolve_col(df.columns, COL_CELLCOMP)
+    n_cells_unique = df[cell_col].dropna().nunique()
+    extra: dict[str, Any] = {"cell_id_unique": n_cells_unique}
+    if cc_col:
+        comp_counts = df[cc_col].value_counts(dropna=False)
+        total = int(comp_counts.sum())
+        if total:
+            extra["nuclear_fraction"] = round(float(comp_counts.get("Nuclear", 0)) / total, 4)
+            extra["cytoplasm_fraction"] = round(float(comp_counts.get("Cytoplasm", 0)) / total, 4)
     return DatasetSummary(
         source_path=Path(source_path),
         n_transcripts=len(df),
         n_cells=df[cell_col].dropna().nunique(),
         n_genes=df[gene_col].nunique(),
         n_fovs=df[fov_col].nunique() if fov_col else 1,
-        extra={},
+        extra=extra,
     )
 
 

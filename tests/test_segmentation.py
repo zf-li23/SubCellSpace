@@ -27,14 +27,18 @@ class TestAssignCells:
 
     def test_backend_fov_cell_id(self, sample_transcripts_df):
         # Create df without a cell column to test fov_cell_id backend
+        # resolve_col_strict will find cell_ID via legacy alias
         df_no_cell = sample_transcripts_df.drop(columns=["cell"])
         result = assign_cells(df_no_cell, "fov_cell_id")
         assigned = result.output
         summary = result.summary
         assert summary["segmentation_backend"] == "fov_cell_id"
-        assert "cell" in assigned.columns
-        expected_cell = f"{df_no_cell['fov'].iloc[0]}_{df_no_cell['cell_ID'].iloc[0]}"
-        assert assigned["cell"].iloc[0] == expected_cell
+        # Column name is the resolved column (cell_ID via alias)
+        from src.constants import resolve_col_strict, COL_CELL_ID
+        cell_col = resolve_col_strict(df_no_cell.columns, COL_CELL_ID)
+        assert cell_col in assigned.columns
+        expected_cell = f"{df_no_cell['fov'].iloc[0]}_{df_no_cell[cell_col].iloc[0]}"
+        assert assigned[cell_col].iloc[0] == expected_cell
 
     def test_unknown_backend_raises(self, sample_transcripts_df):
         with pytest.raises(ValueError, match="Unknown segmentation backend"):
@@ -82,7 +86,7 @@ class TestCellposeBackend:
         rng = np.random.default_rng(42)
         return pd.DataFrame({
             "fov": [1] * n,
-            "cell_ID": list(range(1, n + 1)),
+            "cell": list(range(1, n + 1)),
             "x_global_px": rng.uniform(10, 90, size=n),
             "y_global_px": rng.uniform(10, 90, size=n),
             "x_local_px": rng.uniform(10, 90, size=n),
@@ -148,7 +152,7 @@ class TestCellposeBackend:
         # Create transcripts, many outside the mask
         df = pd.DataFrame({
             "fov": [1] * 10,
-            "cell_ID": list(range(1, 11)),
+            "cell": list(range(1, 11)),
             "x_global_px": [10.0, 50.0, 80.0, 10.0, 90.0, 5.0, 95.0, 10.0, 99.0, 10.0],
             "y_global_px": [10.0, 50.0, 80.0, 80.0, 10.0, 5.0, 95.0, 10.0, 99.0, 10.0],
             "x_local_px": [10.0] * 10,
@@ -198,7 +202,7 @@ class TestBaysorBackend:
         rng = np.random.default_rng(42)
         return pd.DataFrame({
             "fov": [1] * n,
-            "cell_ID": list(range(1, n + 1)),
+            "cell": list(range(1, n + 1)),
             "x_global_px": rng.uniform(0, 100, size=n),
             "y_global_px": rng.uniform(0, 100, size=n),
             "x_local_px": rng.uniform(0, 100, size=n),
