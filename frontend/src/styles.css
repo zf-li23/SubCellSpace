@@ -1,11 +1,81 @@
+/* ── Theme Variables ───────────────────────────────────────────────── */
+
+:root {
+  --bg-gradient-start: #f6fbfd;
+  --bg-gradient-end: #eef4f7;
+  --bg-radial: rgba(11, 76, 110, 0.14);
+  --text-primary: #16323f;
+  --text-secondary: #4c6774;
+  --text-muted: #5c7886;
+  --card-bg: rgba(255, 255, 255, 0.88);
+  --card-border: rgba(255, 255, 255, 0.6);
+  --card-shadow: rgba(10, 45, 58, 0.12);
+  --header-bg: linear-gradient(135deg, #08384d 0%, #0b4c6e 55%, #11698a 100%);
+  --header-text: white;
+  --btn-bg: #0b4c6e;
+  --btn-text: white;
+  --btn-border: rgba(22, 50, 63, 0.18);
+  --select-bg: white;
+  --select-text: #16323f;
+  --table-border: rgba(22, 50, 63, 0.08);
+  --table-hover: rgba(11, 76, 110, 0.04);
+  --alert-error-bg: #fff2f0;
+  --alert-error-text: #8d1d13;
+  --alert-error-border: #f4b7ae;
+  --link-color: #0b4c6e;
+  --link-hover: #11698a;
+  --skeleton-bg: #e6edf0;
+  --skeleton-shine: #f0f5f8;
+  --scatter-bg: rgba(247, 251, 253, 0.96);
+  --step-header-bg: linear-gradient(135deg, #08384d 0%, #0b4c6e 55%, #11698a 100%);
+  --hero-bg: linear-gradient(135deg, rgba(8, 56, 77, 0.92), rgba(11, 76, 110, 0.88));
+  --modal-overlay: rgba(8, 35, 48, 0.52);
+  --metric-tile-bg: rgba(255, 255, 255, 0.72);
+}
+
+[data-theme="dark"] {
+  --bg-gradient-start: #0f1b24;
+  --bg-gradient-end: #16232e;
+  --bg-radial: rgba(17, 105, 138, 0.18);
+  --text-primary: #dce8ef;
+  --text-secondary: #8fa8b8;
+  --text-muted: #7a9eb1;
+  --card-bg: rgba(30, 45, 55, 0.85);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --card-shadow: rgba(0, 0, 0, 0.3);
+  --header-bg: linear-gradient(135deg, #061a24 0%, #08293a 55%, #0a3a4f 100%);
+  --header-text: #dce8ef;
+  --btn-bg: #11698a;
+  --btn-text: #dce8ef;
+  --btn-border: rgba(220, 232, 239, 0.15);
+  --select-bg: #1a2d38;
+  --select-text: #dce8ef;
+  --table-border: rgba(220, 232, 239, 0.06);
+  --table-hover: rgba(17, 105, 138, 0.12);
+  --alert-error-bg: rgba(141, 29, 19, 0.18);
+  --alert-error-text: #f4a89a;
+  --alert-error-border: rgba(244, 183, 174, 0.3);
+  --link-color: #4da8c4;
+  --link-hover: #70c1d8;
+  --skeleton-bg: #1e2d3d;
+  --skeleton-shine: #253644;
+  --scatter-bg: rgba(20, 32, 42, 0.94);
+  --step-header-bg: linear-gradient(135deg, #061a24 0%, #08293a 55%, #0a3a4f 100%);
+  --hero-bg: linear-gradient(135deg, rgba(6, 26, 36, 0.94), rgba(10, 58, 79, 0.9));
+  --modal-overlay: rgba(0, 0, 0, 0.6);
+  --metric-tile-bg: rgba(30, 45, 55, 0.72);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────── */
+
 body {
 	font-family: Inter, system-ui, Arial, sans-serif;
 	margin: 0;
 	padding: 0;
 	background:
-		radial-gradient(circle at top left, rgba(11, 76, 110, 0.14), transparent 30%),
-		linear-gradient(180deg, #f6fbfd 0%, #eef4f7 100%);
-	color: #16323f;
+		radial-gradient(circle at top left, var(--bg-radial), transparent 30%),
+		linear-gradient(180deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+	color: var(--text-primary);
 }
 
 header {
@@ -13,23 +83,23 @@ header {
 	align-items: center;
 	gap: 16px;
 	padding: 16px 20px;
-	background: linear-gradient(135deg, #08384d 0%, #0b4c6e 55%, #11698a 100%);
-	color: white;
+	background: var(--header-bg);
+	color: var(--header-text);
 	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 header h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
-nav { display: flex; gap: 8px; }
+nav { display: flex; gap: 8px; align-items: center; }
 nav button { margin-right: 0; }
 main { padding: 20px; }
 .container { max-width: 1280px; margin: 0 auto; }
 .card {
-	background: rgba(255, 255, 255, 0.88);
+	background: var(--card-bg);
 	backdrop-filter: blur(8px);
 	border-radius: 18px;
 	padding: 18px;
-	box-shadow: 0 10px 30px rgba(10, 45, 58, 0.12);
-	border: 1px solid rgba(255, 255, 255, 0.6);
+	box-shadow: 0 10px 30px var(--card-shadow);
+	border: 1px solid var(--card-border);
 }
 
 .page-hero {
@@ -1784,6 +1854,119 @@ select {
 .data-browser-empty p {
   margin: 0;
   font-size: 14px;
+}
+
+/* ===== Step Metrics Chips (ReportPage) ===== */
+.step-metrics-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.step-metric-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(22, 50, 63, 0.05);
+  font-size: 11px;
+  color: #16323f;
+  white-space: nowrap;
+}
+
+.step-metric-chip em {
+  font-style: normal;
+  color: #5c7886;
+  margin-right: 3px;
+}
+
+.backend-code {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(11, 76, 110, 0.06);
+  color: #0b4c6e;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+
+/* ===== Elapsed Badge ===== */
+.elapsed-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  background: rgba(31, 138, 112, 0.1);
+  color: #1f8a70;
+}
+
+.elapsed-fast {
+  background: rgba(31, 138, 112, 0.08);
+  color: #1f8a70;
+}
+
+.elapsed-slow {
+  background: rgba(200, 85, 61, 0.08);
+  color: #c8553d;
+}
+
+/* ===== Cell Detail Panel ===== */
+.cell-detail-panel h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  color: #0b4c6e;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.detail-gene-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.detail-gene-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(22, 50, 63, 0.04);
+  border-radius: 6px;
+  color: #16323f;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-gene-more {
+  color: #5c7886;
+  font-style: italic;
+  align-self: center;
+}
+
+.detail-domain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.detail-domain-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(22, 50, 63, 0.04);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.detail-domain-name {
+  color: #16323f;
+  font-weight: 500;
+}
+
+.detail-domain-count {
+  font-weight: 700;
+  color: #0b4c6e;
+  font-variant-numeric: tabular-nums;
 }
 
 

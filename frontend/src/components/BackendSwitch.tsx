@@ -1,41 +1,23 @@
 import React, { useEffect, useState } from 'react'
-import { type BackendConfig, fetchBackendMeta, STEP_TO_CONFIG_KEY, STEP_LABELS, FALLBACK_BACKENDS } from '../api'
+import { fetchBackendMeta, FALLBACK_BACKENDS, STEP_TO_CONFIG_KEY, STEP_LABELS, type BackendConfig } from '../api'
 
-type BackendSwitchProps = {
+export default function BackendSwitch({ value, onChange }: {
   value: BackendConfig
   onChange: (next: BackendConfig) => void
-}
-
-/** All backends per step, fetched dynamically from /api/meta/backends. */
-export default function BackendSwitch({ value, onChange }: BackendSwitchProps) {
-  const [backends, setBackends] = useState<Record<string, string[]> | null>(null)
-  const [loading, setLoading] = useState(true)
+}) {
+  const [backends, setBackends] = useState<Record<string, string[]>>(FALLBACK_BACKENDS)
 
   useEffect(() => {
-    let cancelled = false
-    fetchBackendMeta().then((meta) => {
-      if (cancelled) return
-      if (meta) {
-        const converted: Record<string, string[]> = {}
-        for (const step of Object.keys(meta)) {
-          converted[step] = Object.keys(meta[step])
-        }
-        setBackends(converted)
-      } else {
-        setBackends(FALLBACK_BACKENDS)
-      }
-      setLoading(false)
+    fetchBackendMeta().then(meta => {
+      if (!meta) return
+      const converted: Record<string, string[]> = {}
+      for (const step of Object.keys(meta)) converted[step] = Object.keys(meta[step])
+      if (Object.keys(converted).length > 0) setBackends(converted)
     })
-    return () => { cancelled = true }
   }, [])
 
-  const update = (key: keyof BackendConfig, nextValue: string) => {
-    onChange({ ...value, [key]: nextValue })
-  }
-
-  const steps = backends ?? FALLBACK_BACKENDS
-  const entries = Object.keys(steps)
-    .map((step) => {
+  const entries = Object.keys(backends)
+    .map(step => {
       const configKey = STEP_TO_CONFIG_KEY[step]
       const label = STEP_LABELS[step]
       if (!configKey || !label) return null
@@ -45,14 +27,11 @@ export default function BackendSwitch({ value, onChange }: BackendSwitchProps) {
 
   return (
     <div className="backend-switch">
-      {loading && <div className="backend-switch-loading">Loading backends…</div>}
       {entries.map(({ step, configKey, label }) => (
         <label key={step}>
           {label}
-          <select value={value[configKey]} onChange={(e) => update(configKey, e.target.value)}>
-            {steps[step].map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
+          <select value={value[configKey]} onChange={e => onChange({ ...value, [configKey]: e.target.value })}>
+            {backends[step].map(opt => <option key={opt} value={opt}>{opt}</option>)}
           </select>
         </label>
       ))}

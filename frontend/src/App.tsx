@@ -1,159 +1,63 @@
-import React, { useState } from 'react'
-import DataBrowser from './pages/DataBrowser'
-import ReportPage from './pages/ReportPage'
-import BenchmarkPage from './pages/BenchmarkPage'
+import React, { Suspense, lazy } from 'react'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import ErrorBoundary from './components/ErrorBoundary'
-import BackendSwitch from './components/BackendSwitch'
-import { type BackendConfig } from './api'
+import LoadingSkeleton from './components/LoadingSkeleton'
 
-type Route = 'home' | 'report' | 'browser' | 'benchmark'
+const HomePage = lazy(() => import('./pages/HomePage'))
+const ReportPage = lazy(() => import('./pages/ReportPage'))
+const DataBrowser = lazy(() => import('./pages/DataBrowser'))
+const BenchmarkPage = lazy(() => import('./pages/BenchmarkPage'))
 
-/* ------------------------------------------------------------------ */
-/*  Home Page (Phase 5)                                                */
-/* ------------------------------------------------------------------ */
+const NAV_ITEMS = [
+  { path: '/',         label: 'Home',      icon: '🏠' },
+  { path: '/report',   label: 'Report',    icon: '📋' },
+  { path: '/browser',  label: 'Browser',   icon: '📊' },
+  { path: '/benchmark',label: 'Benchmark', icon: '⚡' },
+] as const
 
-function HomePage({ onNavigate }: { onNavigate: (route: Route) => void }) {
-  return (
-    <div className="container">
-      <section className="home-hero">
-        <div className="home-hero-content">
-          <div className="home-title-icon">🔬</div>
-          <h1>SubCellSpace Viewer</h1>
-          <p className="home-subtitle">
-            A modular platform for subcellular spatial transcriptomics analysis.
-            Explore spatial transcriptomics data, run analysis pipelines, and compare benchmark results.
-          </p>
-        </div>
-      </section>
-
-      <div className="home-cards">
-        <div className="home-card" onClick={() => onNavigate('report')} role="button" tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && onNavigate('report')}>
-          <div className="home-card-icon">📋</div>
-          <h3>Pipeline Report</h3>
-          <p>Run the CosMx spatial transcriptomics pipeline and view results including filtering, segmentation, clustering, and spatial domain identification.</p>
-          <div className="home-card-actions">
-            <span className="home-card-link">Open Report →</span>
-          </div>
-        </div>
-
-        <div className="home-card" onClick={() => onNavigate('browser')} role="button" tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && onNavigate('browser')}>
-          <div className="home-card-icon">📊</div>
-          <h3>Data Browser</h3>
-          <p>Browse datasets and pipeline runs. Explore benchmark metrics, view run details, and compare results across different configurations.</p>
-          <div className="home-card-actions">
-            <span className="home-card-link">Browse Data →</span>
-          </div>
-        </div>
-
-        <div className="home-card" onClick={() => onNavigate('benchmark')} role="button" tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && onNavigate('benchmark')}>
-          <div className="home-card-icon">⚡</div>
-          <h3>Benchmark</h3>
-          <p>Compare multi-run benchmark results across backend configurations. Filter by backend type and view silhouette scores, cluster counts, and validation status.</p>
-          <div className="home-card-actions">
-            <span className="home-card-link">View Benchmarks →</span>
-          </div>
-        </div>
-      </div>
-
-      <section className="home-info">
-        <h3>Pipeline Overview</h3>
-        <div className="home-steps">
-          <div className="home-step">
-            <span className="home-step-num">1</span>
-            <div>
-              <strong>Filtering / Denoise</strong>
-              <p>Filter low-quality transcripts using intracellular or nuclear-only criteria</p>
-            </div>
-          </div>
-          <div className="home-step">
-            <span className="home-step-num">2</span>
-            <div>
-              <strong>Segmentation</strong>
-              <p>Assign transcripts to cells using provided boundaries or FOV-based grouping</p>
-            </div>
-          </div>
-          <div className="home-step">
-            <span className="home-step-num">3</span>
-            <div>
-              <strong>Spatial Domain</strong>
-              <p>Identify cell-level and subcellular spatial domains via Leiden clustering and DBSCAN</p>
-            </div>
-          </div>
-          <div className="home-step">
-            <span className="home-step-num">4</span>
-            <div>
-              <strong>Clustering & Expression</strong>
-              <p>Leiden or K-means clustering with UMAP visualization and expression QC</p>
-            </div>
-          </div>
-          <div className="home-step">
-            <span className="home-step-num">5</span>
-            <div>
-              <strong>Annotation</strong>
-              <p>Cell-type annotation via marker gene ranking or label transfer</p>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  )
+function PageLoading() {
+  return <div style={{ padding: 20 }}><LoadingSkeleton count={3} /></div>
 }
 
-/* ------------------------------------------------------------------ */
-/*  Main App                                                           */
-/* ------------------------------------------------------------------ */
-
 export default function App() {
-  const [route, setRoute] = useState<Route>('home')
-  const [backendConfig, setBackendConfig] = useState<BackendConfig>({
-    denoise: 'intracellular',
-    segmentation: 'provided_cells',
-    clustering: 'leiden',
-    annotation: 'rank_marker',
-    spatialDomain: 'spatial_leiden',
-    subcellularDomain: 'hdbscan',
-    spatialAnalysis: 'squidpy',
-  })
-
-  const navItems: Array<{ route: Route; label: string; icon: string }> = [
-    { route: 'home', label: 'Home', icon: '🏠' },
-    { route: 'report', label: 'Report', icon: '📋' },
-    { route: 'browser', label: 'Browser', icon: '📊' },
-    { route: 'benchmark', label: 'Benchmark', icon: '⚡' },
-  ]
+  const location = useLocation()
 
   return (
     <div className="app">
       <header>
         <div className="header-left">
-          <h1>🔬 SubCellSpace</h1>
+          <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+            <h1>🔬 SubCellSpace</h1>
+          </Link>
         </div>
         <nav>
-          {navItems.map((item) => (
-            <button
-              key={item.route}
-              className={route === item.route ? 'nav-active' : ''}
-              onClick={() => setRoute(item.route)}
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={location.pathname === item.path ? 'nav-active' : ''}
+              style={{ textDecoration: 'none' }}
             >
-              {item.icon} {item.label}
-            </button>
+              <button className={location.pathname === item.path ? 'nav-active' : ''}>
+                {item.icon} {item.label}
+              </button>
+            </Link>
           ))}
         </nav>
       </header>
       <main>
         <ErrorBoundary>
-          {route === 'home' && <HomePage onNavigate={setRoute} />}
-          {route === 'report' && (
-            <ReportPage backendConfig={backendConfig} onBackendChange={setBackendConfig} />
-          )}
-          {route === 'browser' && <DataBrowser />}
-          {route === 'benchmark' && <BenchmarkPage />}
+          <Suspense fallback={<PageLoading />}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/report" element={<ReportPage />} />
+              <Route path="/report/:runName" element={<ReportPage />} />
+              <Route path="/browser" element={<DataBrowser />} />
+              <Route path="/benchmark" element={<BenchmarkPage />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
     </div>
   )
 }
-

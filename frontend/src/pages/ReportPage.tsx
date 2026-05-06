@@ -1,788 +1,314 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import BackendSwitch from '../components/BackendSwitch'
-import { type BackendConfig } from '../api'
-import {
-  loadPipelineReport,
-  loadPlotData,
-  loadCellTranscripts,
-  loadPerBackendStats,
-  fetchBackendMeta,
-  STEP_LABELS,
-  FALLBACK_BACKENDS,
-  type CellTranscripts,
-  type CellTranscriptPoint,
-  type PlotData,
-  type PipelineReport,
-  type LayerEvaluation,
-  type DenoiseMetrics,
-  type SegmentationMetrics,
-  type ExpressionMetrics,
-  type ClusteringMetrics,
-  type AnnotationMetrics,
-  type SpatialDomainMetrics,
-  type SubcellularDomainMetrics,
-  type SpatialGraphMetrics,
-  type IngestionMetrics,
-  type DenoiseStepSummary,
-  type SegmentationStepSummary,
-  type AnalysisStepSummary,
-  type SpatialDomainStepSummary,
-  type SubcellularStepSummary,
-  type PerBackendStats,
-} from '../api'
-import InteractiveScatterPlot from '../components/InteractiveScatterPlot'
+import React, { useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import AdaptiveScatterPlot from '../components/AdaptiveScatterPlot'
+import LoadingSkeleton from '../components/LoadingSkeleton'
+import CellDetailPanel from '../components/CellDetailPanel'
 import DonutChart from '../components/DonutChart'
-import LoadingSkeleton, { SkeletonCard } from '../components/LoadingSkeleton'
+import {
+  type BackendConfig,
+} from '../api'
+import { useRuns, useRunReport, useRunPlots } from '../hooks/useQueries'
 
-type ReportPageProps = {
-  backendConfig: BackendConfig
-  onBackendChange: (config: BackendConfig) => void
+function fmtNum(n: number | undefined): string {
+  if (n == null) return '—'
+  if (n >= 1_000_000) return (n/1_000_000).toFixed(1)+'M'
+  if (n >= 1_000) return (n/1_000).toFixed(1)+'K'
+  return String(n)
 }
 
-export default function ReportPage({ backendConfig, onBackendChange }: ReportPageProps) {
-  const [report, setReport] = useState<PipelineReport | null>(null)
-  const [plotData, setPlotData] = useState<PlotData | null>(null)
-  const [perBackendStats, setPerBackendStats] = useState<PerBackendStats | null>(null)
-  const [selectedCell, setSelectedCell] = useState<string | null>(null)
-  const [backendOptions, setBackendOptions] = useState<Record<string, string[]>>(FALLBACK_BACKENDS)
+function fmtPct(v: number | undefined): string {
+  if (v == null) return '—'
+  return (v * 100).toFixed(1) + '%'
+}
 
-  // Fetch backend options dynamically
-  useEffect(() => {
-    let cancelled = false
-    fetchBackendMeta().then((meta) => {
-      if (cancelled) return
-      if (meta) {
-        const converted: Record<string, string[]> = {}
-        for (const step of Object.keys(meta)) {
-          converted[step] = Object.keys(meta[step])
-        }
-        setBackendOptions(converted)
-      }
-    })
-    return () => { cancelled = true }
-  }, [])
+function ElapsedBadge({ seconds }: { seconds: number }) {
+  if (seconds < 1) return <span className="elapsed-badge elapsed-fast">{seconds.toFixed(2)}s</span>
+  if (seconds < 10) return <span className="elapsed-badge">{seconds.toFixed(2)}s</span>
+  return <span className="elapsed-badge elapsed-slow">{(seconds/60).toFixed(1)}min</span>
+}
 
-  // Load main report & plot data when backendConfig changes
-  useEffect(() => {
-    setReport(null)
-    setPlotData(null)
-    loadPipelineReport(backendConfig)
-      .then((value) => {
-        setReport(value)
-        return value?.outputs?.report ?? null
-      })
-      .then((reportPath) => loadPlotData(reportPath as string | null | undefined))
-      .then((value) => setPlotData(value))
-  }, [backendConfig])
+// ── Step metric helpers ──────────────────────────────────────────────
 
-  // Load per-backend stats once
-  useEffect(() => {
-    loadPerBackendStats().then(setPerBackendStats)
-  }, [])
+type StepInfo = {
+  label: string; backend: string; metrics: Array<{ label: string; value: string }>; elapsed?: number
+}
 
-  /** Read per-backend stats for a specific step + backend */
-  const stepStats = useCallback(
-    (stepName: string, backend: string) => {
-      return perBackendStats?.steps?.[stepName]?.[backend] ?? null
-    },
-    [perBackendStats],
-  )
+function extractSteps(ss: Record<string, Record<string, unknown>> | undefined): StepInfo[] {
+  if (!ss) return []
+  const order = ['denoise','patchify','segmentation','spatial_domain','subcellular_spatial_domain','analysis','annotation','spatial_analysis','subcellular_analysis']
+  const labels: Record<string, string> = {
+    denoise:'Denoise', patchify:'Patchify', segmentation:'Segmentation',
+    spatial_domain:'Spatial Domain', subcellular_spatial_domain:'Subcellular Domain',
+    analysis:'Clustering', annotation:'Annotation',
+    spatial_analysis:'Spatial Analysis', subcellular_analysis:'Subcellular Analysis',
+  }
+  const result: StepInfo[] = []
+  for (const key of order) {
+    const step = ss[key]
+    if (!step) continue
+    const backend = Object.entries(step).find(([k]) => k.endsWith('_backend') || k.endsWith('_backend_used'))?.[1] as string | undefined
+    const elapsed = step.__elapsed_seconds__ as number | undefined
+    // Skip trivial steps
+    if (backend === 'none' && step.skipped) continue
 
-  const eval_ = report?.layer_evaluation
-  const step_ = report?.step_summary
+    const metrics: Array<{ label: string; value: string }> = []
+    for (const [k, v] of Object.entries(step)) {
+      if (k.startsWith('__') || k.endsWith('_backend') || k.endsWith('_backend_used') || k.endsWith('_backend_requested') || k === 'skipped' || k.endsWith('_distribution')) continue
+      if (typeof v === 'number') metrics.push({ label: k.replace(/_/g, ' '), value: fmtNum(v) })
+      else if (typeof v === 'string') metrics.push({ label: k.replace(/_/g, ' '), value: v })
+    }
+    result.push({ label: labels[key] ?? key, backend: backend ?? '—', metrics, elapsed })
+  }
+  return result
+}
 
-  // Handle step-level backend changes — sync back to the global config
-  const stepBackendChange = useCallback(
-    (stepName: string, backend: string) => {
-      const mapping: Record<string, keyof BackendConfig> = {
-        denoise: 'denoise',
-        segmentation: 'segmentation',
-        analysis: 'clustering',
-        annotation: 'annotation',
-        spatial_domain: 'spatialDomain',
-        subcellular_spatial_domain: 'subcellularDomain',
-        spatial_analysis: 'spatialAnalysis',
-      }
-      const key = mapping[stepName]
-      if (key) {
-        onBackendChange({ ...backendConfig, [key]: backend })
-      }
-    },
-    [backendConfig, onBackendChange],
-  )
+// ── Layer evaluation helpers ─────────────────────────────────────────
 
-  /** The per-step backend value from the current global config */
-  const currentStepBackend = useCallback(
-    (stepName: string): string => {
-      const mapping: Record<string, keyof BackendConfig> = {
-        denoise: 'denoise',
-        segmentation: 'segmentation',
-        analysis: 'clustering',
-        annotation: 'annotation',
-        spatial_domain: 'spatialDomain',
-        subcellular_spatial_domain: 'subcellularDomain',
-        spatial_analysis: 'spatialAnalysis',
-      }
-      const key = mapping[stepName]
-      return key ? backendConfig[key] : ''
-    },
-    [backendConfig],
-  )
+type LayerMetric = { key: string; label: string; value: string }
+function extractLayerMetrics(le: Record<string, Record<string, unknown>> | undefined): Array<{ layer: string; metrics: LayerMetric[] }> {
+  if (!le) return []
+  const order = ['ingestion','denoise','segmentation','expression','clustering','annotation','spatial_domain','subcellular_spatial_domain','spatial']
+  const labels: Record<string, string> = {
+    ingestion:'Ingestion', denoise:'Denoise', segmentation:'Segmentation',
+    expression:'Expression', clustering:'Clustering', annotation:'Annotation',
+    spatial_domain:'Spatial Domain', subcellular_spatial_domain:'Subcellular Domain', spatial:'Spatial Graph',
+  }
+  const result: Array<{ layer: string; metrics: LayerMetric[] }> = []
+  for (const key of order) {
+    const layer = le[key]
+    if (!layer) continue
+    const metrics: LayerMetric[] = []
+    for (const [k, v] of Object.entries(layer)) {
+      if (k.endsWith('_distribution') || k === 'cellcomp_distribution' || k === 'cellcomp_distribution_after') continue
+      if (typeof v === 'number') metrics.push({ key: k, label: k.replace(/_/g, ' '), value: k.includes('ratio') || k.includes('fraction') ? fmtPct(v) : fmtNum(v) })
+      else if (typeof v === 'string') metrics.push({ key: k, label: k.replace(/_/g, ' '), value: v })
+    }
+    result.push({ layer: labels[key] ?? key, metrics })
+  }
+  return result
+}
+
+// ── Main Component ────────────────────────────────────────────────────
+
+export default function ReportPage() {
+  const { runName: urlRunName } = useParams<{ runName?: string }>()
+  const navigate = useNavigate()
+
+  const { data: allRuns = [] } = useRuns()
+  const [selectedRun, setSelectedRun] = useState<string | null>(urlRunName ?? null)
+  const effectiveRun = selectedRun ?? allRuns[0]?.run_name ?? null
+
+  const { data: report, isLoading: reportLoading, error: reportError } = useRunReport(effectiveRun)
+  const { data: plots } = useRunPlots(effectiveRun)
+  const [selectedCellId, setSelectedCellId] = useState<string | null>(null)
+
+  const ss = report?.step_summary as Record<string, Record<string, unknown>> | undefined
+  const le = report?.layer_evaluation as Record<string, Record<string, unknown>> | undefined
+  const summary = report?.summary as Record<string, unknown> | undefined
+
+  const steps = extractSteps(ss)
+  const layerMetrics = extractLayerMetrics(le)
+
+  const handleSelectRun = (name: string) => {
+    setSelectedRun(name)
+    navigate(`/report/${encodeURIComponent(name)}`, { replace: true })
+  }
 
   return (
     <div className="container">
-      {/* Control bar */}
+      {/* Run selector */}
       <section className="report-control-bar">
         <div>
-          <div className="eyebrow">Dataset</div>
-          <h2 style={{ margin: 0, fontSize: 22 }}>CosMx Mouse brain</h2>
-        </div>
-        <div className="report-actions">
-          <BackendSwitch value={backendConfig} onChange={onBackendChange} />
+          <div className="eyebrow">Pipeline Run</div>
+          <select value={effectiveRun ?? ''} onChange={(e) => handleSelectRun(e.target.value)}
+            style={{ fontSize: 18, fontWeight: 600, padding: '4px 8px', border: '1px solid var(--border-color,#ddd)', borderRadius: 6 }}>
+            {allRuns.map(r => r.run_name).map(name => <option key={name} value={name}>{name}</option>)}
+            {allRuns.length === 0 && <option value="">No runs</option>}
+          </select>
         </div>
       </section>
 
-      {perBackendStats && !perBackendStats.available && (
-        <div className="alert alert-error" style={{ marginTop: 12 }}>
-          Per-backend stats unavailable. Run the benchmark first: <code>subcellspace benchmark-cosmx ...</code>
-        </div>
-      )}
+      {reportLoading && <LoadingSkeleton />}
+      {reportError && <div className="alert alert-error">Failed to load report. Network error.</div>}
 
-      {report ? (
-        <div className="report-layout">
-          {/* ============================================ */}
-          {/* STEP 1: Filtering (Denoise)                   */}
-          {/* ============================================ */}
-          <StepSection title="Step 1: Filtering / Denoise" stepIndex={1} totalSteps={5}
-            stepName="denoise"
-            currentBackend={currentStepBackend('denoise')}
-            allBackends={backendOptions.denoise ?? []}
-            stepStats={stepStats('denoise', currentStepBackend('denoise'))}
-            onBackendChange={(b) => stepBackendChange('denoise', b)}
-          >
-            <div className="step-two-col">
-              <div className="step-insight-card">
-                <h4>Raw data overview</h4>
-                <StatTable rows={rawIngestionRows(eval_?.ingestion)} />
-              </div>
-              <div className="step-insight-card">
-                <h4>Filtering effect</h4>
-                <StatTable rows={denoiseEffectRows(eval_?.denoise, step_?.denoise)} />
-              </div>
-            </div>
-            {eval_?.denoise?.cellcomp_distribution_after && (
-              <div className="step-insight-card" style={{ marginTop: 12 }}>
-                <h4>CellComp distribution after filtering</h4>
-                <BarChart data={eval_.denoise.cellcomp_distribution_after} />
-              </div>
-            )}
-          </StepSection>
+      {report && (
+        <>
+          {/* Summary metrics */}
+          <section className="metrics-grid" style={{ marginTop: 16 }}>
+            <div className="metric-tile"><span>Cells</span><strong>{fmtNum(report.n_obs)}</strong></div>
+            <div className="metric-tile"><span>Genes</span><strong>{fmtNum(report.n_vars)}</strong></div>
+            <div className="metric-tile"><span>Clusters</span><strong>{report.clusters ? Object.keys(report.clusters).length : '—'}</strong></div>
+            <div className="metric-tile"><span>Transcripts</span><strong>{fmtNum(summary?.n_transcripts as number)}</strong></div>
+            <div className="metric-tile"><span>FOVs</span><strong>{fmtNum(summary?.n_fovs as number)}</strong></div>
+            <div className="metric-tile"><span>Platform</span><strong>{summary?.platform as string ?? report.pipeline_name ?? '—'}</strong></div>
+          </section>
 
-          {/* ============================================ */}
-          {/* STEP 2: Segmentation                          */}
-          {/* ============================================ */}
-          <StepSection title="Step 2: Segmentation" stepIndex={2} totalSteps={5}
-            stepName="segmentation"
-            currentBackend={currentStepBackend('segmentation')}
-            allBackends={backendOptions.segmentation ?? []}
-            stepStats={stepStats('segmentation', currentStepBackend('segmentation'))}
-            onBackendChange={(b) => stepBackendChange('segmentation', b)}
-          >
-            <div className="step-two-col">
-              <div className="step-insight-card">
-                <h4>Assignment statistics</h4>
-                <StatTable rows={segmentationStatRows(eval_?.segmentation, step_?.segmentation)} />
-              </div>
-              <div className="step-insight-card">
-                <h4>Spatial layout — cells colored by cell ID</h4>
-                {plotData?.points?.spatial ? (
-                  <InteractiveScatterPlot
-                    series={plotData.points.spatial}
-                    onCellClick={(cellId) => setSelectedCell(cellId === selectedCell ? null : cellId)}
-                  />
-                ) : (
-                  <div className="empty-state">No spatial plot data available.</div>
-                )}
-                <p className="step-hint">Click a cell to highlight its transcript coordinates (below)</p>
-              </div>
-            </div>
-            {selectedCell && (
-              <div className="step-insight-card" style={{ marginTop: 12 }}>
-                <h4>Transcripts in cell <code>{selectedCell}</code> (colored by gene)</h4>
-                <TranscriptScatter cellId={selectedCell} />
-                <p className="step-hint" style={{ marginTop: 8 }}>
-                  Each dot = one transcript. Color encodes gene target.
-                  <button className="link-btn" onClick={() => setSelectedCell(null)} style={{ marginLeft: 12 }}>
-                    × Clear selection
-                  </button>
-                </p>
-              </div>
-            )}
-          </StepSection>
-
-          {/* ============================================ */}
-          {/* STEP 3: Spatial Domain Identification        */}
-          {/* ============================================ */}
-          <StepSection title="Step 3: Spatial Domain Identification" stepIndex={3} totalSteps={5}
-            stepName="spatial_domain"
-            currentBackend={currentStepBackend('spatial_domain')}
-            allBackends={backendOptions.spatial_domain ?? []}
-            stepStats={stepStats('spatial_domain', currentStepBackend('spatial_domain'))}
-            onBackendChange={(b) => stepBackendChange('spatial_domain', b)}
-          >
-            <div className="step-insight-card">
-              <h4>Subcellular spatial domain statistics</h4>
-              <StatTable rows={subcellularDomainRows(eval_?.subcellular_spatial_domain, step_?.subcellular_spatial_domain)} />
-            </div>
-            <div className="step-two-col" style={{ marginTop: 12 }}>
-              <div className="step-insight-card">
-                <h4>Cell-level spatial domain distribution</h4>
-                {step_?.spatial_domain?.spatial_domain_distribution ? (
-                  <BarChart data={step_.spatial_domain.spatial_domain_distribution as Record<string, number>} />
-                ) : (
-                  <div className="empty-state">No domain distribution data.</div>
-                )}
-              </div>
-              <div className="step-insight-card">
-                <h4>Spatial graph (cell-level)</h4>
-                <StatTable rows={spatialGraphStatRows(eval_?.spatial)} />
-              </div>
-            </div>
-            <div className="step-insight-card" style={{ marginTop: 12 }}>
-              <h4>Multi-level spatial domains</h4>
-              <table className="domain-level-table">
-                <thead>
-                  <tr>
-                    <th>Level</th>
-                    <th>Granularity</th>
-                    <th>Current support</th>
-                    <th>Backend</th>
-                  </tr>
-                </thead>
+          {/* Pipeline Steps */}
+          <section className="card" style={{ marginTop: 16 }}>
+            <h3>Pipeline Steps</h3>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead><tr><th>Step</th><th>Backend</th><th>Key Metrics</th><th style={{textAlign:'right'}}>Time</th></tr></thead>
                 <tbody>
-                  <tr>
-                    <td><strong>Cell-level</strong></td>
-                    <td>Groups of cells sharing spatial proximity</td>
-                    <td><span className="status-badge status-badge--supported">Available</span></td>
-                    <td>{step_?.spatial_domain?.spatial_domain_backend_used ?? backendConfig.spatialDomain}</td>
-                  </tr>
-                  <tr>
-                    <td><strong>Subcellular-level</strong></td>
-                    <td>Transcript-level spatial domains within cells</td>
-                    <td><span className="status-badge status-badge--supported">Available</span></td>
-                    <td>{step_?.subcellular_spatial_domain?.subcellular_spatial_domain_backend ?? backendConfig.subcellularDomain}</td>
-                  </tr>
+                  {steps.map((step) => (
+                    <tr key={step.label}>
+                      <td style={{fontWeight:600}}>{step.label}</td>
+                      <td><code className="backend-code">{step.backend}</code></td>
+                      <td className="step-metrics-cell">
+                        {step.metrics.slice(0, 3).map((m, i) => (
+                          <span key={i} className="step-metric-chip"><em>{m.label}</em> {m.value}</span>
+                        ))}
+                      </td>
+                      <td style={{textAlign:'right'}}>
+                        {step.elapsed != null ? <ElapsedBadge seconds={step.elapsed} /> : '—'}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-          </StepSection>
+          </section>
 
-          {/* ============================================ */}
-          {/* STEP 4: Clustering / Expression Analysis     */}
-          {/* ============================================ */}
-          <StepSection title="Step 4: Clustering & Expression Analysis" stepIndex={4} totalSteps={5}
-            stepName="analysis"
-            currentBackend={currentStepBackend('analysis')}
-            allBackends={backendOptions.analysis ?? []}
-            stepStats={stepStats('analysis', currentStepBackend('analysis'))}
-            onBackendChange={(b) => stepBackendChange('analysis', b)}
-          >
-            <div className="step-grid-2x2">
-              <div className="step-insight-card full-width-col">
-                <h4>UMAP embedding</h4>
-                {plotData?.points?.umap ? (
-                  <InteractiveScatterPlot series={plotData.points.umap} />
-                ) : (
-                  <div className="empty-state">No UMAP data available.</div>
+          {/* Cluster + Annotation side by side */}
+          <div className="two-column-grid" style={{ marginTop: 16 }}>
+            {report.clusters && Object.keys(report.clusters).length > 0 && (
+              <section className="card">
+                <h3>Cluster Distribution</h3>
+                <div className="cluster-donut-section">
+                  <DonutChart
+                    data={Object.entries(report.clusters).map(([k, v]) => ({ label: `C${k}`, count: v as number }))}
+                    maxSlices={8}
+                    size={200}
+                    title={`${Object.keys(report.clusters).length} clusters`}
+                  />
+                </div>
+              </section>
+            )}
+            {ss?.annotation?.cell_type_distribution && (
+              <section className="card">
+                <h3>Cell Type Annotation</h3>
+                <div className="cluster-donut-section">
+                  <DonutChart
+                    data={Object.entries(ss.annotation.cell_type_distribution as Record<string,number>)
+                      .map(([k, v]) => ({ label: k.replace('CT_',''), count: v }))}
+                    maxSlices={8}
+                    size={200}
+                    title={`${ss.annotation.n_cell_types ?? '?'} types`}
+                  />
+                </div>
+              </section>
+            )}
+          </div>
+
+          {/* Layer evaluation — compact table */}
+          {layerMetrics.length > 0 && (
+            <section className="card" style={{ marginTop: 16 }}>
+              <h3>Layer Evaluation</h3>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead><tr><th>Layer</th><th>Metric</th><th>Value</th></tr></thead>
+                  <tbody>
+                    {layerMetrics.map(({ layer, metrics }) =>
+                      metrics.map((m, i) => (
+                        <tr key={`${layer}-${m.key}`}>
+                          {i === 0 && <td rowSpan={metrics.length} style={{fontWeight:600,verticalAlign:'top'}}>{layer}</td>}
+                          <td>{m.label}</td>
+                          <td style={{fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{m.value}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* Plots */}
+          <section className="card" style={{ marginTop: 16 }}>
+            <h3>Visualization</h3>
+            {plots?.points ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                {plots.points.spatial && (
+                  <div>
+                    <h4 style={{ marginBottom: 8 }}>Spatial (colored by domain)</h4>
+                    <AdaptiveScatterPlot
+                      series={plots.points.spatial as any}
+                      onCellClick={(id) => setSelectedCellId(id)}
+                    />
+                  </div>
+                )}
+                {plots.points.umap && (
+                  <div>
+                    <h4 style={{ marginBottom: 8 }}>UMAP (colored by cluster)</h4>
+                    <AdaptiveScatterPlot
+                      series={plots.points.umap as any}
+                      onCellClick={(id) => setSelectedCellId(id)}
+                    />
+                  </div>
                 )}
               </div>
-              <div className="step-insight-card">
-                <h4>Cluster distribution</h4>
-                <ClusterDonut report={report} />
-              </div>
-              <div className="step-insight-card">
-                <h4>Expression & QC</h4>
-                <StatTable rows={expressionStatRows(eval_?.expression, step_?.analysis)} />
-              </div>
-              <div className="step-insight-card">
-                <h4>Clustering details</h4>
-                <StatTable rows={clusteringStatRows(eval_?.clustering)} />
-              </div>
-            </div>
-          </StepSection>
-
-          {/* ============================================ */}
-          {/* STEP 5: Annotation                           */}
-          {/* ============================================ */}
-          <StepSection title="Step 5: Cell-type Annotation" stepIndex={5} totalSteps={5}
-            stepName="annotation"
-            currentBackend={currentStepBackend('annotation')}
-            allBackends={backendOptions.annotation ?? []}
-            stepStats={stepStats('annotation', currentStepBackend('annotation'))}
-            onBackendChange={(b) => stepBackendChange('annotation', b)}
-          >
-            {eval_?.annotation?.n_cell_types && eval_.annotation.n_cell_types > 0 ? (
-              <div className="step-insight-card">
-                <h4>Annotation results</h4>
-                <StatTable rows={annotationStatRows(eval_?.annotation)} />
-              </div>
             ) : (
-              <div className="annotation-missing">
-                <div className="annotation-missing-icon">🧬</div>
-                <h4>No single-cell reference available</h4>
-                <p>
-                  Cell-type annotation requires a single-cell RNA-seq reference dataset for label transfer.
-                  Currently the pipeline operates in a discovery mode without external reference data.
-                  Common solutions include:
-                </p>
-                <ul>
-                  <li>Provide a pre-annotated scRNA-seq reference (e.g., as AnnData .h5ad file)</li>
-                  <li>Use a dedicated annotation model like CellTypist or ScArches</li>
-                  <li>Manually curate cluster markers from the differential expression results</li>
-                </ul>
-              </div>
+              <div className="empty-state">No plot data available for this run.</div>
             )}
-          </StepSection>
-        </div>
-      ) : (
-        <div className="report-loading-skeleton">
-          <div className="metric-strip">
-            {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
-          </div>
-          <div className="two-column-grid" style={{ marginTop: 16 }}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div className="chart-card" key={i}>
-                <SkeletonCard />
+          </section>
+
+          {/* Spatial analysis details */}
+          {ss?.spatial_analysis && (
+            <section className="card" style={{ marginTop: 16 }}>
+              <h3>Spatial Analysis Details</h3>
+              <div className="detail-meta-grid">
+                {Object.entries(ss.spatial_analysis as Record<string,unknown>)
+                  .filter(([k]) => !k.startsWith('__') && !k.endsWith('_backend') && !k.endsWith('_backend_used') && !k.endsWith('_backend_requested'))
+                  .map(([k, v]) => (
+                    <MetaItem key={k} label={k.replace(/_/g, ' ')} value={typeof v === 'number' ? fmtNum(v) : String(v)} />
+                  ))}
               </div>
-            ))}
-          </div>
-        </div>
+            </section>
+          )}
+
+          {/* Subcellular analysis details */}
+          {ss?.subcellular_analysis && (
+            <section className="card" style={{ marginTop: 16 }}>
+              <h3>Subcellular Analysis</h3>
+              <div className="detail-meta-grid">
+                {Object.entries(ss.subcellular_analysis as Record<string,unknown>)
+                  .filter(([k]) => !k.startsWith('__') && !k.endsWith('_backend'))
+                  .map(([k, v]) => (
+                    <MetaItem key={k} label={k.replace(/_/g, ' ')} value={typeof v === 'number' ? fmtPct(v) : String(v)} />
+                  ))}
+              </div>
+            </section>
+          )}
+
+          {/* Outputs */}
+          {report.outputs && (
+            <section className="card" style={{ marginTop: 16 }}>
+              <h3>Output Files</h3>
+              <div style={{ fontSize: 12, color: '#4c6774', lineHeight: 1.8 }}>
+                <div>📁 h5ad: <code>{report.outputs.adata ?? '—'}</code></div>
+                <div>📄 Report JSON: <code>{report.outputs.report ?? '—'}</code></div>
+                <div>📊 Transcripts: <code>{report.outputs.transcripts ?? '—'}</code></div>
+              </div>
+            </section>
+          )}
+        </>
+      )}
+
+      {!reportLoading && !reportError && !report && effectiveRun && (
+        <div className="empty-state">Select a run to view its report.</div>
+      )}
+
+      {!effectiveRun && (
+        <div className="empty-state">No pipeline runs found. Run <code>subcellspace ingest ... && subcellspace run ...</code> first.</div>
+      )}
+
+      {selectedCellId && effectiveRun && (
+        <CellDetailPanel cellId={selectedCellId} runName={effectiveRun} onClose={() => setSelectedCellId(null)} />
       )}
     </div>
   )
 }
 
-/* ============ Sub-components ============ */
-
-/** A visual step section with title bar, backend selector, and content body */
-function StepSection({
-  title,
-  stepIndex,
-  totalSteps,
-  stepName,
-  currentBackend,
-  allBackends,
-  stepStats,
-  onBackendChange,
-  children,
-}: {
-  title: string
-  stepIndex: number
-  totalSteps: number
-  stepName: string
-  currentBackend: string
-  allBackends: string[]
-  stepStats: { layer_evaluation?: Record<string, unknown> | null; step_summary?: Record<string, unknown> | null } | null
-  onBackendChange: (backend: string) => void
-  children: React.ReactNode
-}) {
-  const label = STEP_LABELS[stepName] ?? stepName
-
-  return (
-    <section className="step-block">
-      <div className="step-header">
-        <div className="step-header-left">
-          <span className="step-number">{stepIndex}/{totalSteps}</span>
-          <h3>{title}</h3>
-        </div>
-        <div className="step-substeps">
-          <span className="step-substep">
-            <span className="step-substep-label">{label}</span>
-            <select
-              className="step-backend-select"
-              value={currentBackend}
-              onChange={(e) => onBackendChange(e.target.value)}
-            >
-              {allBackends.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </span>
-          {stepStats?.step_summary && Object.keys(stepStats.step_summary).length > 0 && (
-            <span className="step-substep">
-              <span className="step-substep-label">per-backend</span>
-              <span className="step-substep-value">✓ loaded</span>
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="step-body">
-        {children}
-      </div>
-    </section>
-  )
-}
-
-function StatTable({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
-  return (
-    <table className="stat-table">
-      <tbody>
-        {rows.map(([label, value]) => (
-          <tr key={label}>
-            <td className="stat-label">{label}</td>
-            <td className="stat-value">{formatDisplayValue(value)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-/** Simple horizontal bar chart rendering a distribution */
-function BarChart({ data, maxBars = 12 }: { data: Record<string, number>; maxBars?: number }) {
-  const entries = Object.entries(data).slice(0, maxBars)
-  const maxVal = Math.max(...entries.map(([, v]) => v), 1)
-  const colors = [
-    '#0b4c6e', '#1a7a9e', '#2aa0c0', '#4cb8d6',
-    '#7acee6', '#a0dff0', '#c7eaf5', '#e5f3f8',
-    '#f4a261', '#e76f51', '#2a9d8f', '#e9c46a',
-  ]
-  return (
-    <div className="bar-chart">
-      {entries.map(([label, value], i) => (
-        <div className="bar-row" key={label}>
-          <span className="bar-label" title={label}>{label.length > 18 ? label.slice(0, 16) + '…' : label}</span>
-          <div className="bar-track">
-            <div
-              className="bar-fill"
-              style={{ width: `${(value / maxVal) * 100}%`, background: colors[i % colors.length] }}
-            />
-          </div>
-          <span className="bar-value">{typeof value === 'number' ? value.toLocaleString() : String(value)}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function ClusterDonut({ report }: { report: PipelineReport }) {
-  const clusterDistribution = useMemo(() => {
-    const clusters = report?.clusters ?? {}
-    return Object.entries(clusters)
-      .map(([label, count]) => ({ label, count: Number(count) || 0 }))
-      .sort((a, b) => b.count - a.count)
-  }, [report])
-
-  if (clusterDistribution.length === 0) {
-    return <div className="empty-state">No cluster distribution available.</div>
-  }
-
-  return <DonutChart data={clusterDistribution} maxSlices={6} size={200} title="Cluster distribution" />
-}
-
-const TRANSCRIPT_PALETTE = [
-  '#0b4c6e', '#11698a', '#1f8a70', '#d99b2b', '#c8553d',
-  '#7d5ba6', '#4c8d9d', '#335c67', '#f25f5c', '#70c1b3',
-  '#e76f51', '#2a9d8f', '#e9c46a', '#264653', '#a8dadc',
-]
-
-/** Real transcript-level scatter — fetches per-cell coordinates from backend */
-function TranscriptScatter({ cellId }: { cellId: string }) {
-  const [data, setData] = useState<CellTranscripts | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [colorMode, setColorMode] = useState<'subcellular' | 'gene' | 'cellcomp'>('subcellular')
-  const [hoveredKey, setHoveredKey] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    setData(null)
-    loadCellTranscripts(cellId)
-      .then((value) => {
-        if (!cancelled) {
-          setData(value)
-          setLoading(false)
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(String(err))
-          setLoading(false)
-        }
-      })
-    return () => { cancelled = true }
-  }, [cellId])
-
-  if (loading) {
-    return (
-      <div className="transcript-view-placeholder">
-        <SkeletonCard />
-      </div>
-    )
-  }
-
-  if (error || !data || data.points.length === 0) {
-    return (
-      <div className="transcript-view-placeholder">
-        <p className="empty-state">
-          {error ? `Error: ${error}` : `No transcript data for cell ${cellId}`}
-        </p>
-      </div>
-    )
-  }
-
-  const W = 600
-  const H = 400
-  const PAD = 24
-  const xs = data.points.map((p) => p.x)
-  const ys = data.points.map((p) => p.y)
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-  const xSpan = Math.max(maxX - minX, 1e-6)
-  const ySpan = Math.max(maxY - minY, 1e-6)
-
-  const toSvg = (px: number, py: number) => ({
-    x: PAD + ((px - minX) / xSpan) * (W - PAD * 2),
-    y: H - PAD - ((py - minY) / ySpan) * (H - PAD * 2),
-  })
-
-  type ColorKeyFn = (pt: CellTranscriptPoint) => string
-  const colorKey: ColorKeyFn =
-    colorMode === 'subcellular'
-      ? (pt) => pt.subcellular_domain
-      : colorMode === 'cellcomp'
-        ? (pt) => pt.cellcomp
-        : (pt) => pt.gene
-
-  const keyList = [...new Set(data.points.map(colorKey))]
-  const colorMap = new Map(keyList.map((k, i) => [k, TRANSCRIPT_PALETTE[i % TRANSCRIPT_PALETTE.length]]))
-
-  const radius = hoveredKey ? 3.0 : 1.8
-  const baseOpacity = hoveredKey ? 0.25 : 0.75
-
-  const modeLabel =
-    colorMode === 'subcellular' ? 'subcellular domain' :
-    colorMode === 'cellcomp' ? 'CellComp' : 'gene'
-
-  return (
-    <div className="transcript-scatter-real">
-      <div className="transcript-meta">
-        <span>{data.n_transcripts} transcripts · {keyList.length} {modeLabel}(s)</span>
-        <div className="transcript-color-mode">
-          {(['subcellular', 'gene', 'cellcomp'] as const).map((mode) => (
-            <label key={mode} className={`color-mode-option${colorMode === mode ? ' active' : ''}`}>
-              <input
-                type="radio"
-                name={`cmode-${cellId}`}
-                value={mode}
-                checked={colorMode === mode}
-                onChange={() => setColorMode(mode)}
-              />
-              {mode === 'subcellular' ? 'Domain' : mode === 'gene' ? 'Gene' : 'CellComp'}
-            </label>
-          ))}
-        </div>
-      </div>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="transcript-svg">
-        <rect x={0} y={0} width={W} height={H} fill="rgba(247,251,253,0.5)" rx={8} />
-        {data.hull && data.hull.length >= 3 && (
-          <polygon
-            points={data.hull.map((h) => {
-              const s = toSvg(h.x, h.y)
-              return `${s.x},${s.y}`
-            }).join(' ')}
-            fill="rgba(22,50,63,0.06)"
-            stroke="rgba(22,50,63,0.30)"
-            strokeWidth={1.2}
-            strokeDasharray="4 2"
-          />
-        )}
-        {data.points.map((pt, idx) => {
-          const svg = toSvg(pt.x, pt.y)
-          const key = colorKey(pt)
-          const isHovered = hoveredKey === key
-          const fill = colorMap.get(key) ?? '#888'
-          return (
-            <circle
-              key={idx}
-              cx={svg.x}
-              cy={svg.y}
-              r={isHovered ? radius * 2.5 : radius}
-              fill={fill}
-              opacity={isHovered ? 1 : baseOpacity}
-              stroke={isHovered ? '#fff' : 'none'}
-              strokeWidth={isHovered ? 0.5 : 0}
-              style={{ cursor: 'pointer', transition: 'r 0.1s, opacity 0.1s' }}
-              onMouseEnter={() => setHoveredKey(key)}
-              onMouseLeave={() => setHoveredKey(null)}
-            />
-          )
-        })}
-      </svg>
-      <div className="transcript-legend">
-        {keyList.slice(0, 12).map((key, i) => (
-          <span
-            key={key}
-            className="transcript-legend-item"
-            style={{ opacity: hoveredKey && hoveredKey !== key ? 0.4 : 1 }}
-            onMouseEnter={() => setHoveredKey(key)}
-            onMouseLeave={() => setHoveredKey(null)}
-          >
-            <i style={{ backgroundColor: colorMap.get(key) }} />
-            {key}
-          </span>
-        ))}
-        {keyList.length > 12 && <span className="transcript-legend-item">+{keyList.length - 12} more</span>}
-      </div>
-    </div>
-  )
-}
-
-/* ============ Helper functions ============ */
-
-function formatMetric(value: unknown): string {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value.toFixed(3)
-  }
-  return formatDisplayValue(value)
-}
-
-function formatDisplayValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return 'n/a'
-  }
-  if (typeof value === 'number') {
-    return Number.isInteger(value) ? String(value) : value.toFixed(3)
-  }
-  if (typeof value === 'string') {
-    return value
-  }
-  return JSON.stringify(value)
-}
-
-function formatTranscriptFiltering(denoise: DenoiseMetrics | undefined): string {
-  if (!denoise || denoise.n_transcripts_before == null || denoise.n_transcripts_after == null) {
-    return 'n/a'
-  }
-  const pct = denoise.retained_ratio != null ? ` (${(denoise.retained_ratio * 100).toFixed(1)}% retained)` : ''
-  return `${denoise.n_transcripts_before.toLocaleString()} → ${denoise.n_transcripts_after.toLocaleString()}${pct}`
-}
-
-function rawIngestionRows(ingestion: IngestionMetrics | undefined): Array<[string, string | number | null | undefined]> {
-  if (!ingestion) return [['No raw data available', null]]
-  return [
-    ['Total transcripts', ingestion.n_transcripts],
-    ['Raw cells (CSV)', ingestion.n_cells_raw],
-    ['Unique genes', ingestion.n_genes_raw],
-    ['FOVs', ingestion.n_fovs],
-    ['Missing cell ratio', ingestion.missing_cell_ratio != null ? `${(ingestion.missing_cell_ratio * 100).toFixed(1)}%` : null],
-  ]
-}
-
-function denoiseEffectRows(
-  denoise: DenoiseMetrics | undefined,
-  step: DenoiseStepSummary | undefined,
-): Array<[string, string | number | null | undefined]> {
-  if (!denoise) return [['No filtering data', null]]
-  return [
-    ['Backend', step?.denoise_backend ?? 'n/a'],
-    ['Before filtering', denoise.n_transcripts_before?.toLocaleString()],
-    ['After filtering', denoise.n_transcripts_after?.toLocaleString()],
-    ['Dropped', step?.dropped_transcripts?.toLocaleString()],
-    ['Drop ratio', step?.drop_ratio != null ? `${(step.drop_ratio * 100).toFixed(1)}%` : null],
-  ]
-}
-
-function segmentationStatRows(
-  seg: SegmentationMetrics | undefined,
-  step: SegmentationStepSummary | undefined,
-): Array<[string, string | number | null | undefined]> {
-  if (!seg) return [['No segmentation data', null]]
-  return [
-    ['Backend', step?.segmentation_backend ?? 'n/a'],
-    ['Transcripts assigned', seg.n_transcripts_assigned?.toLocaleString()],
-    ['Cells assigned', seg.n_cells_assigned?.toLocaleString()],
-    ['Assignment ratio', seg.assignment_ratio != null ? `${(seg.assignment_ratio * 100).toFixed(1)}%` : null],
-    ['Mean transcripts / cell', seg.mean_transcripts_per_cell != null ? seg.mean_transcripts_per_cell.toFixed(1) : null],
-    ['Median transcripts / cell', seg.median_transcripts_per_cell != null ? seg.median_transcripts_per_cell.toFixed(1) : null],
-  ]
-}
-
-function expressionStatRows(
-  expr: ExpressionMetrics | undefined,
-  step: AnalysisStepSummary | undefined,
-): Array<[string, string | number | null | undefined]> {
-  if (!expr && !step) return [['No expression data', null]]
-  const rows: Array<[string, string | number | null | undefined]> = []
-  if (step) {
-    rows.push(['Cells before QC', step.n_obs_before_qc])
-    rows.push(['Cells after QC', step.n_obs_after_qc])
-  }
-  if (expr) {
-    rows.push(['Genes after HVG', expr.n_genes_after_hvg])
-    rows.push(['Median total counts', expr.median_total_counts != null ? expr.median_total_counts.toFixed(1) : null])
-    rows.push(['Median genes/cell', expr.median_n_genes_by_counts != null ? expr.median_n_genes_by_counts.toFixed(1) : null])
-    rows.push(['QC pass ratio', expr.qc_pass_ratio_vs_segmented != null ? `${(expr.qc_pass_ratio_vs_segmented * 100).toFixed(1)}%` : null])
-  }
-  return rows
-}
-
-function clusteringStatRows(
-  clust: ClusteringMetrics | undefined,
-): Array<[string, string | number | null | undefined]> {
-  if (!clust) return [['No clustering data', null]]
-  return [
-    ['# clusters', clust.n_clusters],
-    ['Largest cluster fraction', clust.largest_cluster_fraction != null ? `${(clust.largest_cluster_fraction * 100).toFixed(1)}%` : null],
-    ['Silhouette (PCA)', clust.silhouette_pca != null ? clust.silhouette_pca.toFixed(3) : null],
-  ]
-}
-
-function annotationStatRows(
-  ann: AnnotationMetrics | undefined,
-): Array<[string, string | number | null | undefined]> {
-  if (!ann) return [['No annotation data', null]]
-  return [
-    ['# cell types', ann.n_cell_types],
-    ['Largest cell type fraction', ann.largest_cell_type_fraction != null ? `${(ann.largest_cell_type_fraction * 100).toFixed(1)}%` : null],
-  ]
-}
-
-function subcellularDomainRows(
-  sub: SubcellularDomainMetrics | undefined,
-  step: SubcellularStepSummary | undefined,
-): Array<[string, string | number | null | undefined]> {
-  if (!sub && !step) return [['No subcellular domain data', null]]
-  const rows: Array<[string, string | number | null | undefined]> = []
-  if (step) {
-    rows.push(['Backend', step.subcellular_spatial_domain_backend])
-    rows.push(['DBSCAN eps', step.dbscan_eps])
-    rows.push(['DBSCAN min_samples', step.dbscan_min_samples])
-    rows.push(['Cells processed', step.n_cells_processed])
-    rows.push(['Noise transcripts (total)', step.total_noise_transcripts])
-  }
-  if (sub) {
-    rows.push(['Cells with multiple domains', sub.n_cells_with_multiple_domains])
-    rows.push(['Fraction multi-domain', sub.fraction_multi_domain != null ? `${(sub.fraction_multi_domain * 100).toFixed(1)}%` : null])
-    rows.push(['Mean domains per cell', sub.mean_domains_per_cell != null ? sub.mean_domains_per_cell.toFixed(1) : null])
-    rows.push(['Transcripts in multi-domain cells', sub.n_transcripts_in_multi_domain_cells?.toLocaleString()])
-  }
-  return rows
-}
-
-function spatialGraphStatRows(
-  spatial: SpatialGraphMetrics | undefined,
-): Array<[string, string | number | null | undefined]> {
-  if (!spatial || !spatial.graph_available) return [['Spatial graph not available', null]]
-  return [
-    ['Nodes (cells)', spatial.n_nodes],
-    ['Edges', spatial.n_edges],
-    ['Avg degree', spatial.avg_degree != null ? spatial.avg_degree.toFixed(2) : null],
-    ['Median degree', spatial.median_degree != null ? spatial.median_degree.toFixed(1) : null],
-    ['Connected components', spatial.connected_components],
-  ]
+function MetaItem({ label, value }: { label: string; value: string }) {
+  return <div className="meta-item"><span className="meta-label">{label}</span><span className="meta-value">{value}</span></div>
 }

@@ -69,11 +69,11 @@ async function waitForPort(port, timeoutMs = 30000) {
   return false
 }
 
-function spawnProcess(command, args, cwd, label) {
+function spawnProcess(command, args, cwd, label, extraEnv = {}) {
   const child = spawn(command, args, {
     cwd,
     stdio: 'inherit',
-    env: process.env,
+    env: { ...process.env, ...extraEnv },
   })
 
   child.on('exit', (code, signal) => {
@@ -98,6 +98,7 @@ async function startBackendIfNeeded() {
     ['-m', 'uvicorn', 'src.api_server:app', '--host', '127.0.0.1', '--port', '8000'],
     repoRoot,
     'backend',
+    { TF_CPP_MIN_LOG_LEVEL: '3', TF_ENABLE_ONEDNN_OPTS: '0' },
   )
 
   const ready = await waitForPort(8000)
