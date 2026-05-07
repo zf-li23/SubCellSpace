@@ -148,9 +148,20 @@ def run_expression_and_spatial_analysis(
 
     n_obs_before = adata.n_obs
 
+    # ── Preserve raw counts before normalization ──
+    if "counts" not in adata.layers:
+        adata.layers["counts"] = adata.X.copy()
+
     sc.pp.calculate_qc_metrics(adata, inplace=True, percent_top=[])
+    # Write QC metrics to uns for frontend consumption
+    adata.uns["qc_metrics"] = {
+        "n_obs_before_qc": int(n_obs_before),
+        "min_transcripts": min_transcripts,
+        "min_genes": min_genes,
+    }
     adata = adata[adata.obs["total_counts"] >= min_transcripts].copy()
     adata = adata[adata.obs["n_genes_by_counts"] >= min_genes].copy()
+    adata.uns["qc_metrics"]["n_obs_after_qc"] = int(adata.n_obs)
 
     if adata.n_obs < 2:
         # Not enough cells left after filtering; return early with minimal summary
@@ -166,6 +177,7 @@ def run_expression_and_spatial_analysis(
 
     sc.pp.normalize_total(adata, target_sum=1e4)
     sc.pp.log1p(adata)
+    # ── Standard scanpy layer: log-normalized expression ──
     adata.layers["lognorm"] = adata.X.copy()
     try:
         sc.pp.highly_variable_genes(adata, flavor="cell_ranger", n_top_genes=min(2000, adata.n_vars))

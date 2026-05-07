@@ -40,13 +40,13 @@ OPTIONAL_CANONICAL_COLUMNS = {COL_CELL_ID, COL_FOV, COL_CELLCOMP, COL_QV, COL_Z}
 # to accept either naming scheme.  Phase 2 removes legacy aliases.
 
 _LEGACY_ALIASES: dict[str, list[str]] = {
-    COL_X:        ["x_global_px", "x_location"],
-    COL_Y:        ["y_global_px", "y_location"],
-    COL_GENE:     ["target", "feature_name", "geneID"],
-    COL_CELL_ID:  ["cell", "cell_id", "cell_ID"],
-    COL_FOV:      ["fov", "fov_name"],
-    COL_CELLCOMP: ["CellComp"],
-    COL_QV:       ["qv"],
+    COL_X:        ["x_global_px", "x_location", "global_x", "X"],
+    COL_Y:        ["y_global_px", "y_location", "global_y", "Y"],
+    COL_GENE:     ["target", "feature_name", "geneID", "Gene", "gene_name"],
+    COL_CELL_ID:  ["cell", "cell_id", "cell_ID", "barcode_id", "CellID", "cell_label"],
+    COL_FOV:      ["fov", "fov_name", "FOV"],
+    COL_CELLCOMP: ["CellComp", "cell_comp", "compartment"],
+    COL_QV:       ["qv", "QV", "quality_value"],
 }
 
 
@@ -98,13 +98,13 @@ KEY_COMSEG_BOUNDARIES = "comseg_boundaries"
 KEY_IMAGE_PATCHES = "image_patches"
 KEY_TRANSCRIPT_PATCHES = "transcript_patches"
 
-# Tables layer
-KEY_MAIN_TABLE = "main_table"
-KEY_REFERENCE_TABLE = "reference_table"
+# Tables layer — aligned with spatialdata conventions
+KEY_MAIN_TABLE = "table"          # spatialdata default: sanitize_table writes to "table"
+KEY_REFERENCE_TABLE = "reference"
 
-# Images layer
-KEY_MORPHOLOGY_IMAGE = "morphology_image"
-KEY_HE_IMAGE = "he_image"
+# Images layer — aligned with spatialdata conventions
+KEY_MORPHOLOGY_IMAGE = "morphology_focus"
+KEY_HE_IMAGE = "he"
 
 # ── SpatialData attrs keys ──────────────────────────────────────────
 
@@ -118,16 +118,44 @@ ATTRS_CELL_ID_COLUMN = "cell_id_column"
 ATTRS_CELL_SEGMENTATION_IMAGE = "cell_segmentation_image"
 ATTRS_TISSUE_SEGMENTATION_IMAGE = "tissue_segmentation_image"
 ATTRS_INGESTION_SUMMARY = "ingestion_summary"
+ATTRS_CELL_ID_SOURCE = "cell_id_source"  # "native" | "inferred" | "missing"
+
+# ── Standard spatialdata component names ────────────────────────────
+# These align with spatialdata community conventions:
+#   points["transcripts"]  — standard transcript point layer
+#   shapes["cell_boundaries"] — cell polygon boundaries
+#   tables["table"]        — cell-by-gene AnnData table (sanitize_table default)
 
 # ── Pipeline step names ─────────────────────────────────────────────
 
 STEP_DENOISE = "denoise"
 STEP_SEGMENTATION = "segmentation"
-STEP_AGGREGATION = "aggregation"
-STEP_CLUSTERING = "clustering"
-STEP_ANNOTATION = "annotation"
-STEP_SPATIAL_ANALYSIS = "spatial_analysis"
-STEP_SUBCELLULAR_ANALYSIS = "subcellular_analysis"
+STEP_PATCHIFY = "patchify"
 STEP_SPATIAL_DOMAIN = "spatial_domain"
 STEP_SUBCELLULAR_SPATIAL_DOMAIN = "subcellular_spatial_domain"
 STEP_ANALYSIS = "analysis"
+STEP_ANNOTATION = "annotation"
+STEP_SPATIAL_ANALYSIS = "spatial_analysis"
+STEP_SUBCELLULAR_ANALYSIS = "subcellular_analysis"
+
+# ── CLI argument name → pipeline step name aliases ───────────────────
+#
+# The CLI uses abbreviated names (e.g. ``--subcellular-domain-backend``)
+# but the pipeline engine resolves backends by ``{step_name}_backend``
+# (e.g. ``subcellular_spatial_domain_backend``).  This table bridges
+# the gap so that adding a new step or CLI flag only requires one entry.
+
+STEP_ARG_ALIASES: dict[str, str] = {
+    # CLI arg suffix            → full step_name in pipeline.yaml
+    "denoise_backend":          STEP_DENOISE,
+    "patchify_backend":         STEP_PATCHIFY,
+    "segmentation_backend":     STEP_SEGMENTATION,
+    "spatial_domain_backend":   STEP_SPATIAL_DOMAIN,
+    "subcellular_domain_backend": STEP_SUBCELLULAR_SPATIAL_DOMAIN,
+    "subcellular_spatial_domain_backend": STEP_SUBCELLULAR_SPATIAL_DOMAIN,
+    "clustering_backend":       STEP_ANALYSIS,
+    "analysis_backend":         STEP_ANALYSIS,
+    "annotation_backend":       STEP_ANNOTATION,
+    "spatial_analysis_backend": STEP_SPATIAL_ANALYSIS,
+    "subcellular_analysis_backend": STEP_SUBCELLULAR_ANALYSIS,
+}

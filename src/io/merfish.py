@@ -37,9 +37,13 @@ class MERFISHIngestor(BaseIngestor):
         resolved = self._resolve_path(input_path)
         df = pd.read_csv(resolved)
 
-        # Accept either long or short coordinate column names
+        # Accept either long or short coordinate column names.
+        # If BOTH sets exist (e.g. vizgen data), prefer long names
+        # and drop the short ones to avoid duplicate canonical columns.
         has_long = {"global_x", "global_y"}.issubset(df.columns)
         has_short = {"x", "y"}.issubset(df.columns)
+        if has_long and has_short:
+            df = df.drop(columns=["x", "y"], errors="ignore")
         if has_long:
             required = {"global_x", "global_y", "gene"}
         elif has_short:
@@ -53,10 +57,9 @@ class MERFISHIngestor(BaseIngestor):
     def _column_mapping(self) -> list[tuple[str, str]]:
         return [
             ("global_x", COL_X),
-            ("x", COL_X),
             ("global_y", COL_Y),
-            ("y", COL_Y),
             ("gene", COL_GENE),
+            ("barcode_id", COL_CELL_ID),
             ("cell_id", COL_CELL_ID),
             ("fov", COL_FOV),
             ("global_z", COL_Z),

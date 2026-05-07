@@ -86,8 +86,3 @@ class PipelineContractError(PipelineError):
 class PipelineDataError(PipelineError):
     """Data loading or transformation error (file not found, bad format)."""
     pass
-
-
-class PipelineRuntimeError(PipelineError):
-    """Unexpected runtime error that doesn't fit other categories."""
-    pass

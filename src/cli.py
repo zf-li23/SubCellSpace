@@ -6,10 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from .benchmark import run_cosmx_backend_benchmark
-from .constants import STEP_SEGMENTATION, STEP_ANALYSIS, STEP_ANNOTATION, STEP_SUBCELLULAR_SPATIAL_DOMAIN, STEP_DENOISE, STEP_SPATIAL_ANALYSIS
-from .io import get_available_platforms, ingest
-from .pipelines.cosmx_minimal import run_cosmx_minimal
+from .constants import STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS, STEP_ANNOTATION, STEP_SUBCELLULAR_SPATIAL_DOMAIN, STEP_SPATIAL_ANALYSIS
+from .io import get_available_platforms, ingest, detect_platform
 from .registry import get_available_backends, registry
 
 
@@ -26,10 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser.add_argument("--output", type=Path, default=None, help="Write .zarr (skips if unset)")
     ingest_parser.add_argument("--json", action="store_true", help="Print summary as JSON")
 
-    # ── Run pipeline from .zarr ─────────────────────────────────────
-    run_parser = subparsers.add_parser("run", help="Run full pipeline on ingested .zarr")
-    run_parser.add_argument("sdata_path", type=Path, help="Path to SpatialData .zarr")
-    run_parser.add_argument("--output-dir", type=Path, default=Path("outputs/pipeline_run"))
+    # ── Run pipeline (accepts .zarr or raw data file) ───────────────
+    run_parser = subparsers.add_parser("run", help="Run full pipeline: auto-ingest → analyze → export")
+    run_parser.add_argument("input_path", type=Path, help="Path to .zarr or raw data file (.csv/.parquet/.gem)")
+    run_parser.add_argument("--platform", type=str, default="auto",
+                            help="Platform: auto (detect) / cosmx / xenium / merfish / stereoseq")
+    run_parser.add_argument("--output-dir", "-o", type=Path, default=Path("outputs/pipeline_run"))
     run_parser.add_argument("--min-transcripts", type=int, default=10)
     run_parser.add_argument("--min-genes", type=int, default=10)
     run_parser.add_argument("--denoise-backend", choices=get_available_backends("denoise"), default="intracellular")
@@ -43,6 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--n-spatial-domains", type=int, default=None)
     run_parser.add_argument("--subcellular-domain-backend", choices=get_available_backends("subcellular_spatial_domain"), default="hdbscan")
     run_parser.add_argument("--spatial-analysis-backend", choices=get_available_backends("spatial_analysis"), default="squidpy")
+    run_parser.add_argument("--strict-contracts", action="store_true", help="Treat data contract violations as hard errors")
+    run_parser.add_argument("--no-export", action="store_true", help="Skip export step")
+    run_parser.add_argument("--keep-zarr", action="store_true", help="Keep intermediate .zarr file")
 
     # ── Export frontend-friendly files ──────────────────────────────
     export_parser = subparsers.add_parser("export", help="Export .zarr → frontend-friendly static files")
@@ -52,40 +55,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── Backend capabilities ────────────────────────────────────────
     backends_parser = subparsers.add_parser("backends", help="List available backends and capabilities as JSON")
-
-    # ── Legacy: CosMx pipeline (backward compat) ────────────────────
-    cosmx = subparsers.add_parser("run-cosmx", help="[Legacy] Run the minimal CosMx pipeline")
-    cosmx.add_argument("input_csv", type=Path)
-    cosmx.add_argument("--output-dir", type=Path, default=Path("outputs/cosmx_demo"))
-    cosmx.add_argument("--min-transcripts", type=int, default=10)
-    cosmx.add_argument("--min-genes", type=int, default=10)
-    cosmx.add_argument("--denoise-backend", choices=get_available_backends("denoise"), default="intracellular")
-    cosmx.add_argument("--patchify-backend", choices=get_available_backends("patchify"), default="none")
-    cosmx.add_argument(
-        "--segmentation-backend", choices=get_available_backends("segmentation"), default="provided_cells"
-    )
-    cosmx.add_argument("--clustering-backend", choices=get_available_backends("analysis"), default="leiden")
-    cosmx.add_argument("--leiden-resolution", type=float, default=1.0)
-    cosmx.add_argument("--annotation-backend", choices=get_available_backends("annotation"), default="rank_marker")
-    cosmx.add_argument(
-        "--spatial-domain-backend", choices=get_available_backends("spatial_domain"), default="spatial_leiden"
-    )
-    cosmx.add_argument("--spatial-domain-resolution", type=float, default=1.0)
-    cosmx.add_argument("--n-spatial-domains", type=int, default=None)
-    cosmx.add_argument(
-        "--subcellular-domain-backend",
-        choices=get_available_backends("subcellular_spatial_domain"),
-        default="hdbscan",
-    )
-
-    benchmark = subparsers.add_parser("benchmark-cosmx", help="[Legacy] Run backend benchmark grid on CosMx data")
-    benchmark.add_argument("input_csv", type=Path)
-    benchmark.add_argument("--output-dir", type=Path, default=Path("outputs/cosmx_benchmark"))
-    benchmark.add_argument("--min-transcripts", type=int, default=10)
-    benchmark.add_argument("--min-genes", type=int, default=10)
-    benchmark.add_argument("--leiden-resolution", type=float, default=1.0)
-    benchmark.add_argument("--spatial-domain-resolution", type=float, default=1.0)
-    benchmark.add_argument("--n-spatial-domains", type=int, default=None)
 
     # ── Patchify: Snakemake parallel scheduler ──────────────────────
     patchify_run = subparsers.add_parser("patchify-run", help="Run patchify via Snakemake parallel scheduler")
@@ -170,21 +139,54 @@ def _cmd_ingest(args: argparse.Namespace) -> None:
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
-    """Handle the ``subcellspace run`` command."""
+    """Handle the ``subcellspace run`` command.
+
+    Accepts either a .zarr (pre-ingested) or a raw data file.
+    For raw files: auto-detect platform → ingest → run → export.
+    """
     import spatialdata
     from .pipeline_engine import run_pipeline
 
-    sdata_path = Path(args.sdata_path)
-    if not sdata_path.exists():
-        print(f"Error: SpatialData not found at {sdata_path}")
+    input_path = Path(args.input_path)
+    if not input_path.exists():
+        print(f"Error: Input file not found: {input_path}")
         return
 
-    print(f"Loading SpatialData from {sdata_path} …")
-    sdata = spatialdata.read_zarr(sdata_path)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
+    # ── Detect if input is .zarr or raw data ──
+    is_zarr = input_path.suffix == ".zarr" or (input_path.is_dir() and (input_path / ".zgroup").exists())
+
+    if is_zarr:
+        # ── Pre-ingested .zarr path ──
+        print(f"Loading SpatialData from {input_path} …")
+        sdata = spatialdata.read_zarr(input_path)
+    else:
+        # ── Raw data: auto-detect platform, ingest ──
+        platform = args.platform
+        if platform == "auto":
+            platform = detect_platform(input_path)
+            print(f"Auto-detected platform: {platform}")
+        print(f"Ingesting {platform} data from {input_path} …")
+        sdata = ingest(platform, input_path)
+
+        # Show summary
+        summary = sdata.attrs.get("ingestion_summary", {})
+        print(f"  {summary.get('n_transcripts', '?'):,} transcripts, "
+              f"{summary.get('n_cells', '?')} cells, "
+              f"{summary.get('n_genes', '?')} genes")
+
+        # Optionally save intermediate zarr
+        if args.keep_zarr:
+            zarr_path = output_dir / f"{platform}.zarr"
+            sdata.write(zarr_path)
+            print(f"  Saved: {zarr_path}")
+
+    # ── Run pipeline ──
     result = run_pipeline(
         sdata=sdata,
-        output_dir=args.output_dir,
+        output_dir=output_dir,
         min_transcripts=args.min_transcripts,
         min_genes=args.min_genes,
         denoise_backend=args.denoise_backend,
@@ -195,12 +197,53 @@ def _cmd_run(args: argparse.Namespace) -> None:
         spatial_domain_backend=args.spatial_domain_backend,
         spatial_domain_resolution=args.spatial_domain_resolution,
         n_spatial_domains=args.n_spatial_domains,
-        subcellular_domain_backend=args.subcellular_domain_backend,
+        subcellular_spatial_domain_backend=args.subcellular_domain_backend,
         spatial_analysis_backend=args.spatial_analysis_backend,
+        strict_contracts=getattr(args, "strict_contracts", False),
     )
     print(result.summary.to_text())
     print(f"AnnData: {result.adata_path}")
     print(f"Report:  {result.report_path}")
+
+    # ── Export frontend files (default: yes) ──
+    if not getattr(args, "no_export", False):
+        print(f"\nExporting frontend files …")
+        _do_export(sdata, output_dir)
+
+
+def _do_export(sdata, output_dir: Path) -> None:
+    """Lightweight export: write pipeline_results.json + backend_options.json."""
+    import json
+    exp_dir = Path(output_dir) / "export"
+    exp_dir.mkdir(parents=True, exist_ok=True)
+
+    from .registry import get_all_capabilities, get_available_backends
+
+    summary = sdata.attrs.get("ingestion_summary", {})
+    results = {
+        "platform": sdata.attrs.get("platform", "unknown"),
+        "summary": summary,
+        "points_keys": list(sdata.points.keys()),
+        "shapes_keys": list(sdata.shapes.keys()),
+    }
+    (exp_dir / "pipeline_results.json").write_text(
+        json.dumps(results, ensure_ascii=False, indent=2, default=str))
+
+    caps = get_all_capabilities()
+    backend_options = {}
+    for step_name in [STEP_DENOISE, STEP_SEGMENTATION, "spatial_domain",
+                       STEP_SUBCELLULAR_SPATIAL_DOMAIN, STEP_ANALYSIS,
+                       STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS]:
+        backends = {}
+        for b in get_available_backends(step_name):
+            backends[b] = {"available": True, "capabilities": caps.get(step_name, {}).get(b, [])}
+        if backends:
+            backend_options[step_name] = backends
+    (exp_dir / "backend_options.json").write_text(
+        json.dumps(backend_options, ensure_ascii=False, indent=2))
+
+    print(f"  → {exp_dir}/pipeline_results.json")
+    print(f"  → {exp_dir}/backend_options.json")
 
 
 def _cmd_export(args: argparse.Namespace) -> None:
@@ -228,7 +271,7 @@ def _cmd_export(args: argparse.Namespace) -> None:
 
     # Cell-level stats from main_table if available
     # Try from zarr tables first, then from h5ad in output dir
-    main_table_key = sdata.attrs.get("main_table_key", "main_table")
+    main_table_key = sdata.attrs.get("main_table_key", "table")
     adata = None
     if main_table_key in sdata.tables:
         adata = sdata.tables[main_table_key]
@@ -400,40 +443,6 @@ def main() -> None:
     if args.command == "backends":
         _cmd_backends(args)
         return
-
-    if args.command == "run-cosmx":
-        result = run_cosmx_minimal(
-            input_csv=args.input_csv,
-            output_dir=args.output_dir,
-            min_transcripts=args.min_transcripts,
-            min_genes=args.min_genes,
-            denoise_backend=args.denoise_backend,
-            segmentation_backend=args.segmentation_backend,
-            clustering_backend=args.clustering_backend,
-            leiden_resolution=args.leiden_resolution,
-            annotation_backend=args.annotation_backend,
-            spatial_domain_backend=args.spatial_domain_backend,
-            spatial_domain_resolution=args.spatial_domain_resolution,
-            n_spatial_domains=args.n_spatial_domains,
-            subcellular_domain_backend=args.subcellular_domain_backend,
-        )
-        print(result.summary.to_text())
-        print(f"Saved AnnData to: {result.adata_path}")
-        print(f"Saved report to: {result.report_path}")
-
-    if args.command == "benchmark-cosmx":
-        benchmark = run_cosmx_backend_benchmark(
-            input_csv=args.input_csv,
-            output_dir=args.output_dir,
-            min_transcripts=args.min_transcripts,
-            min_genes=args.min_genes,
-            leiden_resolution=args.leiden_resolution,
-            spatial_domain_resolution=args.spatial_domain_resolution,
-            n_spatial_domains=args.n_spatial_domains,
-        )
-        print(f"Completed {benchmark['n_runs']} runs")
-        print(f"Benchmark summary CSV: {benchmark['summary_csv']}")
-        print(f"Benchmark summary JSON: {benchmark['summary_json']}")
 
     if args.command == "patchify-run":
         _cmd_patchify_run(args)

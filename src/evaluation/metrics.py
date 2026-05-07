@@ -45,7 +45,12 @@ def _silhouette_from_pca(adata: ad.AnnData) -> float | None:
 
 
 def _spatial_graph_metrics(adata: ad.AnnData) -> dict[str, Any]:
-    matrix = adata.obsp.get("spatial_connectivities")
+    """Compute spatial graph metrics — aligned with scanpy/squidpy conventions.
+
+    Uses ``spatial_connectivities`` (squidpy) with fallback to
+    ``connectivities`` (scanpy).
+    """
+    matrix = adata.obsp.get("spatial_connectivities", adata.obsp.get("connectivities"))
     if matrix is None:
         return {
             "graph_available": False,

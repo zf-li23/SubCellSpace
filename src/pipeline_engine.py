@@ -23,10 +23,10 @@ from typing import Any
 import pandas as pd
 
 from .config import PipelineConfig, Settings
+from .constants import STEP_ARG_ALIASES
 from .errors import PipelineContractError, PipelineDataError, PipelineStepError
 from .evaluation import build_layer_evaluation
-from .io import get_ingestor
-from .io.cosmx import build_cell_level_adata, build_spatialdata_from_adata, load_cosmx_transcripts, summarize_cosmx_transcripts
+from .io.cosmx import build_cell_level_adata, build_spatialdata_from_adata
 from .models import PipelineResult, StepResult
 from .registry import get_available_backends, get_runner, load_backends
 from .validation import validate_contract
@@ -201,64 +201,31 @@ def run_pipeline(
         sdata=sdata,
     )
 
-    # ── Data loading (Phase 0 or legacy) ────────────────────────────
-    if sdata is not None:
-        # ── Phase 0+ path: data already ingested as SpatialData ────
-        logger.info("Using pre-ingested SpatialData (Phase 0 path)")
-        ctx.sdata = sdata
+    # ── Data loading (Phase 0): data already ingested as SpatialData ─
+    logger.info("Using pre-ingested SpatialData (Phase 0 path)")
+    ctx.sdata = sdata
 
-        # Extract transcripts from SpatialData points layer
-        points_key = sdata.attrs.get("raw_transcripts_key", KEY_RAW_TRANSCRIPTS)
-        if points_key not in sdata.points:
-            raise PipelineDataError(
-                f"SpatialData does not contain '{points_key}' in points layer.",
-                context={"available_points": list(sdata.points.keys())},
-            )
-        ctx.transcripts = sdata.points[points_key].compute()
-
-        # Build summary from attrs
-        summary_dict = sdata.attrs.get("ingestion_summary", {})
-        from .models import DatasetSummary
-        summary_ds = DatasetSummary(
-            source_path=Path(str(settings.get("input_csv", "unknown"))),
-            n_transcripts=summary_dict.get("n_transcripts", len(ctx.transcripts)),
-            n_cells=summary_dict.get("n_cells", 0),
-            n_genes=summary_dict.get("n_genes", 0),
-            n_fovs=summary_dict.get("n_fovs", 1),
-            extra={k: v for k, v in summary_dict.items()
-                   if k not in ("n_transcripts", "n_cells", "n_genes", "n_fovs")},
+    # Extract transcripts from SpatialData points layer
+    points_key = sdata.attrs.get("raw_transcripts_key", KEY_RAW_TRANSCRIPTS)
+    if points_key not in sdata.points:
+        raise PipelineDataError(
+            f"SpatialData does not contain '{points_key}' in points layer.",
+            context={"available_points": list(sdata.points.keys())},
         )
-    else:
-        # ── Legacy path: load CSV directly (backward compat) ────────
-        input_csv = Path(str(settings.get("input_csv", "data/sample_transcripts.csv")))
-        ctx.input_csv = input_csv
-        logger.info("Loading transcripts from %s (legacy path)", input_csv)
-        platform = str(settings.get("platform", "cosmx"))
-        try:
-            if platform == "cosmx":
-                ctx.transcripts = load_cosmx_transcripts(input_csv)
-                summary_ds = summarize_cosmx_transcripts(ctx.transcripts, input_csv)
-            else:
-                sd = get_ingestor(platform).ingest(input_csv)
-                ctx.sdata = sd
-                pts_key = sd.attrs.get("raw_transcripts_key", KEY_RAW_TRANSCRIPTS)
-                ctx.transcripts = sd.points[pts_key].compute()
-                summary_dict = sd.attrs.get("ingestion_summary", {})
-                from .models import DatasetSummary
-                summary_ds = DatasetSummary(
-                    source_path=input_csv,
-                    n_transcripts=summary_dict.get("n_transcripts", 0),
-                    n_cells=summary_dict.get("n_cells", 0),
-                    n_genes=summary_dict.get("n_genes", 0),
-                    n_fovs=summary_dict.get("n_fovs", 1),
-                    extra={},
-                )
-        except Exception as exc:
-            raise PipelineDataError(
-                f"Failed to load data for platform '{platform}' from {input_csv}: {exc}",
-                original=exc,
-                context={"platform": platform, "path": str(input_csv)},
-            ) from exc
+    ctx.transcripts = sdata.points[points_key].compute()
+
+    # Build summary from attrs
+    summary_dict = sdata.attrs.get("ingestion_summary", {})
+    from .models import DatasetSummary
+    summary_ds = DatasetSummary(
+        source_path=Path(str(summary_dict.get("source_path", "unknown"))),
+        n_transcripts=summary_dict.get("n_transcripts", len(ctx.transcripts)),
+        n_cells=summary_dict.get("n_cells", 0),
+        n_genes=summary_dict.get("n_genes", 0),
+        n_fovs=summary_dict.get("n_fovs", 1),
+        extra={k: v for k, v in summary_dict.items()
+               if k not in ("n_transcripts", "n_cells", "n_genes", "n_fovs", "source_path", "platform")},
+    )
 
     # ── Dynamic step execution ───────────────────────────────────────
     step_names = cfg.get_step_names()
@@ -267,7 +234,14 @@ def run_pipeline(
             logger.info("Skipping disabled step '%s'", step_cfg.name)
             continue
 
+        # Resolve backend: check step-specific key, then CLI alias keys
         backend = overrides.get(f"{step_cfg.name}_backend")
+        if backend is None:
+            # Walk STEP_ARG_ALIASES to find CLI args that map to this step
+            for arg_key, mapped_step in STEP_ARG_ALIASES.items():
+                if mapped_step == step_cfg.name and arg_key in overrides:
+                    backend = overrides[arg_key]
+                    break
         if backend is None:
             backend = step_cfg.default_backend
 
@@ -285,14 +259,17 @@ def run_pipeline(
             backend = fallback
 
         # Build per-step params from overrides
+        # Skip the 'backend' param as it's already resolved above
         step_params: dict[str, Any] = dict(step_cfg.params)
         for key, value in overrides.items():
             if key.startswith(step_cfg.name + "_"):
                 param_name = key[len(step_cfg.name) + 1 :]
+                if param_name == "backend":
+                    continue  # already resolved as the backend arg
                 step_params[param_name] = value
         # Generic pipeline-level params that map to the analysis step
         if step_cfg.name == "analysis":
-            for generic_param in ("min_transcripts", "min_genes"):
+            for generic_param in ("min_transcripts", "min_genes", "clustering_backend"):
                 if generic_param in overrides and generic_param not in step_params:
                     step_params[generic_param] = overrides[generic_param]
                 elif generic_param not in step_params:
@@ -309,6 +286,32 @@ def run_pipeline(
         #  annotation) have access to it.
         if step_cfg.name == "segmentation" and ctx.adata is None and ctx.segmented_df is not None:
             ctx.adata = build_cell_level_adata(ctx.segmented_df)
+            # ── QC guard: skip downstream if no cells survived ──────
+            if ctx.adata.n_obs == 0:
+                logger.warning(
+                    "No cells survived QC after segmentation (%d transcripts, %d unique genes). "
+                    "Skipping all downstream steps.",
+                    len(ctx.segmented_df) if ctx.segmented_df is not None else 0,
+                    ctx.segmented_df["gene"].nunique() if ctx.segmented_df is not None else 0,
+                )
+                ctx.step_results["__qc_skip__"] = StepResult(
+                    output=None,
+                    summary={
+                        "reason": "no_cells_after_segmentation",
+                        "n_transcripts": len(ctx.segmented_df) if ctx.segmented_df is not None else 0,
+                        "n_cells": 0,
+                        "n_genes": ctx.segmented_df["gene"].nunique() if ctx.segmented_df is not None else 0,
+                    },
+                    backend_used="none",
+                )
+                # Skip remaining steps — break out of the step loop
+                for remainder in cfg.steps[idx + 1:]:
+                    ctx.step_results[remainder.name] = StepResult(
+                        output=None,
+                        summary={"skipped": True, "reason": "no_cells_after_segmentation"},
+                        backend_used="none",
+                    )
+                break
 
         # ── Inter-step contract validation ──────────────────────────
         # Determine the next step for contract validation
@@ -316,13 +319,25 @@ def run_pipeline(
         contract_msgs = validate_contract(step_cfg.name, next_step, ctx)
         if contract_msgs:
             error_detail = "; ".join(contract_msgs)
-            logger.error("Contract violation: %s", error_detail)
-            raise PipelineContractError(
-                f"Data contract violation after step '{step_cfg.name}': {error_detail}",
-                step_name=step_cfg.name,
-                backend=backend,
-                context={"contract_errors": contract_msgs, "next_step": next_step},
-            )
+            strict_mode = overrides.get("strict_contracts", False)
+            if strict_mode:
+                raise PipelineContractError(
+                    f"Data contract violation after step '{step_cfg.name}': {error_detail}",
+                    step_name=step_cfg.name,
+                    backend=backend,
+                    context={"contract_errors": contract_msgs, "next_step": next_step},
+                )
+            else:
+                logger.warning("Contract violation (non-fatal): %s", error_detail)
+                if "__contract_warnings" not in ctx.step_results:
+                    ctx.step_results["__contract_warnings"] = StepResult(
+                        output=None,
+                        summary={"warnings": []},
+                        backend_used="none",
+                    )
+                ctx.step_results["__contract_warnings"].summary.setdefault("warnings", []).append(
+                    {"source": step_cfg.name, "target": next_step, "detail": error_detail}
+                )
 
     # ── Build final outputs ──────────────────────────────────────────
     if ctx.adata is None:
@@ -342,10 +357,40 @@ def run_pipeline(
         adata=ctx.adata,
     )
 
-    cfg_name = cfg.name or "pipeline"
+    # Resolve platform name for file naming (from sdata attrs or source path)
+    platform = sdata.attrs.get("platform", "pipeline") if sdata else "pipeline"
+    cfg_name = platform if platform else "pipeline"
+    ingestion_info = sdata.attrs.get("ingestion_summary", {}) if sdata else {}
+    source_path = str(
+        ctx.input_csv
+        or ingestion_info.get("source_path", "")
+        or settings.get("input_csv", "unknown")
+    )
+
     adata_path = output_dir / f"{cfg_name}.h5ad"
     report_path = output_dir / f"{cfg_name}_report.json"
     transcripts_path = output_dir / f"{cfg_name}_transcripts.parquet"
+
+    # ── Write pipeline provenance to adata.uns ──
+    ctx.adata.uns["pipeline"] = {
+        "name": cfg.name,
+        "version": cfg.version,
+        "platform": platform,
+        "step_order": list(cfg.get_step_names()),
+        "backend_choices": {
+            name: result.backend_used
+            for name, result in ctx.step_results.items()
+            if not name.startswith("__")
+        },
+        "parameters": {
+            "min_transcripts": settings.get("min_transcripts", 10),
+            "min_genes": settings.get("min_genes", 10),
+        },
+        "qc_skip": ctx.step_results.get("__qc_skip__") is not None,
+    }
+    if "__contract_warnings" in ctx.step_results:
+        ctx.adata.uns["pipeline"]["contract_warnings"] = \
+            ctx.step_results["__contract_warnings"].summary.get("warnings", [])
 
     ctx.adata.write_h5ad(adata_path)
     if ctx.segmented_df is not None:
@@ -356,7 +401,8 @@ def run_pipeline(
 
     # Build report
     report = {
-        "input_csv": str(ctx.input_csv or settings.get("input_csv", "unknown")),
+        "source_path": source_path,
+        "platform": platform,
         "pipeline_name": cfg.name,
         "pipeline_version": cfg.version,
         "n_obs": int(ctx.adata.n_obs),

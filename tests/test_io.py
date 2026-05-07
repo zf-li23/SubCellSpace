@@ -7,59 +7,30 @@ from src.io.base import DataValidationError
 from src.io.cosmx import (
     build_cell_level_adata,
     build_spatialdata_from_adata,
-    load_cosmx_transcripts,
-    summarize_cosmx_transcripts,
 )
-from src.models import DatasetSummary
+from src.io import ingest, detect_platform
 
 
-class TestLoadCosmxTranscripts:
-    def test_load_valid_csv(self, sample_transcripts_csv):
-        df = load_cosmx_transcripts(sample_transcripts_csv)
-        assert len(df) > 0
+class TestDetectPlatform:
+    def test_detect_cosmx_csv(self, sample_transcripts_csv):
+        platform = detect_platform(sample_transcripts_csv)
+        assert platform == "cosmx"
+
+
+class TestIngest:
+    def test_ingest_cosmx_csv(self, sample_transcripts_csv):
+        sdata = ingest("cosmx", sample_transcripts_csv)
+        assert "raw_transcripts" in sdata.points
+        pts = sdata.points["raw_transcripts"].compute()
         for col in REQUIRED_CANONICAL_COLUMNS:
-            assert col in df.columns
+            assert col in pts.columns
 
-    def test_missing_columns_raises_error(self, tmp_path):
-        bad_csv = tmp_path / "bad.csv"
-        bad_csv.write_text("x,y,z\n1,2,3\n")
-        # load_cosmx_transcripts now uses canonical column mapping:
-        # x, y, z columns are mapped to canonical names and no error is raised
-        df = load_cosmx_transcripts(str(bad_csv))
-        assert "x" in df.columns
-        assert "y" in df.columns
-
-    def test_strips_unnamed_column(self, sample_transcripts_df, tmp_path):
-        csv_path = tmp_path / "with_unnamed.csv"
-        sample_transcripts_df.to_csv(csv_path)
-        # Write with Unnamed: 0 column by using a saved CSV that includes the default index
-        df = load_cosmx_transcripts(str(csv_path))
-        assert "Unnamed: 0" not in df.columns
-
-    def test_unnamed_0_dropped(self, tmp_path, sample_transcripts_df):
-        # Create a file that has "Unnamed: 0" as a column header
-        csv_path = tmp_path / "unnamed_test.csv"
-        sample_transcripts_df.to_csv(csv_path)
-        # The pandas default to_csv may already include index. Let's just test that load handles it.
-        df = load_cosmx_transcripts(str(csv_path))
-        assert "Unnamed: 0" not in df.columns
-
-
-class TestSummarizeCosmxTranscripts:
-    def test_returns_dataset_summary(self, sample_transcripts_csv):
-        summary = summarize_cosmx_transcripts(load_cosmx_transcripts(sample_transcripts_csv), sample_transcripts_csv)
-        assert isinstance(summary, DatasetSummary)
-        assert summary.n_transcripts > 0
-        assert summary.n_cells > 0
-        assert summary.n_genes > 0
-        assert summary.n_fovs > 0
-
-    def test_extra_fields(self, sample_transcripts_df, tmp_path):
-        csv_path = tmp_path / "extra_test.csv"
-        sample_transcripts_df.to_csv(csv_path, index=False)
-        summary = summarize_cosmx_transcripts(sample_transcripts_df, csv_path)
-        assert "cell_id_unique" in summary.extra
-        assert "nuclear_fraction" in summary.extra
+    def test_ingest_summary_attrs(self, sample_transcripts_csv):
+        sdata = ingest("cosmx", sample_transcripts_csv)
+        summary = sdata.attrs.get("ingestion_summary", {})
+        assert summary.get("n_transcripts", 0) > 0
+        assert summary.get("n_cells", 0) > 0
+        assert summary.get("n_genes", 0) > 0
 
 
 class TestBuildCellLevelAdata:
@@ -70,7 +41,6 @@ class TestBuildCellLevelAdata:
         assert "spatial" in adata.obsm
         assert adata.obsm["spatial"].shape[1] == 2
         assert "counts" in adata.layers
-        assert "cosmx" in adata.uns
 
     def test_all_cells_in_obs(self, sample_transcripts_df):
         adata = build_cell_level_adata(sample_transcripts_df)
@@ -90,4 +60,4 @@ class TestBuildSpatialdata:
     def test_build_from_anndata(self, sample_anndata):
         sdata = build_spatialdata_from_adata(sample_anndata)
         assert "cell_centroids" in sdata.points
-        assert "main_table" in sdata.tables
+        assert "table" in sdata.tables

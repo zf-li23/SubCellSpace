@@ -28,7 +28,6 @@ from ..constants import (
     KEY_MAIN_TABLE,
     PLATFORM_COSMX,
 )
-from ..models import DatasetSummary
 from .base import BaseIngestor, register_ingestor
 
 
@@ -66,7 +65,11 @@ def build_cell_level_adata(
     y_col = resolve_col_strict(df.columns, COL_Y)
     fov_col = resolve_col(df.columns, COL_FOV)
 
-    cell_index = df[cell_col].astype(str)
+    # Normalise cell column to string (MERFISH barcode_id is int, etc.)
+    df = df.copy()
+    df[cell_col] = df[cell_col].astype(str)
+
+    cell_index = df[cell_col]
     gene_index = df[gene_col].astype(str)
 
     counts = pd.crosstab(cell_index, gene_index)
@@ -91,8 +94,8 @@ def build_cell_level_adata(
     adata.obs_names = counts.index.astype(str)
     adata.var_names = counts.columns.astype(str)
     adata.obsm["spatial"] = obs[["x", "y"]].to_numpy(dtype=np.float32)
-    adata.layers["counts"] = adata.X.copy()
-    adata.uns["cosmx"] = {"pipeline": "cosmx_minimal", "version": "0.1.0"}
+    # ── Standard scanpy layers ──
+    adata.layers["counts"] = adata.X.copy().astype(np.float32)
 
     if min_transcripts > 0 or min_genes > 0:
         adata = adata[
@@ -123,49 +126,6 @@ def build_spatialdata_from_adata(adata: ad.AnnData) -> SpatialData:
     )
     sdata.attrs["main_table_key"] = KEY_MAIN_TABLE
     return sdata
-
-
-# ── Legacy backward-compat functions ─────────────────────────────────
-# These preserve the OLD CosMx-native column names (target, cell,
-# x_global_px, y_global_px) for backward compatibility with existing
-# step modules.  Phase 1 will migrate all steps to canonical names.
-
-
-def load_cosmx_transcripts(path: str | Path) -> pd.DataFrame:
-    """Legacy: load CosMx CSV, return CANONICAL column names."""
-    resolved = Path(path)
-    df = pd.read_csv(resolved)
-    if "Unnamed: 0" in df.columns:
-        df = df.drop(columns=["Unnamed: 0"])
-    # Map to canonical columns
-    ingestor = CosMxIngestor()
-    df = ingestor._standardise_columns(df)
-    return df
-
-
-def summarize_cosmx_transcripts(df: pd.DataFrame, source_path: str | Path) -> DatasetSummary:
-    """Legacy: summarize a transcript DataFrame (any column scheme)."""
-    from ..constants import COL_CELL_ID, COL_GENE, COL_FOV, COL_CELLCOMP, resolve_col, resolve_col_strict
-    cell_col = resolve_col_strict(df.columns, COL_CELL_ID)
-    gene_col = resolve_col_strict(df.columns, COL_GENE)
-    fov_col = resolve_col(df.columns, COL_FOV)
-    cc_col = resolve_col(df.columns, COL_CELLCOMP)
-    n_cells_unique = df[cell_col].dropna().nunique()
-    extra: dict[str, Any] = {"cell_id_unique": n_cells_unique}
-    if cc_col:
-        comp_counts = df[cc_col].value_counts(dropna=False)
-        total = int(comp_counts.sum())
-        if total:
-            extra["nuclear_fraction"] = round(float(comp_counts.get("Nuclear", 0)) / total, 4)
-            extra["cytoplasm_fraction"] = round(float(comp_counts.get("Cytoplasm", 0)) / total, 4)
-    return DatasetSummary(
-        source_path=Path(source_path),
-        n_transcripts=len(df),
-        n_cells=df[cell_col].dropna().nunique(),
-        n_genes=df[gene_col].nunique(),
-        n_fovs=df[fov_col].nunique() if fov_col else 1,
-        extra=extra,
-    )
 
 
 # ── Ingestor ─────────────────────────────────────────────────────────

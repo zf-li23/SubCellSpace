@@ -11,17 +11,15 @@ from fastapi import Body, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from .benchmark import run_cosmx_backend_benchmark
 from .config import settings as _settings
 from .io import get_available_platforms
-from .pipelines.cosmx_minimal import run_cosmx_minimal
 from .pipeline_engine import run_pipeline
 from .registry import get_all_capabilities, get_available_backends
 
 # ── Configurable defaults (from centralized configuration system) ─────────
 DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMX_1000cells.csv"))
 DEFAULT_OUTPUT_DIR = Path(_settings.get("output_dir", "outputs/api_runs"))
-DEFAULT_REPORT_RUN = _settings.get("report_run", "default_test")
+DEFAULT_REPORT_RUN = _settings.get("report_run", "all_platforms/cosmx")
 DEFAULT_BENCHMARK_RUN = _settings.get("benchmark_run", "cosmx_benchmark_round")
 DEFAULT_BENCHMARK_VALIDATION_DIR = _settings.get("benchmark_validation_dir", "outputs/backend_validation")
 DEFAULT_API_HOST = _settings.get("api_host", "0.0.0.0")
@@ -60,6 +58,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    """Pre-load backend registry so /api/meta/backends returns real data."""
+    from .registry import load_backends
+    load_backends()
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────
@@ -111,7 +116,13 @@ def _ensure_under_outputs(path: Path) -> Path:
 
 
 def _resolve_report_path(run_name: str) -> Path:
-    return _ensure_under_outputs(OUTPUTS_ROOT / run_name / "cosmx_minimal_report.json")
+    # Handle nested run names like "all_platforms/cosmx"
+    run_dir = _ensure_under_outputs(OUTPUTS_ROOT / run_name)
+    # Match any *_report.json file
+    candidates = sorted(run_dir.glob("*_report.json"))
+    if candidates:
+        return candidates[0]
+    return run_dir / "pipeline_report.json"
 
 
 def _validate_backend(name: str, value: str, all_backends: list[str]) -> None:
@@ -150,7 +161,8 @@ def _resolve_output_dir(request: CosmxRunRequest) -> Path:
     return _ensure_under_outputs((REPO_ROOT / DEFAULT_OUTPUT_DIR / token).resolve())
 
 
-def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
+def _run_pipeline_from_request(request: CosmxRunRequest) -> dict[str, Any]:
+    """Validate request, ingest CSV, run full pipeline."""
     _validate_backend("denoise_backend", request.denoise_backend, get_available_backends("denoise"))
     _validate_backend("segmentation_backend", request.segmentation_backend, get_available_backends("segmentation"))
     _validate_backend("clustering_backend", request.clustering_backend, get_available_backends("analysis"))
@@ -173,9 +185,15 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
     if not input_csv_path.exists():
         raise HTTPException(status_code=404, detail=f"Input file not found: {input_csv_path}")
 
-    result = run_cosmx_minimal(
-        input_csv=str(input_csv_path),
-        output_dir=_resolve_output_dir(request),
+    # Detect platform and ingest
+    from .io import detect_platform, ingest
+    platform = detect_platform(str(input_csv_path))
+    sdata = ingest(platform, str(input_csv_path))
+
+    output_dir = _resolve_output_dir(request)
+    result = run_pipeline(
+        sdata=sdata,
+        output_dir=output_dir,
         min_transcripts=request.min_transcripts,
         min_genes=request.min_genes,
         denoise_backend=request.denoise_backend,
@@ -186,7 +204,7 @@ def _run_cosmx(request: CosmxRunRequest) -> dict[str, Any]:
         spatial_domain_backend=request.spatial_domain_backend,
         spatial_domain_resolution=request.spatial_domain_resolution,
         n_spatial_domains=request.n_spatial_domains,
-        subcellular_domain_backend=request.subcellular_domain_backend,
+        subcellular_spatial_domain_backend=request.subcellular_domain_backend,
         spatial_analysis_backend=request.spatial_analysis_backend,
     )
 
@@ -330,7 +348,11 @@ def stats_by_backend() -> dict[str, Any]:
             continue
         report_file = child_dir / "cosmx_minimal_report.json"
         if not report_file.is_file():
-            continue
+            # Try any *_report.json
+            candidates = sorted(child_dir.glob("*_report.json"))
+            if not candidates:
+                continue
+            report_file = candidates[0]
 
         # Parse "denoise_intracellular" → step="denoise", backend="intracellular"
         dir_name = child_dir.name
@@ -371,50 +393,70 @@ def list_runs() -> list[dict[str, Any]]:
     for child in sorted(OUTPUTS_ROOT.iterdir()):
         if not child.is_dir():
             continue
-        report_path = child / "cosmx_minimal_report.json"
-        if not report_path.is_file():
-            continue
-
-        try:
-            report = json.loads(report_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-
-        params = report.get("parameters", {})
-        analysis = report.get("analysis_summary", {}) or report.get("metadata", {}) or {}
-
-        # Build relative paths to avoid leaking absolute filesystem paths
-        try:
-            rel_report_path = report_path.relative_to(REPO_ROOT)
-        except ValueError:
-            rel_report_path = Path("outputs") / child.name / "cosmx_minimal_report.json"
-
-        runs.append(
-            {
-                "run_name": child.name,
-                "report_path": str(rel_report_path),
-                "created_at": params.get("created_at") or params.get("timestamp"),
-                "n_cells": analysis.get("n_cells") or report.get("n_cells") or 0,
-                "n_genes": analysis.get("n_genes") or report.get("n_genes") or 0,
-                "denoise_backend": params.get("denoise_backend"),
-                "segmentation_backend": params.get("segmentation_backend"),
-                "clustering_backend": params.get("clustering_backend"),
-                "annotation_backend": params.get("annotation_backend"),
-                "spatial_domain_backend": params.get("spatial_domain_backend"),
-                "input_csv": params.get("input_csv"),
-            }
-        )
+        # Check direct report
+        _collect_run(child, child.name, runs)
+        # Check one level deeper (e.g. outputs/all_platforms/cosmx/)
+        for grandchild in sorted(child.iterdir()):
+            if grandchild.is_dir():
+                _collect_run(grandchild, f"{child.name}/{grandchild.name}", runs)
 
     return runs
 
 
-@app.get("/api/reports/{run_name}")
+def _collect_run(dirpath: Path, run_name: str, runs: list[dict[str, Any]]) -> None:
+    # Find any *_report.json file (platform-named: cosmx_report.json, xenium_report.json, etc.)
+    report_files = sorted(dirpath.glob("*_report.json"))
+    if not report_files:
+        return
+    report_path = report_files[0]
+
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+
+    params = report.get("parameters", {})
+    analysis = report.get("analysis_summary", {}) or report.get("metadata", {}) or {}
+
+    try:
+        rel_report_path = report_path.relative_to(REPO_ROOT)
+    except ValueError:
+        rel_report_path = Path("outputs") / dirpath.name / (report_path.name)
+
+    runs.append(
+        {
+            "run_name": run_name,
+            "report_path": str(rel_report_path),
+            "created_at": params.get("created_at") or params.get("timestamp"),
+            "n_cells": analysis.get("n_cells") or report.get("n_cells") or report.get("n_obs") or 0,
+            "n_genes": analysis.get("n_genes") or report.get("n_genes") or report.get("n_vars") or 0,
+            "denoise_backend": params.get("denoise_backend"),
+            "segmentation_backend": params.get("segmentation_backend"),
+            "clustering_backend": params.get("clustering_backend"),
+            "annotation_backend": params.get("annotation_backend"),
+            "spatial_domain_backend": params.get("spatial_domain_backend"),
+            "input_csv": params.get("input_csv"),
+        }
+    )
+
+    return runs
+
+
+@app.get("/api/reports/{run_name:path}")
 def get_report(run_name: str) -> dict[str, Any]:
     return _load_json(_resolve_report_path(run_name))
 
+@app.get("/api/report")
+def get_report_by_query(run_name: str = Query(default=DEFAULT_REPORT_RUN)) -> dict[str, Any]:
+    return _load_json(_resolve_report_path(run_name))
 
-@app.get("/api/plots/{run_name}")
+
+@app.get("/api/plots/{run_name:path}")
 def get_plots(run_name: str) -> dict[str, Any]:
+    return _get_plot_payload(run_name=run_name)
+
+@app.get("/api/plot")
+def get_plot_by_query(run_name: str = Query(default=DEFAULT_REPORT_RUN)) -> dict[str, Any]:
     return _get_plot_payload(run_name=run_name)
 
 
@@ -430,10 +472,17 @@ def get_plots_by_report(
 
     if output_dir:
         output_dir_obj = _ensure_under_outputs(_resolve_under_repo(output_dir))
-        report = _load_json(output_dir_obj / "cosmx_minimal_report.json")
-        return _plot_payload_from_report(report, fallback_label=output_dir_obj.name)
+        # Match any *_report.json
+        candidates = sorted(output_dir_obj.glob("*_report.json"))
+        if candidates:
+            report = _load_json(candidates[0])
+            return _plot_payload_from_report(report, fallback_label=output_dir_obj.name)
 
-    return _get_plot_payload(run_name=DEFAULT_REPORT_RUN)
+    # Fallback: try the first available run
+    runs = list_runs()
+    if runs:
+        return _get_plot_payload(run_name=runs[0]["run_name"])
+    return {"points": {}}
 
 
 @app.get("/api/benchmarks/{run_name}")
@@ -462,15 +511,16 @@ def get_benchmark(run_name: str) -> dict[str, Any]:
             "summary_csv": rel_csv_path if summary_csv.exists() else None,
         }
 
-    # Fallback: construct rows from individual cosmx_minimal_report.json files in subdirectories
+            # Fallback: construct rows from individual *_report.json files
     rows: list[dict[str, Any]] = []
     if benchmark_dir.is_dir():
         for child in sorted(benchmark_dir.iterdir()):
             if not child.is_dir():
                 continue
-            report_path = child / "cosmx_minimal_report.json"
-            if not report_path.exists():
+            candidates = sorted(child.glob("*_report.json"))
+            if not candidates:
                 continue
+            report_path = candidates[0]
             try:
                 report = json.loads(report_path.read_text(encoding="utf-8"))
                 rows.append(report)
@@ -492,7 +542,11 @@ def get_benchmark_validation() -> dict[str, Any]:
     """
     validation_dir = OUTPUTS_ROOT / "backend_validation"
     if not validation_dir.is_dir():
-        raise HTTPException(status_code=404, detail="No backend validation directory found")
+        return {"total_runs": 0, "passed": 0, "failed": 0, "total_elapsed_seconds": 0.0, "results": {}}
+
+    results_path = validation_dir / "benchmark_results.json"
+    if not results_path.exists():
+        return {"total_runs": 0, "passed": 0, "failed": 0, "total_elapsed_seconds": 0.0, "results": {}}
 
     # Load the summary results file
     results_path = validation_dir / "benchmark_results.json"
@@ -506,8 +560,11 @@ def get_benchmark_validation() -> dict[str, Any]:
     for key in results:
         run_dir = validation_dir / key
         report_path = run_dir / "cosmx_minimal_report.json"
+        if not report_path.exists():
+            candidates = sorted(run_dir.glob("*_report.json"))
+            report_path = candidates[0] if candidates else None
         report_data = None
-        if report_path.exists():
+        if report_path and report_path.exists():
             try:
                 report_data = _load_json(report_path)
             except (json.JSONDecodeError, OSError):
@@ -537,6 +594,12 @@ def get_benchmark_validation() -> dict[str, Any]:
         "total_elapsed_seconds": round(total_elapsed, 1),
         "results": runs,
     }
+
+
+@app.get("/api/benchmarks/backend_validation")
+def benchmarks_backend_validation() -> dict[str, Any]:
+    """Legacy-compat endpoint that redirects to /api/stats/by-backend."""
+    return stats_by_backend()
 
 
 @app.get("/api/cosmx/report")
@@ -570,14 +633,14 @@ def cosmx_report(
         n_spatial_domains=n_spatial_domains,
         subcellular_domain_backend=subcellular_domain_backend,
     )
-    return _run_cosmx(request)
+    return _run_pipeline_from_request(request)
 
 
 @app.post("/api/cosmx/run")
 def cosmx_run(request: CosmxRunRequest | None = None) -> dict[str, Any]:
     if request is None:
         request = CosmxRunRequest()
-    return _run_cosmx(request)
+    return _run_pipeline_from_request(request)
 
 
 @app.post("/api/benchmarks/cosmx/run")

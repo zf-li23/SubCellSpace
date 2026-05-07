@@ -466,10 +466,12 @@ class BaseIngestor(ABC):
             attrs[ATTRS_CELL_SEGMENTATION_IMAGE] = None
 
         attrs[ATTRS_INGESTION_SUMMARY] = {
+            "source_path": str(summary.source_path),
             "n_transcripts": summary.n_transcripts,
             "n_cells": summary.n_cells,
             "n_genes": summary.n_genes,
             "n_fovs": summary.n_fovs,
+            "platform": self.platform,
             **summary.extra,
         }
 

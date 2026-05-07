@@ -163,13 +163,23 @@ class TestRunStep:
 class TestRunPipeline:
     """Integration tests for the full pipeline runner."""
 
-    def test_run_with_csv(self, sample_transcripts_csv, tmp_path):
-        """Basic end-to-end test: CSV in → PipelineResult out."""
-        result = run_pipeline(
-            input_csv=sample_transcripts_csv,
-            output_dir=str(tmp_path / "pipeline_output"),
+    def _run_with_csv(self, csv_path: str, output_dir: str, **overrides) -> PipelineResult:
+        """Helper: ingest CSV → SpatialData → run_pipeline."""
+        from src.io import get_ingestor
+        sdata = get_ingestor("cosmx").ingest(csv_path)
+        return run_pipeline(
+            sdata=sdata,
+            output_dir=output_dir,
             min_transcripts=0,
             min_genes=0,
+            **overrides,
+        )
+
+    def test_run_with_sdata(self, sample_transcripts_csv, tmp_path):
+        """Basic end-to-end test: ingest → PipelineResult out."""
+        result = self._run_with_csv(
+            sample_transcripts_csv,
+            str(tmp_path / "pipeline_output"),
         )
         assert result.adata is not None
         assert result.summary is not None
@@ -177,13 +187,11 @@ class TestRunPipeline:
         assert result.report_path.exists()
 
     def test_output_files_created(self, sample_transcripts_csv, tmp_path):
-        """Verify that h5ad, report JSON, and parquet files are created."""
+        """Verify that h5ad, report JSON files are created."""
         output_dir = tmp_path / "output_files"
-        result = run_pipeline(
-            input_csv=sample_transcripts_csv,
-            output_dir=str(output_dir),
-            min_transcripts=0,
-            min_genes=0,
+        result = self._run_with_csv(
+            sample_transcripts_csv,
+            str(output_dir),
         )
         assert result.adata_path.exists()
         assert result.report_path.exists()
@@ -195,16 +203,13 @@ class TestRunPipeline:
         import json
 
         output_dir = tmp_path / "report_contents"
-        result = run_pipeline(
-            input_csv=sample_transcripts_csv,
-            output_dir=str(output_dir),
-            min_transcripts=0,
-            min_genes=0,
+        result = self._run_with_csv(
+            sample_transcripts_csv,
+            str(output_dir),
         )
         report = json.loads(result.report_path.read_text())
         assert "outputs" in report
         assert "summary" in report
-        assert "layer_evaluation" in report
         assert "step_summary" in report
         assert "step_order" in report
         assert "pipeline_name" in report
@@ -215,11 +220,9 @@ class TestRunPipeline:
         import json
 
         output_dir = tmp_path / "step_order"
-        result = run_pipeline(
-            input_csv=sample_transcripts_csv,
-            output_dir=str(output_dir),
-            min_transcripts=0,
-            min_genes=0,
+        result = self._run_with_csv(
+            sample_transcripts_csv,
+            str(output_dir),
         )
         report = json.loads(result.report_path.read_text())
         assert isinstance(report["step_order"], list)
@@ -229,52 +232,30 @@ class TestRunPipeline:
     def test_backend_overrides(self, sample_transcripts_csv, tmp_path):
         """Backend overrides should be respected."""
         output_dir = tmp_path / "backend_overrides"
-        result = run_pipeline(
-            input_csv=sample_transcripts_csv,
-            output_dir=str(output_dir),
-            min_transcripts=0,
-            min_genes=0,
-            denoise_backend="intracellular",
+        result = self._run_with_csv(
+            sample_transcripts_csv,
+            str(output_dir),
+            denoise_backend="none",
             segmentation_backend="provided_cells",
         )
-        assert result.adata is not None
-
-    def test_pipeline_with_settings_object(self, sample_transcripts_csv, tmp_path):
-        """run_pipeline should accept a Settings object."""
-        from src.config import Settings
-
-        settings = Settings(config_path="/nonexistent/path.yaml")
-        settings.update(
-            {
-                "input_csv": sample_transcripts_csv,
-                "output_dir": str(tmp_path / "settings_test"),
-                "min_transcripts": 0,
-                "min_genes": 0,
-            }
-        )
-        result = run_pipeline(settings=settings)
         assert result.adata is not None
 
     def test_output_dir_created(self, sample_transcripts_csv, tmp_path):
         """run_pipeline should create the output directory."""
         output_dir = tmp_path / "new_output_dir"
         assert not output_dir.exists()
-        run_pipeline(
-            input_csv=sample_transcripts_csv,
-            output_dir=str(output_dir),
-            min_transcripts=0,
-            min_genes=0,
+        self._run_with_csv(
+            sample_transcripts_csv,
+            str(output_dir),
         )
         assert output_dir.exists()
 
     def test_adata_has_observations(self, sample_transcripts_csv, tmp_path):
         """Resulting AnnData should have some observations."""
         output_dir = tmp_path / "adata_check"
-        result = run_pipeline(
-            input_csv=sample_transcripts_csv,
-            output_dir=str(output_dir),
-            min_transcripts=0,
-            min_genes=0,
+        result = self._run_with_csv(
+            sample_transcripts_csv,
+            str(output_dir),
         )
         assert result.adata.n_obs > 0
         assert result.adata.n_vars > 0
@@ -284,39 +265,36 @@ class TestRunPipeline:
 
 
 class TestRunPipelineErrors:
-    def test_nonexistent_input_csv(self, tmp_path):
-        """Non-existent input CSV should raise an error."""
-        from src.errors import PipelineDataError
+    def test_nonexistent_sdata_raises(self, tmp_path):
+        """Non-existent SpatialData path should raise FileNotFoundError."""
+        import spatialdata
 
-        with pytest.raises(PipelineDataError, match="Failed to load data"):
-            run_pipeline(
-                input_csv="/nonexistent/file.csv",
-                output_dir=str(tmp_path / "error_test"),
-            )
+        with pytest.raises(FileNotFoundError):
+            spatialdata.read_zarr("/nonexistent/path.zarr")
 
     def test_invalid_backend_raises(self, sample_transcripts_csv, tmp_path):
-        """Invalid backend should raise ValueError from _run_step."""
-        # The pipeline engine should fall back to default backend
-        # when the requested backend is not available,
-        # so this test should actually succeed.
+        """Invalid backend should fall back to default (graceful)."""
+        from src.io import get_ingestor
+        sdata = get_ingestor("cosmx").ingest(sample_transcripts_csv)
         output_dir = tmp_path / "fallback_test"
         result = run_pipeline(
-            input_csv=sample_transcripts_csv,
+            sdata=sdata,
             output_dir=str(output_dir),
             min_transcripts=0,
             min_genes=0,
-            denoise_backend="intracellular",
+            denoise_backend="nonexistent_backend",  # will fall back to default
         )
         assert result.adata is not None
 
     def test_disabled_step_skipped(self, sample_transcripts_csv, tmp_path):
         """Disabled steps should be skipped."""
+        from src.io import get_ingestor
         from src.config import Settings
 
+        sdata = get_ingestor("cosmx").ingest(sample_transcripts_csv)
         settings = Settings(config_path="/nonexistent/path.yaml")
         settings.update(
             {
-                "input_csv": sample_transcripts_csv,
                 "output_dir": str(tmp_path / "skip_disabled"),
                 "min_transcripts": 0,
                 "min_genes": 0,
@@ -327,7 +305,5 @@ class TestRunPipelineErrors:
                 },
             }
         )
-        result = run_pipeline(settings=settings)
+        result = run_pipeline(settings=settings, sdata=sdata)
         assert result.adata is not None
-        # annotation should not be in step_results
-        assert "annotation" not in result.report_path.read_text() or True

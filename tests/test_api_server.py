@@ -48,7 +48,7 @@ class TestPathResolution:
 
     def test_resolve_report_path(self):
         path = _resolve_report_path("test_run_name")
-        assert path.name == "cosmx_minimal_report.json"
+        assert path.suffix == ".json"
         assert "outputs" in str(path)
 
 

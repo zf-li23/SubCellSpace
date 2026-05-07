@@ -63,8 +63,13 @@ def _subcell_rna_localization(
 
     per_cell: dict[str, dict[str, float]] = {}
 
+    # Normalise cell_id to str for consistent matching with adata.obs_names
+    segmented_df = segmented_df.copy()
+    segmented_df[cell_col] = segmented_df[cell_col].astype(str)
+    centroids_idx = set(cell_centroids.index)
+
     for cell_id, group in segmented_df.groupby(cell_col, sort=False):
-        if cell_id not in cell_centroids.index:
+        if cell_id not in centroids_idx:
             continue
         cx, cy = cell_centroids.loc[cell_id]
         dists = np.sqrt((group[x_col] - cx) ** 2 + (group[y_col] - cy) ** 2)
@@ -73,12 +78,13 @@ def _subcell_rna_localization(
             "max_radial_distance": float(dists.max()) if len(dists) else 0.0,
         }
 
-    # Write to adata.obs
+    # Build float-typed series and fill missing cells with 0.0 instead of NaN
     rna_dist = pd.Series(
         {k: v["mean_radial_distance"] for k, v in per_cell.items()},
         name="mean_rna_radial_distance",
+        dtype=float,
     )
-    adata.obs["mean_rna_radial_distance"] = rna_dist.reindex(adata.obs_names)
+    adata.obs["mean_rna_radial_distance"] = rna_dist.reindex(adata.obs_names, fill_value=0.0).astype(float)
 
     summary = {
         "n_cells_analyzed": len(per_cell),

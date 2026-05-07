@@ -2,18 +2,28 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from src.io import ingest
 from src.models import PipelineResult
-from src.pipeline import run_cosmx_minimal
+from src.pipeline_engine import run_pipeline
 
 
-class TestRunCosmxMinimal:
-    def test_run_with_csv(self, sample_transcripts_csv, tmp_path):
+@pytest.fixture
+def sample_sdata(sample_transcripts_csv, tmp_path):
+    """Ingest sample CosMx data → SpatialData for pipeline tests."""
+    return ingest("cosmx", sample_transcripts_csv)
+
+
+class TestRunPipeline:
+    def test_run_with_sdata(self, sample_sdata, tmp_path):
         output_dir = tmp_path / "run_output"
-        result = run_cosmx_minimal(
-            input_csv=sample_transcripts_csv,
+        result = run_pipeline(
+            sdata=sample_sdata,
             output_dir=output_dir,
             min_transcripts=0,
             min_genes=0,
+            denoise_backend="intracellular",
         )
         assert isinstance(result, PipelineResult)
         assert result.adata is not None
@@ -21,13 +31,14 @@ class TestRunCosmxMinimal:
         assert result.adata_path.exists()
         assert result.report_path.exists()
 
-    def test_report_is_valid_json(self, sample_transcripts_csv, tmp_path):
+    def test_report_is_valid_json(self, sample_sdata, tmp_path):
         output_dir = tmp_path / "report_test"
-        result = run_cosmx_minimal(
-            input_csv=sample_transcripts_csv,
+        result = run_pipeline(
+            sdata=sample_sdata,
             output_dir=output_dir,
             min_transcripts=0,
             min_genes=0,
+            denoise_backend="intracellular",
         )
         report = json.loads(result.report_path.read_text())
         assert "outputs" in report
@@ -35,35 +46,32 @@ class TestRunCosmxMinimal:
         assert "layer_evaluation" in report
         assert "step_summary" in report
 
-    def test_outputs_h5ad_and_json(self, sample_transcripts_csv, tmp_path):
+    def test_outputs_h5ad_and_json(self, sample_sdata, tmp_path):
         output_dir = tmp_path / "outputs_test"
-        result = run_cosmx_minimal(
-            input_csv=sample_transcripts_csv,
+        result = run_pipeline(
+            sdata=sample_sdata,
             output_dir=output_dir,
             min_transcripts=0,
             min_genes=0,
+            denoise_backend="intracellular",
         )
         assert result.adata_path.suffix == ".h5ad"
         assert result.report_path.suffix == ".json"
 
-    def test_min_transcripts_threshold(self, sample_transcripts_df, tmp_path):
-        # Write a small CSV
-        csv_path = tmp_path / "small.csv"
-        sample_transcripts_df.to_csv(csv_path, index=False)
+    def test_min_transcripts_threshold(self, sample_sdata, tmp_path):
         output_dir = tmp_path / "threshold_test"
-        result = run_cosmx_minimal(
-            input_csv=str(csv_path),
+        result = run_pipeline(
+            sdata=sample_sdata,
             output_dir=output_dir,
             min_transcripts=1,
             min_genes=0,
         )
-        # Should still succeed since we have data
         assert result.adata.n_obs > 0
 
-    def test_backend_strings_accepted(self, sample_transcripts_csv, tmp_path):
+    def test_backend_strings_accepted(self, sample_sdata, tmp_path):
         output_dir = tmp_path / "backend_test"
-        result = run_cosmx_minimal(
-            input_csv=sample_transcripts_csv,
+        result = run_pipeline(
+            sdata=sample_sdata,
             output_dir=output_dir,
             min_transcripts=0,
             min_genes=0,
@@ -72,5 +80,6 @@ class TestRunCosmxMinimal:
             clustering_backend="leiden",
             annotation_backend="rank_marker",
             spatial_domain_backend="spatial_leiden",
+            subcellular_spatial_domain_backend="none",
         )
         assert result is not None
