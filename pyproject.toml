@@ -8,6 +8,20 @@ version = "0.1.0"
 description = "A modular subcellular spatial transcriptomics analysis platform"
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+  {name = "SubCellSpace Contributors"},
+]
+keywords = ["spatial-transcriptomics", "subcellular", "single-cell", "spatialdata", "scanpy"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
   "anndata>=0.12",
   "fastapi>=0.115",
@@ -57,6 +71,11 @@ celltypist = []  # installed via -e tools/celltypist/
 # All optional tools combined (Python-installable only; excludes baysor)
 all = ["subcellspace[dev,sparc,cellpose,graphst,phenograph,hdbscan,scvi,celltypist]"]
 
+
+[project.urls]
+Homepage = "https://github.com/your-org/subcellspace"
+Repository = "https://github.com/your-org/subcellspace"
+Issues = "https://github.com/your-org/subcellspace/issues"
 
 [project.scripts]
 subcellspace = "src.cli:main"

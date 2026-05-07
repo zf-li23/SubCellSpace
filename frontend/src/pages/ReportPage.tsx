@@ -273,9 +273,11 @@ export default function ReportPage() {
               <div className="detail-meta-grid">
                 {Object.entries(ss.subcellular_analysis as Record<string,unknown>)
                   .filter(([k]) => !k.startsWith('__') && !k.endsWith('_backend'))
-                  .map(([k, v]) => (
-                    <MetaItem key={k} label={k.replace(/_/g, ' ')} value={typeof v === 'number' ? fmtPct(v) : String(v)} />
-                  ))}
+                  .map(([k, v]) => {
+                    // Use fmtNum for counts/integers, only use fmtPct for ratio/metrics ending in _ratio/_fraction
+                    const isPct = typeof k === 'string' && (k.endsWith('_ratio') || k.endsWith('_fraction') || k.endsWith('_pct'))
+                    return <MetaItem key={k} label={k.replace(/_/g, ' ')} value={typeof v === 'number' ? (isPct ? fmtPct(v) : fmtNum(v)) : String(v)} />
+                  })}
               </div>
             </section>
           )}

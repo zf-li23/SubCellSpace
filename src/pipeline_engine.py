@@ -389,8 +389,12 @@ def run_pipeline(
         "qc_skip": ctx.step_results.get("__qc_skip__") is not None,
     }
     if "__contract_warnings" in ctx.step_results:
-        ctx.adata.uns["pipeline"]["contract_warnings"] = \
-            ctx.step_results["__contract_warnings"].summary.get("warnings", [])
+        # Ensure all values are JSON-safe plain strings (h5py requires Python str, not numpy/bytes)
+        raw_warnings = ctx.step_results["__contract_warnings"].summary.get("warnings", [])
+        safe_warnings = []
+        for w in raw_warnings:
+            safe_warnings.append({str(k): str(v) for k, v in w.items()})
+        ctx.adata.uns["pipeline"]["contract_warnings"] = safe_warnings
 
     ctx.adata.write_h5ad(adata_path)
     if ctx.segmented_df is not None:

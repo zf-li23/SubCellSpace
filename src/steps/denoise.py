@@ -20,12 +20,30 @@ def _denoise_none(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _denoise_intracellular(df: pd.DataFrame) -> pd.DataFrame:
-    cc = resolve_col_strict(df.columns, COL_CELLCOMP)
+    from ..constants import resolve_col
+    cc = resolve_col(df.columns, COL_CELLCOMP)
+    if cc is None:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Column '%s' not found in data — denoise backend 'intracellular' falling back to 'none' (no filtering).",
+            COL_CELLCOMP,
+        )
+        df.attrs["denoise_fallback"] = "none (missing CellComp column)"
+        return df
     return df[df[cc].isin(["Nuclear", "Cytoplasm"])].copy()
 
 
 def _denoise_nuclear_only(df: pd.DataFrame) -> pd.DataFrame:
-    cc = resolve_col_strict(df.columns, COL_CELLCOMP)
+    from ..constants import resolve_col
+    cc = resolve_col(df.columns, COL_CELLCOMP)
+    if cc is None:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Column '%s' not found in data — denoise backend 'nuclear_only' falling back to 'none'.",
+            COL_CELLCOMP,
+        )
+        df.attrs["denoise_fallback"] = "none (missing CellComp column)"
+        return df
     return df[df[cc] == "Nuclear"].copy()
 
 

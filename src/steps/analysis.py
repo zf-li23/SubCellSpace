@@ -28,12 +28,18 @@ def _cluster_leiden(adata: sc.AnnData, resolution: float, **kwargs: Any) -> str:
             directed=False,
             n_iterations=2,
         )
+        # Ensure 'cluster' column was actually added (igraph may silently fail on sparse data)
+        if "cluster" not in adata.obs:
+            raise RuntimeError("igraph leiden did not produce 'cluster' column")
         return "leiden_igraph"
     except Exception:
         try:
             sc.tl.leiden(adata, resolution=resolution, key_added="cluster")
+            if "cluster" not in adata.obs:
+                raise RuntimeError("legacy leiden did not produce 'cluster' column")
             return "leiden_legacy"
         except Exception:
+            # Fallback to KMeans — always works with X_pca
             n_clusters = min(8, max(2, adata.n_obs))
             labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(adata.obsm["X_pca"])
             adata.obs["cluster"] = labels.astype(str)
@@ -159,8 +165,29 @@ def run_expression_and_spatial_analysis(
         "min_transcripts": min_transcripts,
         "min_genes": min_genes,
     }
+
+    # Save pre-QC state for possible auto-relax
+    adata_pre_qc = adata.copy()
+
     adata = adata[adata.obs["total_counts"] >= min_transcripts].copy()
     adata = adata[adata.obs["n_genes_by_counts"] >= min_genes].copy()
+
+    # Auto-relax QC on extremely sparse data (e.g. MERFISH barcodes: 1 gene per cell)
+    if adata.n_obs == 0:
+        # Retry with relaxed min_genes=1
+        adata = adata_pre_qc.copy()
+        adata = adata[adata.obs["total_counts"] >= min_transcripts].copy()
+        adata = adata[adata.obs["n_genes_by_counts"] >= 1].copy()
+        if adata.n_obs > 0:
+            import logging
+            logging.getLogger(__name__).warning(
+                "QC with min_genes=%d filtered all %d cells. "
+                "Auto-relaxing min_genes to 1 (retained %d cells).",
+                min_genes, n_obs_before, adata.n_obs,
+            )
+            adata.uns["qc_metrics"]["min_genes_applied"] = 1
+            adata.uns["qc_metrics"]["min_genes_original"] = min_genes
+
     adata.uns["qc_metrics"]["n_obs_after_qc"] = int(adata.n_obs)
 
     if adata.n_obs < 2:
@@ -172,6 +199,7 @@ def run_expression_and_spatial_analysis(
             "clustering_backend_requested": clustering_backend,
             "clustering_backend_used": "none",
             "leiden_resolution": float(leiden_resolution),
+            "qc_note": "Too few cells after QC. Try lowering --min-genes (used: {}).".format(min_genes) if adata.n_obs == 0 else "Only %d cell(s) after QC." % adata.n_obs,
         }
         return StepResult(output=adata, summary=summary, backend_used="none")
 
@@ -183,7 +211,7 @@ def run_expression_and_spatial_analysis(
         sc.pp.highly_variable_genes(adata, flavor="cell_ranger", n_top_genes=min(2000, adata.n_vars))
         if "highly_variable" in adata.var and adata.var["highly_variable"].any():
             adata = adata[:, adata.var["highly_variable"]].copy()
-    except (IndexError, ValueError):
+    except (IndexError, ValueError, RuntimeError):
         pass
 
     n_comps = min(50, adata.n_obs - 1, adata.n_vars - 1)
@@ -191,7 +219,23 @@ def run_expression_and_spatial_analysis(
     sc.pp.scale(adata, max_value=10)
     sc.tl.pca(adata, n_comps=n_comps, svd_solver="randomized")
     sc.pp.neighbors(adata, n_neighbors=min(15, max(2, adata.n_obs - 1)), n_pcs=min(30, n_comps))
-    cluster_backend_used = _CLUSTER_FUNCS[clustering_backend](adata, resolution=leiden_resolution, denoised_expression=denoised_expression)
+
+    # Auto-degrade to kmeans on extremely sparse data (igraph/legacy leiden may silently fail)
+    actual_backend = clustering_backend
+    if clustering_backend == "leiden" and adata.n_obs < 500:
+        total_elements = adata.X.shape[0] * adata.X.shape[1]
+        if total_elements > 0:
+            nonzero = int(adata.X.nnz) if hasattr(adata.X, "nnz") else int((adata.X > 0).sum() if hasattr(adata.X, "__gt__") else total_elements)
+            sparsity = 1.0 - (nonzero / total_elements)
+            if sparsity > 0.99:  # >99% sparse → degrade to kmeans
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Data is extremely sparse (%.2f%% non-zero). Auto-degrading from leiden to kmeans.",
+                    (1.0 - sparsity) * 100,
+                )
+                actual_backend = "kmeans"
+
+    cluster_backend_used = _CLUSTER_FUNCS[actual_backend](adata, resolution=leiden_resolution, denoised_expression=denoised_expression)
     sc.tl.umap(adata)
 
     sq.gr.spatial_neighbors(adata, spatial_key="spatial", coord_type="generic")

@@ -23,6 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser.add_argument("input_path", type=str, help="Path to input data file/directory")
     ingest_parser.add_argument("--output", type=Path, default=None, help="Write .zarr (skips if unset)")
     ingest_parser.add_argument("--json", action="store_true", help="Print summary as JSON")
+    ingest_parser.add_argument("--cell-id-column", type=str, default=None,
+                                help="Override cell ID column name (useful for MERFISH data where barcode_id ≠ cell_id)")
 
     # ── Run pipeline (accepts .zarr or raw data file) ───────────────
     run_parser = subparsers.add_parser("run", help="Run full pipeline: auto-ingest → analyze → export")
@@ -32,6 +34,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--output-dir", "-o", type=Path, default=Path("outputs/pipeline_run"))
     run_parser.add_argument("--min-transcripts", type=int, default=10)
     run_parser.add_argument("--min-genes", type=int, default=10)
+    run_parser.add_argument("--cell-id-column", type=str, default=None,
+                            help="Override cell ID column name for ingestion (e.g. 'fov' for MERFISH data)")
     run_parser.add_argument("--denoise-backend", choices=get_available_backends("denoise"), default="intracellular")
     run_parser.add_argument("--patchify-backend", choices=get_available_backends("patchify"), default="none")
     run_parser.add_argument("--segmentation-backend", choices=get_available_backends("segmentation"), default="provided_cells")

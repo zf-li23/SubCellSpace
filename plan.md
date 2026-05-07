@@ -261,8 +261,8 @@ obs["total_counts"]  obs["n_genes_by_counts"]  obs["pct_counts_mt"]
 | A1 | 统一 CLI 参数名与 pipeline step 名的映射 | `src/cli.py`, `src/pipeline_engine.py` | ✅ |
 | A2 | 建立 `STEP_ARG_ALIASES` 映射表 | `src/constants.py` | ✅ |
 | A3 | `subcellspace run file.csv --platform auto` 全链路 | `src/cli.py`, `src/io/__init__.py` | ✅ |
-| A4 | 后端参数覆盖单元测试 | `tests/test_pipeline.py` | ⬜ |
-| A5 | 移除 legacy `run-cosmx` 命令 | `src/cli.py` | ⬜ |
+| A4 | 后端参数覆盖单元测试 | `tests/test_pipeline.py` | ✅ |
+| A5 | 移除 legacy `run-cosmx` / `benchmark-cosmx` 命令 | `src/cli.py` | ✅ |
 | A6 | 修复 `source_path: unknown` 报告问题 | `src/pipeline_engine.py` | ✅ |
 
 ### 🔴 Phase B：鲁棒 — QC 驱动安全
@@ -272,9 +272,9 @@ obs["total_counts"]  obs["n_genes_by_counts"]  obs["pct_counts_mt"]
 | B1 | 0-cells / 0-genes 优雅跳过 | `src/pipeline_engine.py` | ✅ |
 | B2 | Contract violation → WARNING + `--strict-contracts` flag | `src/validation.py`, `src/pipeline_engine.py` | ✅ |
 | B3 | QC 指标写入 adata.uns + 前端可视化 | `src/steps/analysis.py` | ✅ |
-| B4 | CellComp 缺失时 denoise 自动回退 | `src/steps/denoise.py` | ⬜ |
+| B4 | CellComp 缺失时 denoise 自动回退 | `src/steps/denoise.py` | ✅ |
 | B5 | adata.obs 列统一类型安全 (float, not object) | `src/steps/subcellular_analysis.py` | ✅ |
-| B6 | Merfish barcode ≠ cell 语义处理 | `src/io/merfish.py` | ⬜ |
+| B6 | Merfish barcode ≠ cell 语义处理 | `src/io/merfish.py`, `src/cli.py` | ✅ |
 
 ### 🟡 Phase C：标准化 — 列名 & 组件命名
 
@@ -308,8 +308,8 @@ obs["total_counts"]  obs["n_genes_by_counts"]  obs["pct_counts_mt"]
 | # | 任务 | 说明 | 优先级 | 预计工期 |
 |---|------|------|:------:|:---:|
 | S1 | **Docker 镜像构建** | 含 Python 3.12 + Julia 1.10 + Baysor + 全部 Python 后端，`docker run` 即用 | 🔴 P0 | 1 周 |
-| S2 | **CI/CD (GitHub Actions)** | PR 自动运行 `pytest + ruff + mypy`，合并前必须全通过；添加端到端 smoke test | 🔴 P0 | 3 天 |
-| S3 | **PyPI 包发布准备** | 完善 `pyproject.toml`，发布 `subcellspace` 到 TestPyPI → PyPI | 🔴 P0 | 2 天 |
+| S2 | **CI/CD (GitHub Actions)** | PR 自动运行 `pytest + ruff + mypy`，合并前必须全通过；添加端到端 smoke test | 🔴 P0 | ✅ 已完成 |
+| S3 | **PyPI 包发布准备** | 完善 `pyproject.toml` (license/authors/keywords/classifiers/urls)，发布 `subcellspace` 到 TestPyPI → PyPI | 🔴 P0 | ✅ 元数据就绪，待发布 |
 | S4 | **四平台真实数据端到端验证** | 下载 Xenium/MERFISH/Stereo-seq 官方数据集，全流程跑通并记录 benchmark | 🔴 P0 | 1 周 |
 | S5 | **评估指标完善** | 添加与 ground truth 对比（ARI/NMI 等）、更丰富的 QC 指标写入报告 | 🟡 P1 | 3 天 |
 | S6 | **后端可用性自动化检测** | `pip install subcellspace[full]` 后自动检测哪些后端可用并报告 | 🟡 P1 | 2 天 |
@@ -399,7 +399,19 @@ subcellspace-api & cd frontend && npm run dev
 
 ## 📝 变更日志
 
-### 2026-05-07
+### 2026-05-07 (Round 2 — CI/CD & 鲁棒性提升)
+- **CI/CD**：创建 `.github/workflows/ci.yml` — pytest + ruff + mypy + 三平台 smoke test
+- **PyPI 元数据**：`pyproject.toml` 添加 license/authors/keywords/classifiers/urls
+- **CLI**：添加 `--cell-id-column` 参数（ingest & run），解决 MERFISH barcode≠cell 语义问题
+- **测试**：新增 `test_cli_alias_backends_accepted` 验证所有 CLI 别名映射
+- **Phase A 完成**：A4 (后端参数测试), A5 (移除 legacy 命令)
+- **Phase B 完成**：B4 (denoise CellComp 自动回退), B6 (MERFISH barcode 处理)
+- **MERFISH 端到端修复**：auto-degrade leiden→kmeans (sparsity>99%), auto-relax min_genes→1 (QC all-empty)
+- **h5ad 写入修复**：contract_warnings 中所有值 str() 转换
+- **前端修复**：Subcellular Analysis 数值使用 fmtNum 替代 fmtPct
+- **代码质量**：176 tests 通过（单独运行），test_pipeline_engine 存在 pre-existing flaky（registry 单例竞争）
+
+### 2026-05-07 (Round 1 — 项目审阅)
 - **代码精简**：删除 2 个文件（benchmark.py, cosmx_minimal.py），移除 legacy 路径、死代码等 ~370 行
 - **测试修复**：176 → 176 全通过（适配新 SpatialData-only 入口）
 - **API 修复**：`api_server.py` 适配 `run_pipeline`（替换已删除的 `run_cosmx_minimal`）

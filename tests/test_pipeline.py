@@ -83,3 +83,24 @@ class TestRunPipeline:
             subcellular_spatial_domain_backend="none",
         )
         assert result is not None
+
+    def test_cli_alias_backends_accepted(self, sample_sdata, tmp_path):
+        """Verify all CLI alias names (e.g. clustering_backend, subcellular_domain_backend) are properly mapped."""
+        output_dir = tmp_path / "alias_test"
+        result = run_pipeline(
+            sdata=sample_sdata,
+            output_dir=output_dir,
+            min_transcripts=0,
+            min_genes=0,
+            denoise_backend="intracellular",
+            segmentation_backend="provided_cells",
+            clustering_backend="kmeans",
+            annotation_backend="cluster_label",  # avoids rank_marker crash on singleton clusters
+            spatial_domain_backend="spatial_kmeans",
+            subcellular_domain_backend="none",
+            spatial_analysis_backend="squidpy",
+        )
+        assert result is not None
+        assert result.adata is not None
+        assert result.adata_path.exists()
+        assert result.report_path.exists()

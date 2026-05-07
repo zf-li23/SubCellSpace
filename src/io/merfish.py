@@ -55,11 +55,13 @@ class MERFISHIngestor(BaseIngestor):
         return df
 
     def _column_mapping(self) -> list[tuple[str, str]]:
+        # Respect --cell-id-column override via df.attrs (set by base ingestor)
+        cell_id_col = getattr(self, "_cell_id_column", None) or "barcode_id"
         return [
             ("global_x", COL_X),
             ("global_y", COL_Y),
             ("gene", COL_GENE),
-            ("barcode_id", COL_CELL_ID),
+            (cell_id_col, COL_CELL_ID),
             ("cell_id", COL_CELL_ID),
             ("fov", COL_FOV),
             ("global_z", COL_Z),

@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libigraph-dev libhdf5-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install hdbscan
+
+      - name: Lint with ruff
+        run: ruff check src/ tests/
+
+      - name: Type check with mypy
+        run: mypy src/ --ignore-missing-imports
+
+      - name: Test with pytest
+        run: pytest tests/ -v --tb=short --timeout=120
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libigraph-dev libhdf5-dev
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install hdbscan
+
+      - name: Smoke test — CLI help
+        run: |
+          subcellspace --help
+          subcellspace backends
+
+      - name: Smoke test — ingest CosMx
+        run: |
+          subcellspace ingest cosmx data/test/Mouse_brain_CosMX_1000cells.csv --json
+
+      - name: Smoke test — run CosMx
+        run: |
+          subcellspace run data/test/Mouse_brain_CosMX_1000cells.csv \
+            -o outputs/ci_test/ \
+            --subcellular-domain-backend none \
+            --no-export
+
+      - name: Smoke test — run Xenium
+        run: |
+          subcellspace run data/test/Xenium_mouse_brain_rep3_1000cells.parquet \
+            -o outputs/ci_xenium/ \
+            --denoise-backend none \
+            --subcellular-domain-backend none \
+            --no-export
+
+      - name: Smoke test — run MERFISH
+        run: |
+          subcellspace run data/test/MERFISH_1014_region_1_detected_transcripts.csv \
+            -o outputs/ci_merfish/ \
+            --subcellular-domain-backend none \
+            --no-export
