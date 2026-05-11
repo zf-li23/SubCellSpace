@@ -40,9 +40,15 @@ from . import xenium   # noqa: F401
 
 def _detect_by_columns(columns: set[str]) -> str | None:
     """Detect platform from column names."""
-    # Xenium: x_location + feature_name + cell_id
+    # Xenium (standard): x_location + feature_name + cell_id
     if {"x_location", "y_location", "feature_name", "cell_id"}.issubset(columns):
         return "xenium"
+    # Xenium (flexible): feature_name + cell_id + (x|y or x_location|y_location)
+    # Handles CSV exports where coords are named x/y instead of x_location/y_location
+    if {"feature_name", "cell_id"}.issubset(columns):
+        has_xy = {"x", "y"}.issubset(columns) or {"x_location", "y_location"}.issubset(columns)
+        if has_xy:
+            return "xenium"
     # CosMx: x_global_px + target (+ CellComp)
     if {"x_global_px", "y_global_px", "target"}.issubset(columns):
         return "cosmx"
@@ -112,7 +118,7 @@ def detect_platform(input_path: str | Path) -> str:
     )
 
 
-def ingest(platform: str, input_path: str | Path) -> Any:
+def ingest(platform: str, input_path: str | Path, cell_id_column: str | None = None) -> Any:
     """Run data ingestion for *platform* and return a SpatialData object.
 
     Parameters
@@ -121,13 +127,19 @@ def ingest(platform: str, input_path: str | Path) -> Any:
         One of ``"cosmx"``, ``"xenium"``, ``"merfish"``, ``"stereoseq"``.
     input_path : str or Path
         Path to the input data file or directory.
+    cell_id_column : str or None
+        Override the cell ID column name (e.g. ``"barcode_id"`` for MERFISH
+        data where the default cell_id column differs from actual cells).
 
     Returns
     -------
     SpatialData
         Standardised spatial data object.
     """
-    return get_ingestor(platform).ingest(Path(input_path))
+    ingestor = get_ingestor(platform)
+    if cell_id_column is not None:
+        ingestor._cell_id_column = cell_id_column
+    return ingestor.ingest(Path(input_path))
 
 
 __all__ = [

@@ -47,6 +47,19 @@ class _BackendRegistry:
 
     # ── Public API ──────────────────────────────────────────────
 
+    def reset(self) -> None:
+        """Reset the registry to its initial empty state.
+
+        This is primarily used in tests to avoid flaky test failures
+        caused by shared singleton state across test cases.
+        """
+        self._backends.clear()
+        self._defaults.clear()
+        self._capabilities.clear()
+        self._config.clear()
+        self._config_loaded = False
+        self._runners.clear()
+
     def register_backend(self, step_name: str, backend_name: str) -> Callable[[BackendFunc], BackendFunc]:
         """Decorator that registers *backend_name* for *step_name*.
 
@@ -252,3 +265,4 @@ get_available_runners = registry.get_available_runners
 declare_capabilities = registry.declare_capabilities
 get_capabilities = registry.get_capabilities
 get_all_capabilities = registry.get_all_capabilities
+reset_registry = registry.reset

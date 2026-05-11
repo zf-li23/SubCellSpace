@@ -63,6 +63,10 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup() -> None:
     """Pre-load backend registry so /api/meta/backends returns real data."""
+    import logging
+    logging.getLogger("spatialdata").setLevel(logging.WARNING)
+    logging.getLogger("tqdm").setLevel(logging.WARNING)
+    logging.getLogger("ome_zarr").setLevel(logging.WARNING)
     from .registry import load_backends
     load_backends()
 

@@ -19,6 +19,7 @@ from spatialdata import SpatialData, sanitize_table
 from spatialdata.models import PointsModel
 
 from ..constants import (
+    ATTRS_MAIN_TABLE_KEY,
     COL_CELL_ID,
     COL_CELLCOMP,
     COL_FOV,
@@ -26,6 +27,7 @@ from ..constants import (
     COL_X,
     COL_Y,
     KEY_MAIN_TABLE,
+    KEY_RAW_TRANSCRIPTS,
     PLATFORM_COSMX,
 )
 from .base import BaseIngestor, register_ingestor
@@ -121,10 +123,10 @@ def build_spatialdata_from_adata(adata: ad.AnnData) -> SpatialData:
     sanitize_table(table)
 
     sdata = SpatialData(
-        points={"cell_centroids": points},
+        points={KEY_RAW_TRANSCRIPTS: points},
         tables={KEY_MAIN_TABLE: table},
     )
-    sdata.attrs["main_table_key"] = KEY_MAIN_TABLE
+    sdata.attrs[ATTRS_MAIN_TABLE_KEY] = KEY_MAIN_TABLE
     return sdata
 
 

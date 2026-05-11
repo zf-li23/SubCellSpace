@@ -58,6 +58,8 @@ class TestBuildCellLevelAdata:
 
 class TestBuildSpatialdata:
     def test_build_from_anndata(self, sample_anndata):
+        from src.constants import KEY_RAW_TRANSCRIPTS, KEY_MAIN_TABLE
+
         sdata = build_spatialdata_from_adata(sample_anndata)
-        assert "cell_centroids" in sdata.points
-        assert "table" in sdata.tables
+        assert KEY_RAW_TRANSCRIPTS in sdata.points
+        assert KEY_MAIN_TABLE in sdata.tables

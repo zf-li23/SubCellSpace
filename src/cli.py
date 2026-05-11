@@ -2,9 +2,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import pandas as pd
+
+# ── Logging suppression (R4, R5) ─────────────────────────────────
+# Set at module level AND in main() to catch both import-time and
+# runtime loggers.  Some packages (squidpy, spatialdata) reconfigure
+# root logging during import — we override their specific loggers
+# immediately so our own INFO messages remain visible through the root.
+
+_log_suppressed: set[str] = set()
+
+def _suppress_noise() -> None:
+    """Suppress noisy loggers from dependencies.  Safe to call multiple times."""
+    for name in ("tqdm", "ome_zarr", "spatialdata", "spatialdata._logging",
+                  "squidpy"):
+        if name not in _log_suppressed:
+            logging.getLogger(name).setLevel(logging.WARNING)
+            _log_suppressed.add(name)
+
+_suppress_noise()
 
 from .constants import STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS, STEP_ANNOTATION, STEP_SUBCELLULAR_SPATIAL_DOMAIN, STEP_SPATIAL_ANALYSIS
 from .io import get_available_platforms, ingest, detect_platform
@@ -100,7 +119,7 @@ def _cmd_ingest(args: argparse.Namespace) -> None:
     """Handle the ``subcellspace ingest`` command."""
     from .models import DatasetSummary
 
-    sdata = ingest(args.platform, args.input_path)
+    sdata = ingest(args.platform, args.input_path, cell_id_column=args.cell_id_column)
 
     # Extract summary from attrs
     summary_dict = sdata.attrs.get("ingestion_summary", {})
@@ -173,7 +192,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
             platform = detect_platform(input_path)
             print(f"Auto-detected platform: {platform}")
         print(f"Ingesting {platform} data from {input_path} …")
-        sdata = ingest(platform, input_path)
+        sdata = ingest(platform, input_path, cell_id_column=args.cell_id_column)
 
         # Show summary
         summary = sdata.attrs.get("ingestion_summary", {})
@@ -428,8 +447,23 @@ def _cmd_backends(args: argparse.Namespace) -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def _suppress_all_noise() -> None:
+    """Aggressively suppress noisy dependency loggers after all imports."""
+    import logging
+    _suppress_noise()
+    for name in list(logging.root.manager.loggerDict):
+        if any(p in name for p in ("squidpy", "spatialdata", "tqdm", "ome_zarr")):
+            logger = logging.getLogger(name)
+            try:
+                logger.setLevel(logging.WARNING)
+            except Exception:
+                pass
+
+
 def main() -> None:
+    # Suppress ALL noisy loggers after build_parser() completes all imports
     parser = build_parser()
+    _suppress_all_noise()
     args = parser.parse_args()
 
     if args.command == "ingest":

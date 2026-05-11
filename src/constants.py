@@ -86,7 +86,6 @@ def resolve_col_strict(df_columns: "pd.Index | set[str]", canonical: str) -> str
 
 # Points layer
 KEY_RAW_TRANSCRIPTS = "raw_transcripts"
-KEY_MAIN_TRANSCRIPTS = "main_transcripts"
 
 # Shapes layer
 KEY_PROVIDED_BOUNDARIES = "provided_boundaries"

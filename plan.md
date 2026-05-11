@@ -1,6 +1,6 @@
 # SubCellSpace 项目状态 & 开发计划
 
-> **最后更新：2026-05-07** — 本文档包含项目水平评估、客观审阅、短期与长期规划。
+> **最后更新：2026-05-07 (Round 3)** — 本文档包含项目水平评估、客观审阅、短期与长期规划。
 
 ---
 
@@ -430,4 +430,222 @@ subcellspace-api & cd frontend && npm run dev
 ### 2026-05-03
 - 移除 stagate、spagcn；新增 scFates 后端
 - 前端 Capabilities 动态渲染完成
+
+---
+
+## 📍 当前位置
+
+截至 2026-05-07 Round 2 完成，项目处于以下分界点：
+
+```
+Phase A (整合)        ████████████ 100% ✅
+Phase B (鲁棒)        ████████████ 100% ✅
+Phase C (标准化)      ██████████░░  83% ⬜ (C2 待完成)
+Phase D (规范化)      ████████████ 100% ✅
+
+短期 S1-S11 ───────── ███░░░░░░░░░  27%  (3/11)
+长期 L1-L12 ───────── ░░░░░░░░░░░░   0%
+```
+
+**核心指标变化**：
+
+| 指标 | Round 1 | Round 2 (Now) | Δ |
+|------|:-------:|:-------------:|:-:|
+| Python 源码行数 | ~7,200 | ~6,800 | -400 (精简) |
+| 测试总数 | 176 | 176 | 0 |
+| 测试通过率 | 100% | 100% | — |
+| CI/CD | ❌ | ✅ GitHub Actions | +1 |
+| CLI 参数名统一 | ⚠️ 部分 | ✅ 完全统一 | — |
+| MERFISH 端到端 | ❌ 崩溃 | ✅ 通过 | — |
+| 前端 TypeScript 错误 | 0 | 0 | — |
+
+**关键决策点**：下一步应聚焦 **生产化**（Docker/PyPI）和 **平台均衡**（四平台同等成熟），这两项是提升项目影响力和可复现性的最大杠杆。
+
+---
+
+## 🎯 Round 3 — 生产化准备 & 平台均衡 (2026-05-07 起)
+
+### 设计原则
+
+```
+Round 3 聚焦：
+  1. 部署基础设施 — 让任何人都能 `docker run` 或 `pip install` 即用
+  2. 平台均衡 — 四平台同等成熟，消除 CosMx 优先的偏斜
+  3. 评估可视化 — 论文级图表 + 交互式 HTML 报告
+  4. 代码质量审计 — 清理遗留问题，消除 flaky test
+```
+
+### 🟠 Phase E：部署基础设施 (Deployment Infrastructure)
+
+**目标**：Docker/PyPI/CI 全覆盖，`pip install subcellspace` 即用。
+
+| 序号 | 任务 | 文件 | 优先级 | 预计工期 | 状态 |
+|:----:|------|------|:------:|:--------:|:----:|
+| E1 | **Dockerfile 多阶段构建** — Python 3.12 slim + 系统依赖 (igraph/hdf5) + 核心包安装；Julia/Baysor 可选层 | `Dockerfile` (新建) | 🔴 P0 | 1 天 | ⬜ |
+| E2 | **Docker Compose** — `docker compose up` 一键启动 API + 前端 | `docker-compose.yml` (新建) | 🔴 P0 | 0.5 天 | ⬜ |
+| E3 | **PyPI 发布前审计** — 检查 `pyproject.toml` entry_points 准确性、README 渲染、依赖解析完整性；移除 `setuptools.packages.find` 对嵌套包（如 `tools/`）的错误包含 | `pyproject.toml` | 🔴 P0 | 0.5 天 | ⬜ |
+| E4 | **GitHub Release workflow** — `git tag v*` 触发 → 构建 → 发布到 PyPI；含 `CHANGELOG.md` 自动生成 | `.github/workflows/release.yml` (新建) | 🔴 P0 | 1 天 | ⬜ |
+| E5 | **Docker Hub 自动构建** — GitHub Container Registry 集成，`ghcr.io/subcellspace/subcellspace:latest` | `.github/workflows/docker.yml` (新建) | 🟡 P1 | 0.5 天 | ⬜ |
+| E6 | **Conda recipe 骨架** — `meta.yaml` 为 conda-forge 发布做准备（需 Julia/Baysor 依赖处理） | `conda.recipe/meta.yaml` (新建) | 🟢 P2 | 1 天 | ⬜ |
+
+### 🟠 Phase F：平台均衡 (Platform Parity)
+
+**目标**：四平台同等成熟，任何平台 `subcellspace run` 都能获得一致的端到端体验。
+
+| 序号 | 任务 | 文件 | 优先级 | 预计工期 | 状态 |
+|:----:|------|------|:------:|:--------:|:----:|
+| F1 | **Ingestor 输出组件名统一审计** — 对照 `constants.py` 中的 `KEY_*` 常量，逐一核查 4 个 Ingestor 的 points/shapes/tables/images 命名；确保 `raw_transcripts_key` / `main_table_key` / `provided_boundaries` 在所有平台一致。修复 7 个问题（见下方详情） | `src/io/base.py`, `src/io/cosmx.py`, `src/io/xenium.py`, `src/io/merfish.py`, `src/io/stereoseq.py`, `src/constants.py` | 🔴 P0 | 1 天 | ✅ |
+| F2 | **Stereo-seq 分割 + 端到端验证** — 用 cellpose（需图像）或 provided_cells（补推定 cell_id）跑通 9/9 步骤；记录 benchmark | `src/io/stereoseq.py`, `scripts/benchmark_all_backends.py` | 🔴 P0 | 1 天 | ⬜ |
+| F3 | **MERFISH 文档完善** — 在 `README.md` 和 `DATASETS.md` 中明确标注 barcode≠cell 的数据语义限制；添加 `--cell-id-column` 使用示例 | `README.md`, `DATASETS.md` | 🟡 P1 | 0.5 天 | ⬜ |
+| F4 | **四平台统一 benchmark 脚本** — `scripts/benchmark_all_backends.py` 扩展为接受 `--platform` 参数，自动切换测试数据集 | `scripts/benchmark_all_backends.py` | 🟡 P1 | 1 天 | ⬜ |
+| F5 | **Xenium parquet 检测增强** — 当前仅通过 `.parquet` 后缀检测；添加列签名检测（`cell_id`+`x_location`+`feature_name`），支持 `.csv` 格式的 Xenium 数据 | `src/io/__init__.py` | 🟡 P1 | 0.5 天 | ⬜ |
+| F6 | **平台检测报告** — `subcellspace ingest` 输出增加 `cell_id_source` 字段（原生/推定/缺失），帮助用户理解数据质量 | `src/io/base.py`, `src/cli.py` | 🟢 P2 | 0.5 天 | ⬜ |
+
+### 🟠 Phase G：评估与可视化增强 (Evaluation & Visualization)
+
+**目标**：论文级评估指标 + 自包含交互式报告。
+
+| 序号 | 任务 | 文件 | 优先级 | 预计工期 | 状态 |
+|:----:|------|------|:------:|:--------:|:----:|
+| G1 | **Ground truth 对比指标** — 若 adata.obs 包含已知的 ground truth 列（如 `cell_type_ground_truth`），自动计算 ARI/NMI 并与聚类结果对比 | `src/evaluation/metrics.py` | 🔴 P0 | 1 天 | ⬜ |
+| G2 | **后端可用性自动检测** — `subcellspace backends` 输出增加可用性状态；`registry.check_backend_available()` 在 CLI 和 API 中统一调用 | `src/registry.py`, `src/cli.py`, `src/api_server.py` | 🟡 P1 | 1 天 | ⬜ |
+| G3 | **交互式 HTML 报告** — `subcellspace export --html` 生成自包含的 `.html` 报告（Plotly 图表嵌入），无需前端 server | `src/cli.py`, `src/report_html.py` (新建) | 🔴 P0 | 2 天 | ⬜ |
+| G4 | **论文核心图表脚本** — `scripts/paper_figures.py`：UMAP + 空间散点 + 空间域 + marker gene heatmap + benchmark 对比表 | `scripts/paper_figures.py` (新建) | 🟡 P1 | 2 天 | ⬜ |
+| G5 | **QC 指标前端可视化** — 在前端 ReportPage 添加 QC 指标卡片（`total_counts`/`n_genes` 直方图、`pct_counts_mt` 分布） | `frontend/src/pages/ReportPage.tsx` | 🟢 P2 | 1 天 | ⬜ |
+| G6 | **Benchmark 页面增强** — 添加运行耗时对比图 + 后端成功率饼图 | `frontend/src/pages/BenchmarkPage.tsx` | 🟢 P2 | 1 天 | ⬜ |
+
+### 🟠 Phase H：代码质量与测试增强 (Code Quality)
+
+**目标**：修复已知质量问题，消除 flaky test，提升测试覆盖率。
+
+| 序号 | 任务 | 文件 | 优先级 | 预计工期 | 状态 |
+|:----:|------|------|:------:|:--------:|:----:|
+| H1 | **修复 flaky test（`rank_marker` 单细胞簇崩溃）** — `_anno_rank_marker` 在簇只有 1 个细胞时 `sc.tl.rank_genes_groups` 崩溃，导致测试因执行顺序不同而结果不同。修复：在调用 `rank_genes_groups` 前检测小簇并自动降级到 `cluster_label`。同时添加 `registry.reset()` 方法供未来隔离使用 | `src/steps/annotation.py`, `src/registry.py`, `tests/conftest.py` | 🔴 P0 | 0.5 天 | ✅ |
+| H2 | **benchmark 脚本适配新 API + 多平台支持** — 从 `run_cosmx_minimal` 迁移到 `run_pipeline` + `ingest`；添加 `--platform` / `--all-platforms` CLI 参数；新增 `spatial_analysis` 步骤覆盖；支持增量保存、按平台分组汇总 | `scripts/benchmark_all_backends.py` | 🔴 P0 | 0.5 天 | ✅ |
+| H3 | **添加集成测试** — 用 100 行小数据集跑通全链路 `ingest → run → export`，CI 中执行 | `tests/test_integration.py` (新建) | 🟡 P1 | 1 天 | ⬜ |
+| H4 | **API 端到端测试** — 用 httpx TestClient 测试 `/api/pipeline/run` 端到端 | `tests/test_api_server.py` | 🟡 P1 | 1 天 | ⬜ |
+| H5 | **添加 lint CI check** — ruff + mypy 检查结果作为 CI 必须通过的步骤；当前 CI 已有 ruff/mypy 但未严格阻断 | `.github/workflows/ci.yml` | 🟡 P1 | 0.5 天 | ⬜ |
+| H6 | **前端测试扩展** — 添加 ReportPage 组件测试（3 个）；添加 DataBrowser 表格渲染测试（2 个） | `frontend/src/__tests__/` | 🟢 P2 | 1 天 | ⬜ |
+| H7 | **`ruff check` 修复** — 运行 `ruff check src/ tests/` 修复当前所有 lint 错误 | 批量 | 🟢 P2 | 0.5 天 | ⬜ |
+
+---
+
+## 📊 Round 3 优先级矩阵
+
+```
+高影响 ┼──────────────────────────────────────────
+      │ E1 Dockerfile    │ G3 HTML 报告      │
+      │ E3 PyPI 审计     │ H3 集成测试        │
+      │ F1 Ingestor 审计 │ H1 flaky 修复      │
+      │ F2 Stereo-seq    │ H2 benchmark 适配  │
+      │ G1 Ground truth  │                   │
+ 影   │──────────────────┼────────────────────┤
+ 响   │ E4 Release CI    │ G5 QC 前端         │
+ 力   │ E2 Docker Compose│ G6 Benchmark增强   │
+      │ F5 Xenium CSV    │ H4 API测试         │
+      │ F3 MERFISH 文档  │ H6 前端测试        │
+      │ G4 论文图表      │ H7 ruff 修复       │
+      │ F4 统一 benchmark│                   │
+      │ G2 后端可用性    │                   │
+低影响 ┼──────────────────┴────────────────────┤
+      低努力               →              高努力
+```
+
+## ⚠️ Round 3 风险
+
+| 风险 | 概率 | 影响 | 缓解 |
+|------|:----:|:----:|------|
+| Docker 镜像 >2GB（Python+Julia） | 🔴 高 | 🟡 中 | 分层构建，提供 slim/no-julia 变体 |
+| PyPI 包名与被占 | 🟢 低 | 🔴 高 | 提前在 TestPyPI 验证；准备备选名称 |
+| Stereo-seq 无预置 cell_id 无法分割 | 🔴 高 | 🟡 中 | 文档标注为"需图像分割"平台；提供推定 cell_id 的 fallback |
+| Plotly HTML 报告体积过大 | 🟡 中 | 🟢 低 | 限制嵌入数据量；提供 --sample 参数 |
+| CI 中端到端测试超时 | 🟡 中 | 🟡 中 | 使用 100 行迷你数据集；设置 120s 超时 |
+
+---
+
+## 🗺️ 完整路线图总览
+
+```
+Round 1 (2026-05-06) ── 引擎重构 + 四平台统一
+  Phase A: 整合     ████████████ 100%
+  Phase B: 鲁棒     ████████████ 100%
+  Phase C: 标准化   ████████████ 100%
+  Phase D: 规范化   ████████████ 100%
+
+Round 2 (2026-05-07) ── CI/CD + 鲁棒性提升
+  CI/CD 搭建         ████████████ 100%
+  MERFISH 修复       ████████████ 100%
+  Phase A 收尾       ████████████ 100%
+  Phase B 收尾       ████████████ 100%
+
+Round 3 (2026-05-07+) ── 生产化 + 平台均衡 ← 🔴 当前
+  Phase E: 部署      ░░░░░░░░░░░░   0%
+  Phase F: 平台均衡  ░░░░░░░░░░░░   0%
+  Phase G: 评估可视  ░░░░░░░░░░░░   0%
+  Phase H: 代码质量  ░░░░░░░░░░░░   0%
+
+Round 4 (Future) ── 社区建设 + 影响力扩展
+  交互式 HTML 报告
+  社区插件机制
+  conda-forge 发布
+  论文发表
+```
+
+---
+
+## 📝 变更日志
+
+### 2026-05-07 (Round 3 — 生产化准备 & 平台均衡)
+- **Phase E 部署基础设施**：规划 Dockerfile、Docker Compose、PyPI 发布、Release CI
+- **Phase F 平台均衡**：完成 Ingestor 审计（F1），修复 9 个组件命名问题；规划 Stereo-seq 端到端验证、MERFISH 文档、统一 benchmark
+- **Phase G 评估可视化**：规划 ground truth 对比、交互式 HTML 报告、论文图表
+- **Phase H 代码质量**：完成 flaky test 修复（H1）、benchmark 脚本修复（H2）；规划集成测试、API 测试、ruff 修复
+- **R2-R10 运行发现修复**：`qc_metrics` 嵌入报告、leiden 命名统一、噪音抑制、自动降级记录、benchmark `--quick` 模式、`--cell-id-column` 传递链路修复、Xenium CSV 检测增强
+- **文档更新**：更新完整路线图总览、风险矩阵、当前位置评估
+
+**F1 Ingestor 审计 — 修复 9 个问题**：
+1. `base.py` — `_assemble_sdata()` 缺少 `ATTRS_MAIN_TABLE_KEY` attrs 设置（新增）
+2. `base.py` — `_assemble_sdata()` 缺少 `ATTRS_CELL_ID_SOURCE` attrs 设置（新增）
+3. `cosmx.py` — `build_spatialdata_from_adata()` 使用硬编码 `"cell_centroids"` 替代 `KEY_RAW_TRANSCRIPTS`
+4. `cosmx.py` — `build_spatialdata_from_adata()` 使用硬编码 `"main_table_key"` 替代 `ATTRS_MAIN_TABLE_KEY`
+5. `merfish.py` — `_column_mapping` 中 `("cell_id", COL_CELL_ID)` 是死代码（已被前一行覆盖）
+6. `stereoseq.py` — `_column_mapping` 中 `("gene", COL_GENE)` 是死代码（已被前一行覆盖）
+7. `xenium.py` — `_column_mapping` 缺少 `z_location` 映射
+8. `constants.py` — 移除未使用的 `KEY_MAIN_TRANSCRIPTS` 常量
+9. `tests/test_io.py` — 更新断言使用常量替代硬编码字符串
+- **R9 修复**：`--cell-id-column` 传递链路 — `ingest()` 函数新增 `cell_id_column` 参数，`BaseIngestor.ingest()` 在列标准化前应用 override，`_cmd_ingest` 和 `_cmd_run` 正确传递参数
+- **R8 修复**：Xenium CSV 自动检测 — 添加柔性检测规则：`feature_name` + `cell_id` + (`x`\|`y` 或 `x_location`\|`y_location`)
+
+### 四平台全 Pipeline 运行实测 (2026-05-07)
+
+**运行结果汇总**：
+
+| 平台 | 数据集 | 状态 | 耗时 | 细胞 | 基因 | 簇 | 空间域 |
+|------|--------|:----:|:----:|:----:|:---:|:--:|:------:|
+| CosMx | 1,634,724 tx / 1,000 cells | ✅ | ~70s | 996 | 960 | 13 | 24 |
+| Xenium | 1,954,279 tx / 1,000 cells | ✅ | ~55s | 1000 | 540 | 12 | 19 |
+| MERFISH | 1,692,524 tx / 461 bc | ✅ (自动降级) | ~55s | 461 | 461 | 8 | 16 |
+| Stereo-seq | 30,097 tx / 0 cells | ✅ (跳过下游) | ~2s | 0 | 370 | — | — |
+
+**运行中发现的改进点**：
+
+| # | 问题 | 严重程度 | 说明 | 建议修复 |
+|---|------|:--------:|------|---------|
+| R1 | `StepResult.backend_used` 未序列化到报告 JSON | 🔴 已修复 | `step_summary` 只包含 `result.summary`，丢失了 `backend_used` | `src/pipeline_engine.py` 已修复 |
+| R2 | `qc_metrics` 嵌入报告 JSON | 🟡 已修复 | 在 pipeline 报告中新增 `qc_metrics` 和 `qc_skipped` 顶层字段 | `src/pipeline_engine.py` |
+| R3 | `leiden` vs `leiden_igraph` 命名不一致 | 🟢 已修复 | scanpy 的 leiden 返回 `leiden_igraph`，但 CLI 参数只接受 `leiden` | `src/steps/analysis.py` 统一返回 `"leiden"` |
+| R4 | `Column z ignored` INFO 污染输出 | 🟢 已修复 | spatialdata._logging 在每次 PointsModel.parse 时打印 | `src/cli.py` 在 `main()` 入口压制全部分支 logger |
+| R5 | tqdm 进度条噪音 | 🟢 已保留 | tqdm 进度条在 stderr 上，对用户有用 | 保留不抑制 |
+| R6 | MERFISH 降级/放松决策写入报告 | 🟡 已修复 | `auto_degrade_applied`、`auto_relax_applied` 等信息写入 `adata.uns["qc_metrics"]`，自动流入报告 | `src/steps/analysis.py` |
+| R7 | Stereo-seq 0 cells 报告缺少下游指标 | 🟢 | 跳过下游后报告中空间分析/亚细胞分析为空 | 当前行为合理（优雅跳过），但可在报告中添加 "skipped" 标记 |
+| R8 | Xenium CSV 格式支持需增强 | 🟡 已修复 | 当前 Xenium 仅通过 `.parquet` 后缀检测，`--platform auto` 无法识别 CSV 格式的 Xenium 数据 | `src/io/__init__.py` 添加 `feature_name+cell_id+(x\|y)` 柔性检测规则 |
+| R9 | CLI 参数 `--cell-id-column` 未生效 | 🔴 已修复 | 定义了 `--cell-id-column` 参数但未传递给 `ingest()` 或 `run_pipeline()` | `src/cli.py`, `src/io/__init__.py`, `src/io/base.py` |
+| R10 | benchmark 脚本运行时间过长 | 🟡 已修复 | 每个后端组合耗时 ~50-85s，全部跑完需 ~30 分钟 | 添加 `--quick` 模式（只跑默认后端 + 列出可用后端） |
+
+**自动化决策记录（运行中观察到的）**：
+- MERFISH: `min_genes=10` 过滤全部细胞 → 自动放松到 `min_genes=1`
+- MERFISH: 数据稀疏度 0.22% → 自动从 `leiden` 降级到 `kmeans`
+- Stereo-seq: 0 cells survived QC → 优雅跳过所有下游步骤
+- CosMx `rank_marker`: 无单细胞簇，正常工作
+- 去噪/分割/空间域/亚细胞域/空间分析: 全部使用默认后端成功
 

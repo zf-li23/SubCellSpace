@@ -396,6 +396,9 @@ def run_pipeline(
             safe_warnings.append({str(k): str(v) for k, v in w.items()})
         ctx.adata.uns["pipeline"]["contract_warnings"] = safe_warnings
 
+    # Extract qc_metrics from adata.uns for the report (R2)
+    qc_metrics = dict(ctx.adata.uns.get("qc_metrics", {}))
+
     ctx.adata.write_h5ad(adata_path)
     if ctx.segmented_df is not None:
         # Strip non-JSON-serializable attrs before writing parquet
@@ -421,8 +424,16 @@ def run_pipeline(
             "n_fovs": summary_ds.n_fovs,
             **summary_ds.extra,
         },
-        "step_summary": {name: result.summary for name, result in ctx.step_results.items()},
+        "step_summary": {
+            name: {
+                **result.summary,
+                "backend_used": result.backend_used,
+            }
+            for name, result in ctx.step_results.items()
+        },
         "step_order": cfg.get_step_names(),
+        "qc_metrics": qc_metrics,
+        "qc_skipped": ctx.step_results.get("__qc_skip__") is not None,
         "layer_evaluation": layer_evaluation,
         "outputs": {
             "adata": str(adata_path),

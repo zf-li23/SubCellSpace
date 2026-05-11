@@ -62,7 +62,6 @@ class MERFISHIngestor(BaseIngestor):
             ("global_y", COL_Y),
             ("gene", COL_GENE),
             (cell_id_col, COL_CELL_ID),
-            ("cell_id", COL_CELL_ID),
             ("fov", COL_FOV),
             ("global_z", COL_Z),
             ("z", COL_Z),

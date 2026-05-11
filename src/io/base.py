@@ -32,9 +32,11 @@ from spatialdata.models import PointsModel, ShapesModel
 from ..constants import (
     ATTRS_CELL_ID_COLUMN,
     ATTRS_CELL_ID_EXISTS,
+    ATTRS_CELL_ID_SOURCE,
     ATTRS_CELL_SEGMENTATION_IMAGE,
     ATTRS_INGESTION_SUMMARY,
     ATTRS_MAIN_BOUNDARIES_KEY,
+    ATTRS_MAIN_TABLE_KEY,
     ATTRS_MAIN_TRANSCRIPTS_KEY,
     ATTRS_PLATFORM,
     ATTRS_RAW_TRANSCRIPTS_KEY,
@@ -47,6 +49,7 @@ from ..constants import (
     COL_Y,
     COL_Z,
     KEY_HE_IMAGE,
+    KEY_MAIN_TABLE,
     KEY_MORPHOLOGY_IMAGE,
     KEY_PROVIDED_BOUNDARIES,
     KEY_RAW_TRANSCRIPTS,
@@ -227,6 +230,14 @@ class BaseIngestor(ABC):
     # ── Column standardisation ───────────────────────────────────────
 
     def _standardise_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        # If a cell_id_column override was provided, map it to COL_CELL_ID
+        # before the standard column mapping runs.
+        override = getattr(self, "_cell_id_column", None)
+        if override is not None and override in df.columns and COL_CELL_ID not in df.columns:
+            df = df.rename(columns={override: COL_CELL_ID})
+        # Also set it on the ingestor instance so _column_mapping() can use it
+        if override is not None:
+            self._cell_id_column = override
         """Map platform-native column names to canonical schema.
 
         Uses ``_column_mapping()`` which returns a **priority-ordered
@@ -444,13 +455,18 @@ class BaseIngestor(ABC):
         if reference is not None:
             tables_dict[KEY_REFERENCE_TABLE] = reference
 
+        # Determine cell_id source type
+        cell_id_source: str = "native" if has_cell_id else "missing"
+
         # attrs
         attrs: dict[str, Any] = {
             ATTRS_PLATFORM: self.platform,
             ATTRS_RAW_TRANSCRIPTS_KEY: KEY_RAW_TRANSCRIPTS,
             ATTRS_MAIN_TRANSCRIPTS_KEY: KEY_RAW_TRANSCRIPTS,
+            ATTRS_MAIN_TABLE_KEY: KEY_MAIN_TABLE,
             ATTRS_CELL_ID_EXISTS: has_cell_id,
             ATTRS_CELL_ID_COLUMN: COL_CELL_ID if has_cell_id else None,
+            ATTRS_CELL_ID_SOURCE: cell_id_source,
         }
 
         if KEY_PROVIDED_BOUNDARIES in shapes_dict:

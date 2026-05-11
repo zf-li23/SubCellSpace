@@ -19,6 +19,7 @@ from ..constants import (
     COL_QV,
     COL_X,
     COL_Y,
+    COL_Z,
     PLATFORM_XENIUM,
 )
 from .base import BaseIngestor, register_ingestor
@@ -48,6 +49,7 @@ class XeniumIngestor(BaseIngestor):
         return [
             ("x_location", COL_X),
             ("y_location", COL_Y),
+            ("z_location", COL_Z),
             ("feature_name", COL_GENE),
             ("cell_id", COL_CELL_ID),
             ("fov_name", COL_FOV),

@@ -8,6 +8,19 @@ from scipy.sparse import csr_matrix
 
 
 @pytest.fixture
+def registry_loaded() -> None:
+    """Ensure the backend registry is fully loaded.
+
+    Some tests rely on the registry having all backends and runners
+    registered.  This fixture explicitly loads them, independent of
+    import order.
+    """
+    from src.registry import load_backends
+
+    load_backends()
+
+
+@pytest.fixture
 def sample_transcripts_df() -> pd.DataFrame:
     """CosMx-style transcript DataFrame with 100 rows across 10 cells, 5 FOVs."""
     rng = np.random.default_rng(42)

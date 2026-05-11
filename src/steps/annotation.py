@@ -41,6 +41,23 @@ def _anno_rank_marker(adata: sc.AnnData) -> str:
     if "cluster" not in adata.obs:
         raise ValueError("`cluster` not found in adata.obs. Run clustering before annotation.")
 
+    # ── Graceful degradation: if any cluster has < 2 cells ──────────
+    # sc.tl.rank_genes_groups crashes with "Could not calculate statistics
+    # for groups ... since they only contain one sample."  Fall back to
+    # cluster_label to keep the pipeline non-breaking.
+    cluster_counts = adata.obs["cluster"].astype(str).value_counts()
+    small_clusters = cluster_counts[cluster_counts < 2]
+    if len(small_clusters) > 0:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "rank_marker: %d cluster(s) have < 2 cells (%s). "
+            "Falling back to cluster_label annotation to avoid sc.tl.rank_genes_groups crash.",
+            len(small_clusters),
+            dict(small_clusters),
+        )
+        return _anno_cluster_label(adata)
+
     rank_kwargs = {
         "groupby": "cluster",
         "method": "t-test",

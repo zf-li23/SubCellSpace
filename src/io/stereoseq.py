@@ -50,7 +50,6 @@ class StereoSeqIngestor(BaseIngestor):
             ("x", COL_X),
             ("y", COL_Y),
             ("geneID", COL_GENE),
-            ("gene", COL_GENE),
             ("cell_id", COL_CELL_ID),
             ("MIDCounts", "mid_counts"),
         ]

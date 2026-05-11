@@ -19,6 +19,11 @@ if TYPE_CHECKING:
 
 
 def _cluster_leiden(adata: sc.AnnData, resolution: float, **kwargs: Any) -> str:  # noqa: ARG001
+    """Leiden clustering with automatic fallback.
+
+    Returns the user-facing backend name ("leiden") on success, or
+    "kmeans" if all Leiden implementations fail.
+    """
     try:
         sc.tl.leiden(
             adata,
@@ -28,22 +33,21 @@ def _cluster_leiden(adata: sc.AnnData, resolution: float, **kwargs: Any) -> str:
             directed=False,
             n_iterations=2,
         )
-        # Ensure 'cluster' column was actually added (igraph may silently fail on sparse data)
         if "cluster" not in adata.obs:
             raise RuntimeError("igraph leiden did not produce 'cluster' column")
-        return "leiden_igraph"
+        return "leiden"
     except Exception:
         try:
             sc.tl.leiden(adata, resolution=resolution, key_added="cluster")
             if "cluster" not in adata.obs:
                 raise RuntimeError("legacy leiden did not produce 'cluster' column")
-            return "leiden_legacy"
+            return "leiden"
         except Exception:
             # Fallback to KMeans — always works with X_pca
             n_clusters = min(8, max(2, adata.n_obs))
             labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0).fit_predict(adata.obsm["X_pca"])
             adata.obs["cluster"] = labels.astype(str)
-            return "kmeans_fallback"
+            return "kmeans"
 
 
 def _cluster_kmeans(adata: sc.AnnData, resolution: float, **kwargs: Any) -> str:  # noqa: ARG001
@@ -187,6 +191,8 @@ def run_expression_and_spatial_analysis(
             )
             adata.uns["qc_metrics"]["min_genes_applied"] = 1
             adata.uns["qc_metrics"]["min_genes_original"] = min_genes
+            adata.uns["qc_metrics"]["auto_relax_reason"] = f"min_genes={min_genes} filtered all cells"
+            adata.uns["qc_metrics"]["auto_relax_applied"] = True
 
     adata.uns["qc_metrics"]["n_obs_after_qc"] = int(adata.n_obs)
 
@@ -222,6 +228,7 @@ def run_expression_and_spatial_analysis(
 
     # Auto-degrade to kmeans on extremely sparse data (igraph/legacy leiden may silently fail)
     actual_backend = clustering_backend
+    auto_degrade_applied = False
     if clustering_backend == "leiden" and adata.n_obs < 500:
         total_elements = adata.X.shape[0] * adata.X.shape[1]
         if total_elements > 0:
@@ -234,6 +241,11 @@ def run_expression_and_spatial_analysis(
                     (1.0 - sparsity) * 100,
                 )
                 actual_backend = "kmeans"
+                auto_degrade_applied = True
+                adata.uns["qc_metrics"]["auto_degrade_applied"] = True
+                adata.uns["qc_metrics"]["auto_degrade_reason"] = f"sparsity={sparsity:.2%} > 99% threshold"
+                adata.uns["qc_metrics"]["auto_degrade_from"] = clustering_backend
+                adata.uns["qc_metrics"]["auto_degrade_to"] = "kmeans"
 
     cluster_backend_used = _CLUSTER_FUNCS[actual_backend](adata, resolution=leiden_resolution, denoised_expression=denoised_expression)
     sc.tl.umap(adata)
