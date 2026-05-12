@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -15,6 +16,8 @@ from .config import settings as _settings
 from .io import get_available_platforms
 from .pipeline_engine import run_pipeline
 from .registry import get_all_capabilities, get_available_backends
+from .database import export_csv, export_json
+from .database.schema import COLUMNS
 
 # ── Configurable defaults (from centralized configuration system) ─────────
 DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMX_1000cells.csv"))
@@ -50,7 +53,13 @@ def _parse_allowed_origins() -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
-app = FastAPI(title="SubCellSpace API", version="0.1.0")
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    _startup()
+    yield
+
+
+app = FastAPI(title="SubCellSpace API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_parse_allowed_origins(),
@@ -59,8 +68,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.on_event("startup")
 def _startup() -> None:
     """Pre-load backend registry so /api/meta/backends returns real data."""
     import logging
@@ -851,6 +858,124 @@ def _plot_payload_from_report(report: dict[str, Any], fallback_label: str) -> di
             "umap": _adata_points_payload(adata, embedding_key="X_umap", color_key="cluster"),
         },
     }
+
+
+# ── Database CRUD Endpoints ───────────────────────────────────────────────
+
+DB_PATH = REPO_ROOT / "data" / "datasets.db"
+
+
+class DatasetRowModel(BaseModel):
+    id: int | None = None
+    project_id: int
+    platform: str
+    name_zh: str
+    name_en: str | None = None
+    record_type: str
+    merged_from_ids: str | None = None
+    project_url: str | None = None
+    download_url: str | None = None
+    publication_doi: str | None = None
+    data_source: str
+    species: str
+    tissue: str
+    disease_state: str | None = None
+    spatial_resolution_um: float | None = None
+    gene_panel_size: int | None = None
+    estimated_cell_count: int | None = None
+    data_size_bytes: int | None = None
+    data_size_display: str | None = None
+    status: str = "pending"
+    local_path: str | None = None
+    file_name: str | None = None
+
+
+@app.get("/api/db/datasets")
+def db_list_datasets():
+    import sqlite3
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    rows = [dict(r) for r in conn.execute("SELECT * FROM datasets ORDER BY id").fetchall()]
+    conn.close()
+    return rows
+
+
+@app.post("/api/db/datasets")
+def db_add_dataset(row: DatasetRowModel):
+    import sqlite3
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    cur = conn.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM datasets")
+    next_id = cur.fetchone()[0]
+    row.id = next_id
+    if row.project_id == 0:
+        row.project_id = next_id
+    col_names = [c["name"] for c in COLUMNS]
+    values = tuple(getattr(row, c, None) for c in col_names)
+    placeholders = ", ".join("?" for _ in col_names)
+    conn.execute(
+        f"INSERT INTO datasets ({', '.join(col_names)}) VALUES ({placeholders})",
+        values,
+    )
+    conn.commit()
+    conn.close()
+    _db_auto_export()
+    return {"id": next_id, "message": "Dataset added"}
+
+
+@app.put("/api/db/datasets/{dataset_id}")
+def db_update_dataset(dataset_id: int, row: DatasetRowModel):
+    import sqlite3
+    conn = sqlite3.connect(str(DB_PATH))
+    existing = conn.execute("SELECT id FROM datasets WHERE id = ?", (dataset_id,)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+    col_names = [c["name"] for c in COLUMNS]
+    set_clause = ", ".join(f"{c} = ?" for c in col_names)
+    values = tuple(getattr(row, c, None) for c in col_names) + (dataset_id,)
+    conn.execute(f"UPDATE datasets SET {set_clause} WHERE id = ?", values)
+    conn.commit()
+    conn.close()
+    _db_auto_export()
+    return {"id": dataset_id, "message": "Dataset updated"}
+
+
+@app.delete("/api/db/datasets/{dataset_id}")
+def db_delete_dataset(dataset_id: int):
+    import sqlite3
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.execute("DELETE FROM datasets WHERE id = ?", (dataset_id,))
+    conn.commit()
+    conn.close()
+    _db_auto_export()
+    return {"id": dataset_id, "message": "Dataset deleted"}
+
+
+@app.post("/api/db/reorder")
+def db_reorder_ids(id_order: list[int] = Body(...)):
+    import sqlite3
+    conn = sqlite3.connect(str(DB_PATH))
+    with conn:
+        for new_id, old_id in enumerate(id_order, start=1):
+            conn.execute("UPDATE datasets SET id = ? WHERE id = ?", (new_id, old_id))
+    conn.close()
+    _db_auto_export()
+    return {"message": f"Reordered {len(id_order)} rows"}
+
+
+@app.post("/api/db/export")
+def db_export():
+    _db_auto_export()
+    return {"message": "Export complete"}
+
+
+def _db_auto_export() -> None:
+    try:
+        export_csv(str(DB_PATH), str(REPO_ROOT / "data" / "datasets.csv"))
+        export_json(str(DB_PATH), str(REPO_ROOT / "frontend" / "public" / "datasets.json"))
+    except Exception as e:
+        print(f"[db] Auto-export failed: {e}")
 
 
 def main() -> None:

@@ -1970,3 +1970,31 @@ select {
 }
 
 
+
+/* ===== Pagination ===== */
+.page-btn {
+  padding: 4px 10px;
+  border: 1px solid rgba(22,50,63,0.12);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.page-btn:hover:not(:disabled) { background: rgba(11,76,110,0.08); }
+.page-btn:disabled { opacity: 0.3; cursor: default; }
+.page-btn.page-active { background: var(--btn-bg); color: var(--btn-text); border-color: var(--btn-bg); }
+
+/* ===== Editor tool buttons ===== */
+.btn-sm {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+}
+.btn-primary { background: var(--btn-bg); color: var(--btn-text); }
+.btn-export { background: #1f8a70; color: #fff; }
+.btn-outline { background: transparent; border: 1px solid var(--btn-border); color: var(--text-primary); }
+.btn-danger { background: #e74c3c; color: #fff; }

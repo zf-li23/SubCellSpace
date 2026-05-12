@@ -7,13 +7,17 @@ const HomePage = lazy(() => import('./pages/HomePage'))
 const ReportPage = lazy(() => import('./pages/ReportPage'))
 const DataBrowser = lazy(() => import('./pages/DataBrowser'))
 const BenchmarkPage = lazy(() => import('./pages/BenchmarkPage'))
+const DataEditor = lazy(() => import('./pages/DataEditor'))
+
+const isDev = import.meta.env.DEV
 
 const NAV_ITEMS = [
   { path: '/',         label: 'Home',      icon: '🏠' },
   { path: '/report',   label: 'Report',    icon: '📋' },
   { path: '/browser',  label: 'Browser',   icon: '📊' },
   { path: '/benchmark',label: 'Benchmark', icon: '⚡' },
-] as const
+  ...(isDev ? [{ path: '/editor', label: 'Edit', icon: '🛠️' }] : []),
+]
 
 function PageLoading() {
   return <div style={{ padding: 20 }}><LoadingSkeleton count={3} /></div>
@@ -54,6 +58,7 @@ export default function App() {
               <Route path="/report/:runName" element={<ReportPage />} />
               <Route path="/browser" element={<DataBrowser />} />
               <Route path="/benchmark" element={<BenchmarkPage />} />
+              {isDev && <Route path="/editor" element={<DataEditor />} />}
             </Routes>
           </Suspense>
         </ErrorBoundary>

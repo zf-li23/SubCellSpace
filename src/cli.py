@@ -79,6 +79,25 @@ def build_parser() -> argparse.ArgumentParser:
     # ── Backend capabilities ────────────────────────────────────────
     backends_parser = subparsers.add_parser("backends", help="List available backends and capabilities as JSON")
 
+    # ── Database management ─────────────────────────────────────────
+    db_parser = subparsers.add_parser("db", help="Manage unified datasets database")
+    db_sub = db_parser.add_subparsers(dest="db_command", required=True)
+
+    db_build = db_sub.add_parser("build", help="Build datasets.db from source CSVs")
+    db_build.add_argument("--cosmx", type=Path, default=None, help="Path to CosMX database_info CSV")
+    db_build.add_argument("--xenium", type=Path, default=None, help="Path to Xenium database_info CSV")
+    db_build.add_argument("--merfish", type=Path, default=None, help="Path to MERFISH database_info CSV")
+    db_build.add_argument("--output", "-o", type=Path, default=Path("data/datasets.db"), help="Output SQLite path")
+    db_build.add_argument("--no-xenium-merge", action="store_true", help="Disable Xenium project_id merging")
+
+    db_export = db_sub.add_parser("export", help="Export SQLite → CSV + frontend JSON")
+    db_export.add_argument("--db", type=Path, default=Path("data/datasets.db"), help="SQLite database path")
+    db_export.add_argument("--csv", type=Path, default=Path("data/datasets.csv"), help="Output CSV path")
+    db_export.add_argument("--json", type=Path, default=Path("frontend/public/datasets.json"), help="Output JSON path")
+
+    db_validate = db_sub.add_parser("validate", help="Validate database integrity")
+    db_validate.add_argument("--db", type=Path, default=Path("data/datasets.db"), help="SQLite database path")
+
     # ── Patchify: Snakemake parallel scheduler ──────────────────────
     patchify_run = subparsers.add_parser("patchify-run", help="Run patchify via Snakemake parallel scheduler")
     patchify_run.add_argument("sdata_path", type=Path, help="Path to SpatialData .zarr")
