@@ -67,14 +67,6 @@ main.tsx → BrowserRouter + QueryClientProvider → App.tsx → Routes
 | `tsconfig.json` | `vitest/globals` types |
 | `scripts/dev.mjs` | TF_CPP_MIN_LOG_LEVEL, TF_ENABLE_ONEDNN_OPTS |
 
-### Unused (preserved for future)
-
-| File | Reason |
-|------|--------|
-| `PipelineFlowChart.tsx` | Needs interactive pipeline runner mode |
-| `BackendSwitch.tsx` | Needs interactive backend reconfiguration |
-| `RunSelector.tsx` | Replaced by inline select in ReportPage |
-
 ## Design Principles
 
 1. **Static viewer only** — no pipeline execution in frontend; CLI runs analysis
@@ -82,4 +74,3 @@ main.tsx → BrowserRouter + QueryClientProvider → App.tsx → Routes
 3. **URL-addressable** — `/report/{runName}` deep link
 4. **Data-driven display** — all metrics auto-extracted from report JSON
 5. **No dark mode** — implemented then removed per review
-
