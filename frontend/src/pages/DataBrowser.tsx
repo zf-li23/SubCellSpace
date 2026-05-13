@@ -33,14 +33,14 @@ const PAGE_SIZES = [25, 50, 100, 0] // 0 = All
 // ── Row Detail ───────────────────────────────────────────────────────
 
 function RowDetail({ row, columns, onClose }: { row: DatasetRow; columns: ColumnMeta[]; onClose: () => void }) {
-  const filteredCols = columns.filter(c => c.name !== 'merged_from_ids')
+  const filteredCols = columns
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-detail" onClick={e => e.stopPropagation()} style={{ maxWidth: 750 }}>
         <button className="modal-close" onClick={onClose}>✕</button>
-        <h2>{row.name_en || row.name_zh}</h2>
+        <h2>{row.name}</h2>
         <p style={{ color: 'var(--color-text-secondary,#666)', fontSize: 13, marginBottom: 16 }}>
-          {row.name_zh} &nbsp;|&nbsp; ID: {row.id} &nbsp;|&nbsp; Project: {row.project_id}
+          ID: {row.id} &nbsp;|&nbsp; Project: {row.project_id}
         </p>
         <div className="detail-grid">
           {filteredCols.map(col => {
@@ -93,7 +93,6 @@ export default function DataBrowser() {
   const [search, setSearch] = useState('')
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
-  const [filterRecordType, setFilterRecordType] = useState('all')
   const [hideRawFragment, setHideRawFragment] = useState(true)
   const [sortKey, setSortKey] = useState('id')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -114,7 +113,7 @@ export default function DataBrowser() {
 
   const visibleColumns = useMemo(() => {
     let cols = showAllColumns ? columns : columns.filter(c => priorityCols.includes(c.name))
-    return cols.filter(c => c.name !== 'merged_from_ids')
+    return cols
   }, [columns, priorityCols, showAllColumns])
 
   const visibleCategories = useMemo(() => {
@@ -123,16 +122,13 @@ export default function DataBrowser() {
   }, [categories, visibleColumns])
 
   const platforms = useMemo(() => [...new Set(data?.rows.map(r => r.platform) ?? [])].sort(), [data])
-  const recordTypes = useMemo(() => [...new Set(data?.rows.map(r => r.record_type) ?? [])].sort(), [data])
-
   const filteredRows = useMemo(() => {
     if (!data) return []
     let rows = data.rows
-    if (hideRawFragment) rows = rows.filter(r => r.record_type !== 'Raw_Fragment')
+    if (hideRawFragment) rows = rows.filter(r => !r.id.startsWith('R'))
     if (search) { const q = search.toLowerCase(); rows = rows.filter(r => columns.some(c => { const v = getCellValue(r, c.name); return v !== '—' && v.toLowerCase().includes(q) })) }
     if (filterPlatform !== 'all') rows = rows.filter(r => r.platform === filterPlatform)
     if (filterStatus !== 'all') rows = rows.filter(r => r.status === filterStatus)
-    if (filterRecordType !== 'all') rows = rows.filter(r => r.record_type === filterRecordType)
     return [...rows].sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
       const va = getCellValue(a, sortKey), vb = getCellValue(b, sortKey)
@@ -140,7 +136,7 @@ export default function DataBrowser() {
       if (!isNaN(na) && !isNaN(nb) && va !== '—' && vb !== '—') return dir * (na - nb)
       return dir * va.localeCompare(vb)
     })
-  }, [data, search, filterPlatform, filterStatus, filterRecordType, hideRawFragment, sortKey, sortDir, columns])
+  }, [data, search, filterPlatform, filterStatus, hideRawFragment, sortKey, sortDir, columns])
 
   const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filteredRows.length / pageSize))
   const safePage = Math.min(page, totalPages)
@@ -152,10 +148,10 @@ export default function DataBrowser() {
   }
 
   if (loading) return <div className="container"><div className="empty-state">Loading database...</div></div>
-  if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed: {error}<br/><small>Run <code>python scripts/build_database.py</code></small></div></div>
+  if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed: {error}<br/><small>Run <code>subcellspace db export</code> to regenerate</small></div></div>
 
-  const hasFilters = search || filterPlatform !== 'all' || filterStatus !== 'all' || filterRecordType !== 'all'
-  const rawCount = data ? data.rows.filter(r => r.record_type === 'Raw_Fragment').length : 0
+  const hasFilters = search || filterPlatform !== 'all' || filterStatus !== 'all'
+  const rawCount = data ? data.rows.filter(r => r.id.startsWith('R')).length : 0
 
   return (
     <div className="container">
@@ -170,8 +166,7 @@ export default function DataBrowser() {
           <div className="filter-item"><span>🔍</span><input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search..." style={{ padding: '5px 10px', borderRadius: 10, border: '1px solid rgba(22,50,63,0.15)', fontSize: 13, width: 180 }} /></div>
           <div className="filter-item"><span>Platform</span><select value={filterPlatform} onChange={e => { setFilterPlatform(e.target.value); setPage(1) }}>{['all', ...platforms].map(p => <option key={p} value={p}>{p === 'all' ? 'All' : p}</option>)}</select></div>
           <div className="filter-item"><span>Status</span><select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}><option value="all">All</option><option value="ready">🟢 Ready</option><option value="pending">🟡 Pending</option><option value="error">🔴 Error</option></select></div>
-          <div className="filter-item"><span>Type</span><select value={filterRecordType} onChange={e => { setFilterRecordType(e.target.value); setPage(1) }}>{['all', ...recordTypes].map(t => <option key={t} value={t}>{t === 'all' ? 'All' : t}</option>)}</select></div>
-          {hasFilters && <button className="filter-reset" onClick={() => { setSearch(''); setFilterPlatform('all'); setFilterStatus('all'); setFilterRecordType('all'); setPage(1) }}>Clear</button>}
+          {hasFilters && <button className="filter-reset" onClick={() => { setSearch(''); setFilterPlatform('all'); setFilterStatus('all'); setPage(1) }}>Clear</button>}
           <span style={{ flex: 1 }} />
           <label style={{ fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: hideRawFragment ? '#c8553d' : undefined }}>
             <input type="checkbox" checked={hideRawFragment} onChange={e => { setHideRawFragment(e.target.checked); setPage(1) }} />
@@ -211,9 +206,8 @@ export default function DataBrowser() {
                       if (col.name === 'project_url') return <td key={col.name}><UrlLink url={row.project_url} /></td>
                       if (col.name === 'download_url') return <td key={col.name}><UrlLink url={row.download_url} /></td>
                       if (col.name === 'estimated_cell_count') return <td key={col.name} style={{ textAlign: 'right' }}>{fmtNum(row.estimated_cell_count)}</td>
-                      if (col.name === 'name_en') {
-                        const dn = row.name_en || row.name_zh
-                        return <td key={col.name} className="run-key-cell" title={row.name_zh}>{dn}{row.record_type === 'Merged' ? <span className="badge badge-merged">M</span> : row.record_type === 'Raw_Fragment' ? <span className="badge badge-fragment">F</span> : null}</td>
+                      if (col.name === 'name') {
+                        return <td key={col.name} className="run-key-cell" title={row.name}>{row.name}{row.id.startsWith('M') ? <span className="badge badge-merged">M</span> : row.id.startsWith('R') ? <span className="badge badge-fragment">F</span> : null}</td>
                       }
                       return <td key={col.name}>{getCellValue(row, col.name)}</td>
                     })}

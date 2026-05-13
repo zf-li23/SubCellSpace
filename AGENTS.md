@@ -51,15 +51,14 @@ frontend/src/                  Python src/
 │   ├── ReportPage.tsx         ├── io/                ingestion (cosmx,xenium,merfish,stereoseq)
 │   ├── DataBrowser.tsx  ← NEW ├── steps/             9 pipeline steps
 │   ├── DataEditor.tsx   ← NEW ├── database/          ← NEW: DB module
-│   └── BenchmarkPage.tsx      │   ├── schema.py      22-column schema
-├── components/                │   ├── builder.py      (historical: initial build)
-├── hooks/useQueries.ts        │   └── exporter.py     SQLite→CSV/JSON
+│   └── BenchmarkPage.tsx      │   ├── schema.py      19-column schema
+├── components/                │   └── exporter.py     SQLite→CSV/JSON
 ├── types/datasets.ts   ← NEW  └── evaluation/        layer metrics
 └── styles.css                 
                                
 data/                          scripts/
-├── datasets.db         ← NEW  ├── build_database.py  ← NEW (historical: initial build)
-├── datasets.csv        ← NEW  └── setup-*.sh
+├── datasets.db         ← NEW  └── setup-*.sh
+├── datasets.csv        ← NEW
 ├── DATA_FORMATS.md            (data format reference)
 ```
 
@@ -67,26 +66,40 @@ data/                          scripts/
 
 ## 4. Database System (Current Development Focus)
 
-### Schema: 22 columns, 5 categories
+### Schema: 19 columns, 5 categories
 
 | Category | Columns |
 |----------|---------|
-| **Identity** | `id`, `project_id`, `platform`, `name_zh`, `name_en`, `record_type`, `merged_from_ids` |
+| **Identity** | `id`, `project_id`, `platform`, `name` |
 | **Provenance** | `project_url`, `download_url`, `publication_doi`, `data_source` |
 | **Biological** | `species`, `tissue`, `disease_state` |
 | **Technical** | `spatial_resolution_um`, `gene_panel_size`, `estimated_cell_count`, `data_size_bytes`, `data_size_display`, `status` |
 | **Storage** | `local_path`, `file_name` |
 
-> **Build note**: The database was built once from three platform-specific source CSVs (`database_info_*.csv`) via `scripts/build_database.py`. Those source CSVs have since been removed; the canonical data is now `datasets.db` itself. `db build` is retained in `cli.py` for future re-builds if source CSVs reappear, but the primary workflow for modifying data is the DataEditor UI or direct scripted updates (see §9).
+### ID numbering scheme
+
+```
+{D|M|R}{platform_digit:0=CosMx,1=Xenium,2=MERFISH}{seq:03d}
+```
+
+| Prefix | Meaning | Platform digit | Meaning |
+|--------|---------|:---:|---------|
+| `D` | Standard | `0` | CosMx |
+| `M` | Merged | `1` | Xenium |
+| `R` | Raw_Fragment | `2` | MERFISH |
+
+`project_id` follows the same convention: `P{platform}{seq:03d}`.
+
+> **Build note**: The database was built once from three platform-specific source CSVs (`database_info_*.csv`). Those source CSVs have since been removed; the canonical data is now `datasets.db` itself. The primary workflow for modifying data is the DataEditor UI, scripted updates (see §9), or the CSV round-trip workflow (`subcellspace db export` → edit → `subcellspace db import`).
 
 ### Current data stats
 
 | Platform | Rows | Standard | Merged | Raw_Fragment |
 |----------|-----:|----------|--------|-------------|
-| CosMx    | 1064 | 57       | 8      | 999 |
-| Xenium   | 55   | 55       | 0      | 0 (2 pending) |
+| CosMx    | 1069 | 62       | 8      | 999 |
+| Xenium   | 53   | 53       | 0      | 0 |
 | MERFISH  | 18   | 18       | 0      | 0 |
-| **Total**| 1137 | 130      | 8      | 999 |
+| **Total**| 1140 | 133      | 8      | 999 (5 pending) |
 
 ### Frontend pages
 
@@ -159,18 +172,17 @@ lab-pull FILE  # → scp from cluster to local
 
 ```
 /data3/yangxr002/
-├── CosMx/                     (31 projects, P0001–P0031)
-│   ├── P0001/D0001/           (S0_tx_file.csv)
-│   ├── P0002/D0002/           (S0_tx_file.csv)
-│   ├── P0003/                 (689 FOV fragments under D0179–D0868)
-│   └── P0031/D1064/           (Pancreas — full NanoString output)
+├── CosMx/                     (36 projects, P0001–P0036)
+│   ├── P0001/D0001/           (S0_tx_file.csv — some use new D/M/R IDs)
+│   ├── P0003/                 (689 FOV fragments under R0xxx IDs)
+│   └── P0031/                 (Pancreas — full NanoString output)
 ├── Xenium/
-│   ├── P0032/D1065/  … P0061/D1117/    (30 extracted datasets)
+│   ├── P1001/D1001/  … P1028/D1053/    (28 projects, 53 datasets)
 │   └── *.tar × 37                       (GEO tarballs, pending extraction)
 ├── MERFISH/
 │   ├── MERFISH_P002/                     (Moffitt_Hypothalamus.csv — not in DB)
 │   ├── MERFISH_P003/                     (not in DB)
-│   └── P0062/D1120/  … P0069/D1137/     (8 projects, 18 datasets — in DB)
+│   └── P2001/D2001/  … P2008/D2018/     (8 projects, 18 datasets — in DB)
 ```
 
 ### Download relay (jumpbox) — bio-download (`/data/yangxrlab/`)
@@ -198,10 +210,10 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 ## 6. Development Phases
 
 ### ✅ Phase 0-1: Database foundation
-- SQLite schema (22 cols, 5 categories)
-- Builder (CSV → clean → SQLite)
-- Exporter (SQLite → CSV + JSON)
-- CLI integration (`subcellspace db build|export|validate`)
+- SQLite schema (19 cols, 5 categories)
+- ID numbering scheme: `{D|M|R}{platform}{seq}` encodes type + platform
+- Exporter (SQLite → CSV/JSON) + Importer (CSV → SQLite)
+- CLI integration (`subcellspace db export|import|validate`)
 - Name normalization, data type parsing, Xenium project merging
 
 ### ✅ Phase 2: Static DataBrowser
@@ -238,10 +250,8 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 | File | Purpose |
 |------|---------|
 | `DATABASE_PLAN.md` | Full database design plan and phase tracking |
-| `src/database/schema.py` | 22-column schema, SQL DDL, priority columns |
-| `src/database/builder.py` | CSV → SQLite with normalization |
-| `src/database/exporter.py` | SQLite → CSV + frontend JSON |
-| `scripts/build_database.py` | One-shot build script |
+| `src/database/schema.py` | 19-column schema, SQL DDL, priority columns |
+| `src/database/exporter.py` | SQLite → CSV/JSON export + CSV → SQLite import |
 | `src/api_server.py` | FastAPI with db CRUD endpoints (lifespan-based) |
 | `src/cli.py` | `subcellspace db` subcommand group |
 | `data/datasets.db` | SQLite database (Git tracked) |
@@ -259,12 +269,12 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 
 - **Always use `conda activate subcellspace`** before running Python commands
 - **The single source of truth is `data/datasets.db`**. Never manually edit `datasets.db` or `datasets.csv` — use the DataEditor UI or scripted updates (see §9).
-- `Raw_Fragment` records (999 CosMx rows) are individual FOV fragments from GEO publications. They're valid data but hidden by default in the Browser
+- `Raw_Fragment` records (999 CosMx rows, ID prefix `R`) are individual FOV fragments. They're valid data but hidden by default in the Browser
 - The cluster is only reachable when on the lab network (192.168.1.x) or through the jumpbox
 - `local_path` columns contain absolute cluster paths (`/data3/yangxr002/...`) — these are referenced by CLI tools but hidden in the frontend
 - Frontend edits via `/editor` auto-re-export `datasets.json` — the browser picks up changes on next refresh
-- `merged_from_ids` column exists in the DB but is **permanently filtered out** from both Browser and Editor UIs
-- **Cluster directory naming**: Uses `P0001/D0001/` format, NOT `CosMx_P001/`. DB `local_path` uses the canonical `P0001/D0001/` naming.
+- **ID prefix encodes record type**: `D`=Standard, `M`=Merged, `R`=Raw_Fragment. The `record_type` column has been removed.
+- **Cluster directory naming**: Uses `P0001/D0001/` format with new ID scheme. DB `local_path` is always consistent.
 - **Jumpbox** (`bio-download`) contents differ from older docs. Xenium tarballs are on the cluster at `/data3/yangxr002/Xenium/*.tar`.
 - **`database_info_Xenium.csv`** is a GEO collection plan (200+ rows) on the cluster — reference only, not a data source.
 

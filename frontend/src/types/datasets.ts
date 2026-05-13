@@ -21,13 +21,10 @@ export interface CategoryMeta {
 }
 
 export interface DatasetRow {
-  id: number
-  project_id: number
+  id: string
+  project_id: string
   platform: string
-  name_zh: string
-  name_en: string | null
-  record_type: string
-  merged_from_ids: string | null
+  name: string
   project_url: string | null
   download_url: string | null
   publication_doi: string | null

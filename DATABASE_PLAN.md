@@ -1,6 +1,6 @@
 # SubCellSpace 统一数据库开发计划
 
-> **版本**: v1.1  
+> **版本**: v2.0  
 > **日期**: 2026-05-13  
 > **状态**: Phase 0-3 完成，Phase 4-5 待实施
 
@@ -10,8 +10,9 @@
 
 1. **统一**：CosMx / Xenium / MERFISH 三个平台的数据集元数据整合到同一数据库
 2. **可溯源**：每条数据记录包含 `project_url`（了解数据）和 `download_url`（下载数据）
-4. **双模式访问**：前端 DataBrowser 静态浏览（生产）+ Web UI 编辑器（开发）+ CLI 工具（集群脚本）
-5. **精简**：列数从 32 → 22，降低维护负担；建库初期大量列可留空
+3. **双模式访问**：前端 DataBrowser 静态浏览（生产）+ Web UI 编辑器（开发）+ CLI 工具（集群脚本）
+4. **精简**：列数从 32 → 19，ID 自编码类型和平台，无需冗余列
+5. **自描述 ID**：`{D|M|R}{platform}{seq}` 一眼看出类型和平台
 
 ---
 
@@ -46,68 +47,65 @@
 
 ## 三、数据库 Schema（最终列设计）
 
-共 **22 列**，分 5 个逻辑类别。建库初期大部分 Technical 列可留空。
+共 **19 列**，分 5 个逻辑类别。
 
-### 类别 A：标识与归属（Identity）— 7 列
+### 类别 A：标识与归属（Identity）— 4 列
 
 | # | 列名 | 类型 | 必填 | 说明 |
 |---|------|------|:--:|------|
-| 1 | `id` | INTEGER PK | ✅ | 全局唯一 ID，跨平台统一编号 |
-| 2 | `project_id` | INTEGER | ✅ | 同项目数据集共享；无项目的等于 `id` |
+| 1 | `id` | TEXT PK | ✅ | `{D\|M\|R}{platform}{seq}`，编码类型+平台+序号 |
+| 2 | `project_id` | TEXT | ✅ | `P{platform}{seq}`，同项目数据集共享 |
 | 3 | `platform` | TEXT | ✅ | `CosMx` / `Xenium` / `MERFISH` |
-| 4 | `name_zh` | TEXT | ✅ | 中文名称（**去除技术前缀**） |
-| 5 | `name_en` | TEXT |   | 英文名称 |
-| 6 | `record_type` | TEXT | ✅ | `Standard` / `Merged` / `Raw_Fragment` |
-| 7 | `merged_from_ids` | TEXT |   | 合并来源 ID 列表，JSON 数组如 `"[1,2,3]"` |
+| 4 | `name` | TEXT | ✅ | 数据集名称 |
+
+### ID 编号规则
+
+```
+{D|M|R}{platform_digit:0=CosMx,1=Xenium,2=MERFISH}{seq:03d}
+```
+
+- `D` = Standard（标准数据集）
+- `M` = Merged（合并数据集）  
+- `R` = Raw_Fragment（原始 FOV 片段）
+- 千位数字 = 平台编码
+- 后三位 = 同类型+同平台内递增序号，按 Data Source 分组排序
+
+`project_id` 同理：`P{platform_digit}{seq:03d}`。
 
 ### 类别 B：出版与溯源（Provenance）— 4 列
 
 | # | 列名 | 类型 | 必填 | 说明 |
 |---|------|------|:--:|------|
-| 8 | `project_url` | TEXT |   | 浏览器可打开的数据集/项目说明页 |
-| 9 | `download_url` | TEXT |   | wget 可直接下载源数据的直链 |
-| 10 | `publication_doi` | TEXT |   | DOI（如 `10.1038/s41467-023-43458-x`） |
-| 11 | `data_source` | TEXT | ✅ | 数据来源方：`Nanostring` / `10x Genomics` / `Vizgen` / `GEO` |
-
-> **为何保留 DOI 而放弃 PMID？**
-> - DOI 是跨出版商的通用持久标识符，可直接拼成 `https://doi.org/...`
-> - PMID 仅限 PubMed 收录文献，DOI 覆盖面更广
-> - 从 DOI 可反向查到 PMID（反之亦然），不丢失信息
->
-> **为何删除 `data_source_link`？**
-> - 语义与 `project_url` 重叠且不够明确
-> - `project_url` + `download_url` 更清晰地分离了"了解"和"获取"两个用途
+| 5 | `project_url` | TEXT |   | 浏览器可打开的数据集/项目说明页 |
+| 6 | `download_url` | TEXT |   | wget 可直接下载源数据的直链 |
+| 7 | `publication_doi` | TEXT |   | DOI |
+| 8 | `data_source` | TEXT | ✅ | Nanostring / 10x Genomics / Vizgen / GEO / Zenodo |
 
 ### 类别 C：生物学上下文（Biological Context）— 3 列
 
 | # | 列名 | 类型 | 必填 | 说明 |
 |---|------|------|:--:|------|
-| 12 | `species` | TEXT | ✅ | `Homo sapiens` / `Mus musculus` |
-| 13 | `tissue` | TEXT | ✅ | 组织/器官 |
-| 14 | `disease_state` | TEXT |   | `Non-diseased` / `Cancer` / `Alzheimer's` 等 |
+| 9 | `species` | TEXT | ✅ | `Homo sapiens` / `Mus musculus` |
+| 10 | `tissue` | TEXT | ✅ | 组织/器官 |
+| 11 | `disease_state` | TEXT |   | `Non-diseased` / `Cancer` 等 |
 
 ### 类别 D：技术与规模（Technical & Scale）— 6 列
 
 | # | 列名 | 类型 | 必填 | 说明 |
 |---|------|------|:--:|------|
-| 15 | `spatial_resolution_um` | REAL |   | 空间分辨率（μm），CosMx = 0.1 |
-| 16 | `gene_panel_size` | INTEGER |   | Panel 基因总数 |
-| 17 | `estimated_cell_count` | INTEGER |   | 预估/实际细胞数 |
-| 18 | `data_size_bytes` | INTEGER |   | 数据大小（字节），用于排序/比较 |
-| 19 | `data_size_display` | TEXT |   | 可读展示（`"58.65 GB"`） |
-| 20 | `status` | TEXT | ✅ | `ready` / `pending` / `error` |
+| 12 | `spatial_resolution_um` | REAL |   | 空间分辨率（μm） |
+| 13 | `gene_panel_size` | INTEGER |   | Panel 基因总数（待补充） |
+| 14 | `estimated_cell_count` | INTEGER |   | 预估/实际细胞数（待补充） |
+| 15 | `data_size_bytes` | INTEGER |   | 数据大小（字节） |
+| 16 | `data_size_display` | TEXT |   | 可读展示（`"58.65 GB"`） |
+| 17 | `status` | TEXT | ✅ | `ready` / `pending` / `error` |
 
 ### 类别 E：本地存储路径（Local Storage）— 2 列
 
 | # | 列名 | 类型 | 必填 | 说明 |
 |---|------|------|:--:|------|
-| 21 | `local_path` | TEXT |   | 实验室服务器上的数据集目录绝对路径 |
-| 22 | `file_name` | TEXT |   | 主数据文件名 |
-
-> **为何保留 `local_path`？**
-> - 在本机编辑数据库后，集群路径仍保留在记录中
-> - CLI 工具可根据 `local_path` 直接定位数据，实现自动化集群管线执行
-> - 前端默认隐藏此列，避免暴露服务器路径
+| 18 | `local_path` | TEXT |   | 实验室服务器上的数据集目录绝对路径 |
+| 19 | `file_name` | TEXT |   | 主数据文件名 |
 
 ---
 
@@ -115,17 +113,15 @@
 
 | 原始列 | 处理方式 |
 |--------|---------|
-| `info` / `info.1` | → `name_zh` / `name_en`（并去除技术前缀） |
+| `info` / `info.1` | → `name`（去除技术前缀，中英文合并） |
+| `name_zh` / `name_en` | ✂️ 删除 → 合并为 `name` |
+| `record_type` | ✂️ 删除（ID 前缀 `D`/`M`/`R` 已编码） |
+| `merged_from_ids` | ✂️ 删除（仅 8 条有值，UI 一直隐藏） |
 | `PMID` | ✂️ 删除（DOI 已足够） |
 | `Data_Source_Link` | ✂️ 删除 → 拆为 `project_url` + `download_url` |
-| — | 🆕 `project_url` |
-| — | 🆕 `download_url` |
 | `Data_Size` | → `data_size_bytes` + `data_size_display` |
 | `Data_Status` | → `status`（0/1 → ready/pending/error） |
-| `Notes` | ✂️ 删除（从未使用） |
-| `SCRIN_Standard_Path` | ✂️ 删除 |
-| `Unique_Genes_Count` 等 4 项 | ✂️ 删除（可从源数据计算） |
-| `Spatial_X_Span_px` 等 4 项 | ✂️ 删除（可从源数据计算） |
+| 其他计算列（`Unique_Genes_Count` 等） | ✂️ 删除（可从源数据计算） |
 
 ---
 
@@ -135,9 +131,11 @@
 
 > 数据库已从三个平台的源 CSV 一次性构建完成，源 CSV 已删除。关键处理：
 > - Xenium `project_id` 按中文描述合并
-> - 全局 ID 跨平台统一重编号（CosMx → Xenium → MERFISH）
-> - 名称去除技术前缀，数据类型规范化
-> - 工具链：`subcellspace db build|export|validate`
+> - 全球 ID 重编号：`{D|M|R}{platform}{seq}` 自描述方案
+> - `project_id` 同步重编号：`P{platform}{seq}`
+> - 名称中英文合并为单列 `name`，去除技术前缀
+> - 数据类型规范化，删减冗余列（32 → 19）
+> - 工具链：`subcellspace db export|import|validate`
 
 ### Phase 2：前端 DataBrowser 静态模式
 
@@ -186,13 +184,11 @@ SubCellSpace/
 │   ├── datasets.csv             # ✅ CSV 导出（Git 追踪）
 │   └── DATA_FORMATS.md          # ✅ 数据格式参考
 ├── scripts/
-│   └── build_database.py        # ✅ 构建脚本（一次性使用，源 CSV 已删除）
 ├── src/
 │   ├── database/                # ✅ 数据库操作模块
 │   │   ├── __init__.py
 │   │   ├── schema.py            # ✅ Schema 定义
-│   │   ├── builder.py           # ✅ 构建逻辑
-│   │   └── exporter.py          # ✅ CSV/JSON 导出
+│   │   └── exporter.py          # ✅ CSV/JSON 导出 + CSV 导入
 │   ├── cli.py                   # ✅ `subcellspace db` 子命令组
 │   └── api_server.py            # ✅ FastAPI + CRUD 端点
 ├── frontend/
@@ -211,7 +207,6 @@ SubCellSpace/
 
 | 风险 | 缓解措施 |
 |------|---------|
-| SQLite 文件 Git 冲突 | 数据库从本地 DB 重新导出即可，无需 rebuild |
-| Xenium `project_id` 合并出错 | dry-run 预览 → 人工确认 → 写入 |
-| 前端 JSON 过大 | 当前 <200 行 × 22 列 ≈ <30KB；未来超 1000 行考虑分页 |
+| SQLite 文件 Git 冲突 | `subcellspace db import` 从 CSV 重新导入即可 |
+| 前端 JSON 过大 | 当前 1140 行 × 19 列，未来超 5000 行考虑分页 |
 | `local_path` 环境不一致 | 本地开发环境此列留空或使用相对路径映射 |

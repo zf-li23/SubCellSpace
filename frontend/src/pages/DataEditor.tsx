@@ -5,8 +5,8 @@ const API = '/api/db'
 const PAGE_SIZES = [25, 50, 100, 0]
 
 const COL_LABELS: Record<string, string> = {
-  id: 'ID', project_id: '项目ID', platform: '平台', name_zh: '中文名', name_en: '英文名',
-  record_type: '类型', merged_from_ids: '合并来源', project_url: '项目链接',
+  id: 'ID', project_id: '项目ID', platform: '平台', name: '名称',
+  project_url: '项目链接',
   download_url: '下载链接', publication_doi: 'DOI', data_source: '数据来源',
   species: '物种', tissue: '组织', disease_state: '疾病状态',
   spatial_resolution_um: '分辨率(μm)', gene_panel_size: 'Panel大小',
@@ -16,8 +16,8 @@ const COL_LABELS: Record<string, string> = {
 
 function emptyRow(): DatasetRow {
   return {
-    id: 0, project_id: 0, platform: 'CosMx', name_zh: '', name_en: null,
-    record_type: 'Standard', merged_from_ids: null, project_url: null, download_url: null,
+    id: '', project_id: '', platform: 'CosMx', name: '',
+    project_url: null, download_url: null,
     publication_doi: null, data_source: 'Nanostring', species: 'Homo sapiens',
     tissue: '', disease_state: null, spatial_resolution_um: null, gene_panel_size: null,
     estimated_cell_count: null, data_size_bytes: null, data_size_display: null,
@@ -54,15 +54,14 @@ export default function DataEditor() {
   const [search, setSearch] = useState('')
   const [filterPlatform, setFilterPlatform] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
-  const [filterRecordType, setFilterRecordType] = useState('all')
   const [sortKey, setSortKey] = useState('id')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [showAllCols, setShowAllCols] = useState(false)
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
 
-  const allKeys = useMemo(() => Object.keys(emptyRow()).filter(k => k !== 'merged_from_ids'), [])
-  const PRIORITY_KEYS = ['id', 'platform', 'name_en', 'species', 'tissue', 'disease_state', 'estimated_cell_count', 'data_size_display', 'status', 'record_type']
+  const allKeys = useMemo(() => Object.keys(emptyRow()), [])
+  const PRIORITY_KEYS = ['id', 'platform', 'name', 'species', 'tissue', 'disease_state', 'estimated_cell_count', 'data_size_display', 'status']
   const visibleKeys = useMemo(() =>
     (showAllCols ? allKeys : allKeys.filter(k => PRIORITY_KEYS.includes(k))),
   [allKeys, showAllCols])
@@ -117,14 +116,11 @@ export default function DataEditor() {
 
   // ── Filter + sort + paginate ────────────────────────────────────
   const platforms = useMemo(() => [...new Set(rows.map(r => r.platform))].sort(), [rows])
-  const recordTypes = useMemo(() => [...new Set(rows.map(r => r.record_type))].sort(), [rows])
-
   const filtered = useMemo(() => {
     let r = rows
     if (search) { const q = search.toLowerCase(); r = r.filter(row => allKeys.some(k => { const v = getCellValue(row, k); return v !== '—' && v.toLowerCase().includes(q) })) }
     if (filterPlatform !== 'all') r = r.filter(row => row.platform === filterPlatform)
     if (filterStatus !== 'all') r = r.filter(row => row.status === filterStatus)
-    if (filterRecordType !== 'all') r = r.filter(row => row.record_type === filterRecordType)
     return [...r].sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
       const va = getCellValue(a, sortKey), vb = getCellValue(b, sortKey)
@@ -132,7 +128,7 @@ export default function DataEditor() {
       if (!isNaN(na) && !isNaN(nb) && va !== '—' && vb !== '—') return dir * (na - nb)
       return dir * va.localeCompare(vb)
     })
-  }, [rows, search, filterPlatform, filterStatus, filterRecordType, sortKey, sortDir, allKeys])
+  }, [rows, search, filterPlatform, filterStatus, sortKey, sortDir, allKeys])
 
   const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, totalPages)
@@ -143,7 +139,7 @@ export default function DataEditor() {
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  const hasFilters = search || filterPlatform !== 'all' || filterStatus !== 'all' || filterRecordType !== 'all'
+  const hasFilters = search || filterPlatform !== 'all' || filterStatus !== 'all'
 
   if (loading && !rows.length) return <div className="container"><div className="empty-state">Loading...</div></div>
 
@@ -167,8 +163,7 @@ export default function DataEditor() {
         <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search..." style={{ padding: '4px 10px', borderRadius: 10, border: '1px solid rgba(22,50,63,0.15)', fontSize: 12, width: 150 }} />
         <select value={filterPlatform} onChange={e => { setFilterPlatform(e.target.value); setPage(1) }} style={{ fontSize: 12, padding: '4px 6px', borderRadius: 8 }}>{['all', ...platforms].map(p => <option key={p} value={p}>{p === 'all' ? 'Platform' : p}</option>)}</select>
         <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }} style={{ fontSize: 12, padding: '4px 6px', borderRadius: 8 }}><option value="all">Status</option><option value="ready">Ready</option><option value="pending">Pending</option><option value="error">Error</option></select>
-        <select value={filterRecordType} onChange={e => { setFilterRecordType(e.target.value); setPage(1) }} style={{ fontSize: 12, padding: '4px 6px', borderRadius: 8 }}>{['all', ...recordTypes].map(t => <option key={t} value={t}>{t === 'all' ? 'Type' : t}</option>)}</select>
-        {hasFilters && <button onClick={() => { setSearch(''); setFilterPlatform('all'); setFilterStatus('all'); setFilterRecordType('all'); setPage(1) }} className="btn-sm btn-outline">Clear</button>}
+        {hasFilters && <button onClick={() => { setSearch(''); setFilterPlatform('all'); setFilterStatus('all'); setPage(1) }} className="btn-sm btn-outline">Clear</button>}
         <label style={{ fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, marginLeft: 4 }}><input type="checkbox" checked={showAllCols} onChange={e => setShowAllCols(e.target.checked)} />All</label>
       </div>
 

@@ -83,13 +83,6 @@ def build_parser() -> argparse.ArgumentParser:
     db_parser = subparsers.add_parser("db", help="Manage unified datasets database")
     db_sub = db_parser.add_subparsers(dest="db_command", required=True)
 
-    db_build = db_sub.add_parser("build", help="(Historical) Build datasets.db from source CSVs")
-    db_build.add_argument("--cosmx", type=Path, default=None, help="Path to CosMx database_info CSV")
-    db_build.add_argument("--xenium", type=Path, default=None, help="Path to Xenium database_info CSV")
-    db_build.add_argument("--merfish", type=Path, default=None, help="Path to MERFISH database_info CSV")
-    db_build.add_argument("--output", "-o", type=Path, default=Path("data/datasets.db"), help="Output SQLite path")
-    db_build.add_argument("--no-xenium-merge", action="store_true", help="Disable Xenium project_id merging")
-
     db_export = db_sub.add_parser("export", help="Export SQLite → CSV + frontend JSON")
     db_export.add_argument("--db", type=Path, default=Path("data/datasets.db"), help="SQLite database path")
     db_export.add_argument("--csv", type=Path, default=Path("data/datasets.csv"), help="Output CSV path")
@@ -97,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     db_validate = db_sub.add_parser("validate", help="Validate database integrity")
     db_validate.add_argument("--db", type=Path, default=Path("data/datasets.db"), help="SQLite database path")
+
+    db_import = db_sub.add_parser("import", help="Import CSV (exported by db export) back into SQLite")
+    db_import.add_argument("--csv", type=Path, default=Path("data/datasets.csv"), help="CSV to import")
+    db_import.add_argument("--db", type=Path, default=Path("data/datasets.db"), help="SQLite database path")
+    db_import.add_argument("--no-backup", action="store_true", help="Skip creating a .bak backup")
 
     # ── Patchify: Snakemake parallel scheduler ──────────────────────
     patchify_run = subparsers.add_parser("patchify-run", help="Run patchify via Snakemake parallel scheduler")
@@ -516,6 +514,40 @@ def main() -> None:
     if args.command == "patchify-resolve":
         _cmd_patchify_resolve(args)
         return
+
+    if args.command == "db":
+        _cmd_db(args)
+        return
+
+
+# ── Database command handlers ────────────────────────────────────────
+
+
+def _cmd_db(args: argparse.Namespace) -> None:
+    """Dispatch subcellspace db subcommands."""
+    from .database import export_csv, export_json, import_csv
+
+    if args.db_command == "export":
+        export_csv(str(args.db), str(args.csv))
+        export_json(str(args.db), str(args.json))
+    elif args.db_command == "validate":
+        from .database.schema import SCHEMA_SQL
+        import sqlite3
+        conn = sqlite3.connect(str(args.db))
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM datasets")
+        count = cur.fetchone()[0]
+        print(f"  [validate] {count} rows in {args.db}")
+        # Check required columns are non-null
+        cur.execute("SELECT COUNT(*) FROM datasets WHERE id IS NULL OR platform IS NULL OR name_zh IS NULL")
+        nulls = cur.fetchone()[0]
+        if nulls:
+            print(f"  [validate] WARNING: {nulls} rows with null required fields")
+        else:
+            print(f"  [validate] No null required fields")
+        conn.close()
+    elif args.db_command == "import":
+        import_csv(str(args.csv), str(args.db), backup=not args.no_backup)
 
 
 # ── Patchify command handlers ────────────────────────────────────────

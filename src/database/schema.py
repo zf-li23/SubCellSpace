@@ -20,7 +20,7 @@ COLUMN_CATEGORIES = [
         "label_en": "Identity",
         "columns": [
             "id", "project_id", "platform",
-            "name_zh", "name_en", "record_type", "merged_from_ids",
+            "name",
         ],
     },
     {
@@ -60,27 +60,18 @@ COLUMN_CATEGORIES = [
 
 COLUMNS = [
     # Identity
-    {"name": "id",                 "type": "INTEGER", "nullable": False, "category": "identity",
+    {"name": "id",                 "type": "TEXT",    "nullable": False, "category": "identity",
      "label_zh": "ID",             "label_en": "ID",
      "description_zh": "全局唯一数据集 ID", "description_en": "Globally unique dataset ID"},
-    {"name": "project_id",         "type": "INTEGER", "nullable": False, "category": "identity",
+    {"name": "project_id",         "type": "TEXT",    "nullable": False, "category": "identity",
      "label_zh": "项目 ID",        "label_en": "Project ID",
      "description_zh": "所属项目 ID，同项目数据集共享", "description_en": "Project ID shared by datasets in the same project"},
     {"name": "platform",           "type": "TEXT",    "nullable": False, "category": "identity",
      "label_zh": "技术平台",       "label_en": "Platform",
      "description_zh": "CosMx / Xenium / MERFISH", "description_en": "CosMx / Xenium / MERFISH"},
-    {"name": "name_zh",            "type": "TEXT",    "nullable": False, "category": "identity",
-     "label_zh": "中文名称",       "label_en": "Name (ZH)",
-     "description_zh": "数据集中文名称（已去除技术前缀）", "description_en": "Dataset name in Chinese (tech prefix removed)"},
-    {"name": "name_en",            "type": "TEXT",    "nullable": True,  "category": "identity",
-     "label_zh": "英文名称",       "label_en": "Name (EN)",
-     "description_zh": "数据集英文名称（已去除技术前缀）", "description_en": "Dataset name in English (tech prefix removed)"},
-    {"name": "record_type",        "type": "TEXT",    "nullable": False, "category": "identity",
-     "label_zh": "记录类型",       "label_en": "Record Type",
-     "description_zh": "Standard / Merged / Raw_Fragment", "description_en": "Standard / Merged / Raw_Fragment"},
-    {"name": "merged_from_ids",    "type": "TEXT",    "nullable": True,  "category": "identity",
-     "label_zh": "合并来源 ID",    "label_en": "Merged From IDs",
-     "description_zh": "JSON 数组格式的来源数据集 ID 列表", "description_en": "Source dataset IDs as JSON array"},
+    {"name": "name",               "type": "TEXT",    "nullable": False, "category": "identity",
+     "label_zh": "名称",           "label_en": "Name",
+     "description_zh": "数据集名称", "description_en": "Dataset name"},
 
     # Provenance
     {"name": "project_url",        "type": "TEXT",    "nullable": True,  "category": "provenance",
@@ -140,13 +131,10 @@ COLUMNS = [
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS datasets (
-    id                   INTEGER PRIMARY KEY,
-    project_id           INTEGER NOT NULL,
+    id                   TEXT PRIMARY KEY,
+    project_id           TEXT NOT NULL,
     platform             TEXT    NOT NULL,
-    name_zh              TEXT    NOT NULL,
-    name_en              TEXT,
-    record_type          TEXT    NOT NULL,
-    merged_from_ids      TEXT,
+    name                 TEXT    NOT NULL,
 
     project_url          TEXT,
     download_url         TEXT,
@@ -177,7 +165,7 @@ CREATE INDEX IF NOT EXISTS idx_datasets_status ON datasets(status);
 # Columns shown by default; rest are hidden behind "more info" toggle.
 
 PRIORITY_COLUMNS = [
-    "id", "platform", "name_en",
+    "id", "platform", "name",
     "species", "tissue", "disease_state",
     "estimated_cell_count", "data_size_display", "status",
     "project_url", "download_url",
