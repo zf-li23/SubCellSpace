@@ -37,7 +37,7 @@ from src.registry import get_available_backends, load_backends
 
 # ── Platform → test data mapping ────────────────────────────────────
 PLATFORM_DATA: dict[str, Path] = {
-    "cosmx":     PROJECT_ROOT / "data" / "test" / "Mouse_brain_CosMX_1000cells.csv",
+    "cosmx":     PROJECT_ROOT / "data" / "test" / "Mouse_brain_CosMx_1000cells.csv",
     "xenium":    PROJECT_ROOT / "data" / "test" / "Xenium_mouse_brain_rep3_1000cells.parquet",
     "merfish":   PROJECT_ROOT / "data" / "test" / "MERFISH_1014_region_1_detected_transcripts.csv",
     "stereoseq": PROJECT_ROOT / "data" / "test" / "Stereo_seq_mouse_spleen_bin40.gem",

@@ -20,7 +20,7 @@ from .database import export_csv, export_json
 from .database.schema import COLUMNS
 
 # ── Configurable defaults (from centralized configuration system) ─────────
-DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMX_1000cells.csv"))
+DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMx_1000cells.csv"))
 DEFAULT_OUTPUT_DIR = Path(_settings.get("output_dir", "outputs/api_runs"))
 DEFAULT_REPORT_RUN = _settings.get("report_run", "all_platforms/cosmx")
 DEFAULT_BENCHMARK_RUN = _settings.get("benchmark_run", "cosmx_benchmark_round")

@@ -58,12 +58,12 @@ else
 fi
 
 # 检查测试数据
-DATA_FILE="$PROJECT_DIR/data/test/Mouse_brain_CosMX_1000cells.csv"
+DATA_FILE="$PROJECT_DIR/data/test/Mouse_brain_CosMx_1000cells.csv"
 if [ -f "$DATA_FILE" ]; then
     pass "测试数据文件存在: $DATA_FILE"
 else
     fail "测试数据文件不存在: $DATA_FILE"
-    echo "请将 Mouse_brain_CosMX_1000cells.csv 放置到 data/test/ 目录下" | tee -a "$LOG_FILE"
+    echo "请将 Mouse_brain_CosMx_1000cells.csv 放置到 data/test/ 目录下" | tee -a "$LOG_FILE"
     exit 1
 fi
 

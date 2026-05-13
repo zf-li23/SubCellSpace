@@ -23,7 +23,7 @@ conda activate subcellspace
 pip install -e ".[dev]"
 
 # 2. 一键运行（自动检测平台类型）
-subcellspace run data/test/Mouse_brain_CosMX_1000cells.csv -o outputs/my_run/
+subcellspace run data/test/Mouse_brain_CosMx_1000cells.csv -o outputs/my_run/
 # 输出: outputs/my_run/cosmx.h5ad, cosmx_report.json, export/
 
 # 3. 自定义后端

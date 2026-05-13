@@ -1,5 +1,7 @@
 # SubCellSpace 测试数据来源
 
+> **状态**: 测试文件尚未下载到本地 `data/test/` 目录。以下记录各平台测试数据的来源与格式，需手动从 Zenodo 下载后放入 `data/test/`。
+
 本文档记录 `data/test/` 目录下所有平台测试数据的来源、格式与获取方式。
 
 ---
@@ -8,7 +10,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| **文件名** | `Mouse_brain_CosMX_1000cells.csv.gz` |
+| **文件名** | `Mouse_brain_CosMx_1000cells.csv.gz` |
 | **来源** | Zenodo: [https://zenodo.org/records/17019789](https://zenodo.org/records/17019789) |
 | **描述** | SCRIN 示例数据集——Mouse brain CosMx SMI 数据 |
 | **大小** | 压缩 30 MB / 解压 117 MB (1,634,725 行) |
@@ -104,7 +106,7 @@ pd.DataFrame(rows).to_csv("Stereo_seq_mouse_spleen_bin40.gem", sep="\t", index=F
 
 | 文件 | 平台 | 格式 | 大小 | 行数 | 细胞/BIN |
 |------|------|------|------|------|---------|
-| `Mouse_brain_CosMX_1000cells.csv.gz` | CosMx | CSV (gzip) | 30 MB | 1,634,725 | ~1,000 |
+| `Mouse_brain_CosMx_1000cells.csv.gz` | CosMx | CSV (gzip) | 30 MB | 1,634,725 | ~1,000 |
 | `Xenium_mouse_brain_rep3_1000cells.parquet` | Xenium | Parquet | 47 MB | 1,954,279 | 1,000 |
 | `MERFISH_1014_region_1_detected_transcripts.csv.gz` | MERFISH | CSV (gzip) | 39 MB | 1,692,525 | ~3,250 |
 | `Stereo_seq_mouse_spleen_bin40.gem` | Stereo-seq | TSV (GEM) | 0.9 MB | 30,097 | 23,160 bins |

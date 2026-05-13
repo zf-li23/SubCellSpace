@@ -1,16 +1,15 @@
 # SubCellSpace 统一数据库开发计划
 
-> **版本**: v1.0  
-> **日期**: 2026-05-12  
-> **状态**: 实施中 — Phase 0
+> **版本**: v1.1  
+> **日期**: 2026-05-13  
+> **状态**: Phase 0-3 完成，Phase 4-5 待实施
 
 ---
 
 ## 一、设计目标
 
-1. **统一**：CosMX / Xenium / MERFISH 三个平台的数据集元数据整合到同一数据库
-2. **可复现**：数据库由源 CSV（来自实验室服务器）经脚本自动构建，可重复执行
-3. **可溯源**：每条数据记录包含 `project_url`（了解数据）和 `download_url`（下载数据）
+1. **统一**：CosMx / Xenium / MERFISH 三个平台的数据集元数据整合到同一数据库
+2. **可溯源**：每条数据记录包含 `project_url`（了解数据）和 `download_url`（下载数据）
 4. **双模式访问**：前端 DataBrowser 静态浏览（生产）+ Web UI 编辑器（开发）+ CLI 工具（集群脚本）
 5. **精简**：列数从 32 → 22，降低维护负担；建库初期大量列可留空
 
@@ -132,32 +131,13 @@
 
 ## 五、分期开发计划
 
-### Phase 0：数据整理 & ID 重新分配 ✅ 进行中
+### Phase 0-1：数据整理 & 数据库构建 ✅ 已完成
 
-> **目标**：规范化源数据，统一编号，建立 SQLite
-
-**0.1 Xenium `project_id` 合并**
-- 以 `info`（中文描述）为合并键
-- 相同 `info` → 共享新 `project_id`
-- 示例：4 行 "Xenium Homo sapiens Breast 数据集 (Cancer)" → 同一项目
-
-**0.2 全局 ID 重新分配**
-- 按平台排序后统一递增编号
-- 保留旧 ID ↔ 新 ID 映射表 `data/id_mapping.csv`
-
-**0.3 名称规范化**
-- 去除 `name_zh` / `name_en` 中的技术前缀（"CosMx SMI "、"Xenium "、"MERSCOPE " 等）
-
-**0.4 数据类型规范化**
-- `Data_Size` → 解析为字节数 + 保留展示字符串
-- `Spatial_Resolution_μm` → 统一为 μm 数值
-
-### Phase 1：数据库构建工具链（Python CLI）
-
-- `subcellspace db build` — 从源 CSV 构建 SQLite
-- `subcellspace db export` — SQLite → CSV + JSON
-- `subcellspace db validate` — 检查 ID 唯一性、必填列、URL 格式
-- `subcellspace db edit` — CLI 增删改单行
+> 数据库已从三个平台的源 CSV 一次性构建完成，源 CSV 已删除。关键处理：
+> - Xenium `project_id` 按中文描述合并
+> - 全局 ID 跨平台统一重编号（CosMx → Xenium → MERFISH）
+> - 名称去除技术前缀，数据类型规范化
+> - 工具链：`subcellspace db build|export|validate`
 
 ### Phase 2：前端 DataBrowser 静态模式
 
@@ -197,35 +177,32 @@
 
 ---
 
-## 六、文件清单（规划新增/修改）
+## 六、文件清单（最终状态）
 
 ```
 SubCellSpace/
 ├── data/
-│   ├── datasets.db              # 🆕 SQLite 主数据库
-│   ├── datasets.csv             # 🆕 CSV 导出（Git 追踪）
-│   └── id_mapping.csv           # 🆕 旧 ID → 新 ID 映射
-├── docs/
-│   └── DATABASE_PLAN.md         # 🆕 本文档
+│   ├── datasets.db              # ✅ SQLite 主数据库（Git 追踪）
+│   ├── datasets.csv             # ✅ CSV 导出（Git 追踪）
+│   └── DATA_FORMATS.md          # ✅ 数据格式参考
 ├── scripts/
-│   ├── build_database.py        # 🆕 Phase 1 构建脚本
-│   ├── merge_xenium_projects.py # 🆕 Phase 0 Xenium 合并
-│   └── validate_database.py     # 🆕 Phase 4 校验脚本
+│   └── build_database.py        # ✅ 构建脚本（一次性使用，源 CSV 已删除）
 ├── src/
-│   ├── database/                # 🆕 数据库操作模块
+│   ├── database/                # ✅ 数据库操作模块
 │   │   ├── __init__.py
-│   │   ├── schema.py            # Schema 定义
-│   │   ├── builder.py           # 构建逻辑
-│   │   └── exporter.py          # CSV/JSON 导出
-│   └── cli.py                   # 🔧 添加 `db` 子命令组
+│   │   ├── schema.py            # ✅ Schema 定义
+│   │   ├── builder.py           # ✅ 构建逻辑
+│   │   └── exporter.py          # ✅ CSV/JSON 导出
+│   ├── cli.py                   # ✅ `subcellspace db` 子命令组
+│   └── api_server.py            # ✅ FastAPI + CRUD 端点
 ├── frontend/
 │   ├── public/
-│   │   └── datasets.json        # 🆕 构建产物（.gitignore）
+│   │   └── datasets.json        # ✅ 构建产物（.gitignore）
 │   └── src/
 │       └── pages/
-│           ├── DataBrowser.tsx   # 🔧 重写为静态模式
-│           └── DataEditor.tsx    # 🆕 开发模式编辑器
-└── pyproject.toml               # 🔧 添加 db 子命令入口
+│           ├── DataBrowser.tsx   # ✅ 静态浏览模式
+│           └── DataEditor.tsx    # ✅ 开发模式编辑器
+└── pyproject.toml               # ✅ db 子命令入口
 ```
 
 ---
@@ -234,8 +211,7 @@ SubCellSpace/
 
 | 风险 | 缓解措施 |
 |------|---------|
-| SQLite 文件 Git 冲突 | 数据库仅由脚本生成，冲突时重新 `db build` |
+| SQLite 文件 Git 冲突 | 数据库从本地 DB 重新导出即可，无需 rebuild |
 | Xenium `project_id` 合并出错 | dry-run 预览 → 人工确认 → 写入 |
 | 前端 JSON 过大 | 当前 <200 行 × 22 列 ≈ <30KB；未来超 1000 行考虑分页 |
 | `local_path` 环境不一致 | 本地开发环境此列留空或使用相对路径映射 |
-| 源 CSV 格式变更 | `db build` 添加列名校验，未知列警告但不中断 |

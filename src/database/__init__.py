@@ -1,5 +1,5 @@
 # ── SubCellSpace Database Module ─────────────────────────────────────
-"""Unified dataset database: build from source CSVs, export to CSV/JSON."""
+"""Unified dataset database: schema, export to CSV/JSON, (historical) builder."""
 
 from .schema import SCHEMA_SQL, COLUMNS, COLUMN_CATEGORIES, Platform
 from .builder import build_database

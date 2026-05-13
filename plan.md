@@ -22,10 +22,9 @@
 ### Phase 4: 数据补录
 - 为 Xenium/MERFISH 行填充 `project_url`、`download_url`
 - 从集群实际数据文件计算 `estimated_cell_count`
-- 导入跳板机上的 GEO Xenium tarball 数据
+- 解压集群上剩余的 Xenium GEO tarball (37 个)
 
 ### Phase 5: CI/CD & 文档
-- GitHub Actions: push source CSV → auto build DB + validate
 - `DATASETS.md` 自动生成
 - URL 可达性校验
 
@@ -65,5 +64,5 @@
 |------|:----:|:----:|------|
 | 平台覆盖不均衡导致发表审稿质疑 | 中 | 高 | 统一 benchmark 四平台 |
 | 第三方工具依赖断裂 | 中 | 中 | `tools/urls.yaml` 注册 + 版本锁定 |
-| 数据库构建脚本不可复现 | 低 | 中 | SQLite 事务 + `subcellspace db validate` |
+| 数据库损坏 | 低 | 中 | SQLite 事务 + `subcellspace db validate` |
 | 前端适配移动端需求 | 低 | 低 | 表格横向滚动，非优先 |

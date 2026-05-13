@@ -40,6 +40,12 @@ class XeniumIngestor(BaseIngestor):
         resolved = self._resolve_path(input_path)
         if resolved.suffix == ".parquet":
             df = pd.read_parquet(resolved)
+        elif resolved.suffix == ".gz" and resolved.suffixes[-2:] == [".csv", ".gz"]:
+            import gzip
+            with gzip.open(resolved, "rt") as f:
+                df = pd.read_csv(f)
+        elif resolved.suffix == ".gz":
+            df = pd.read_csv(resolved, compression="gzip")
         else:
             df = pd.read_csv(resolved)
         self._validate_raw_columns(df, {"x_location", "y_location", "feature_name", "cell_id"})

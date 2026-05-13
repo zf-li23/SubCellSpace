@@ -1,5 +1,5 @@
 # ── SubCellSpace Database Builder ────────────────────────────────────
-"""Read source CSVs, normalize, and write to SQLite."""
+"""(Historical) Read source CSVs, normalize, and write to SQLite.  Used only during initial DB build; source CSVs have since been removed."""
 
 import csv
 import json
@@ -160,7 +160,7 @@ def build_database(
 
     Args:
         db_path: Path to output SQLite database.
-        cosmx_csv: Path to CosMX database_info CSV.
+        cosmx_csv: Path to CosMx database_info CSV.
         xenium_csv: Path to Xenium database_info CSV.
         merfish_csv: Path to MERFISH database_info CSV.
         xenium_merge_by_info: If True, merge Xenium rows with same
@@ -425,14 +425,20 @@ def _reassign_global_ids(rows: list[dict]) -> None:
 
     # Assign new IDs
     for i, row in enumerate(rows, start=1):
-        row["id"] = i
+        row["id"] = f"D{i:04d}"
         key = (row["platform"], row["_old_project_id"] or 0)
-        row["project_id"] = pids_seen[key]
+        row["project_id"] = f"P{pids_seen[key]:04d}"
 
     # Clean up internal fields
     for row in rows:
         row.pop("_order", None)
-        # Keep _old_id and _old_project_id for id_mapping export
+        # Rewrite local_path to new P/D convention
+        if row.get("local_path"):
+            row["local_path"] = f"/data3/yangxr002/{row['platform']}/{row['project_id']}/{row['id']}/"
+        # Strip D-prefix from file_name
+        fn = row.get("file_name")
+        if fn:
+            row["file_name"] = re.sub(r'^D\d+_', '', fn)
 
 
 def _export_id_mapping(rows: list[dict], mapping_path: str) -> None:

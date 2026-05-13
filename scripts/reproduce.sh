@@ -129,12 +129,12 @@ else
 fi
 
 # 3c. Check data file
-if [ -f "$PROJECT_DIR/data/test/Mouse_brain_CosMX_1000cells.csv" ]; then
-    pass "Test data file exists: data/test/Mouse_brain_CosMX_1000cells.csv"
+if [ -f "$PROJECT_DIR/data/test/Mouse_brain_CosMx_1000cells.csv" ]; then
+    pass "Test data file exists: data/test/Mouse_brain_CosMx_1000cells.csv"
 else
     # Try other locations
-    if [ -f "${PROJECT_DIR}/../data/test/Mouse_brain_CosMX_1000cells.csv" ]; then
-        pass "Test data file found at ../data/test/Mouse_brain_CosMX_1000cells.csv"
+    if [ -f "${PROJECT_DIR}/../data/test/Mouse_brain_CosMx_1000cells.csv" ]; then
+        pass "Test data file found at ../data/test/Mouse_brain_CosMx_1000cells.csv"
     else
         fail "Test data file NOT FOUND — you may need to copy it manually"
         ISSUES_FOUND=1
@@ -216,9 +216,9 @@ section "6.  Run End-to-End Pipeline"
 
 DATA_FILE=""
 for candidate in \
-    "$PROJECT_DIR/data/test/Mouse_brain_CosMX_1000cells.csv" \
-    "${PROJECT_DIR}/../data/test/Mouse_brain_CosMX_1000cells.csv" \
-    "$HOME/data/test/Mouse_brain_CosMX_1000cells.csv"; do
+    "$PROJECT_DIR/data/test/Mouse_brain_CosMx_1000cells.csv" \
+    "${PROJECT_DIR}/../data/test/Mouse_brain_CosMx_1000cells.csv" \
+    "$HOME/data/test/Mouse_brain_CosMx_1000cells.csv"; do
     if [ -f "$candidate" ]; then
         DATA_FILE="$candidate"
         break

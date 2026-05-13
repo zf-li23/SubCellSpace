@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # ── Build SubCellSpace unified datasets database ─────────────────────
-"""Build datasets.db from source CSV files, then export CSV + JSON.
+"""(Historical) Build datasets.db from source CSV files, then export CSV + JSON.
 
-Usage:
+This script was used once for the initial build. The source CSVs
+(database_info_*.csv) have since been removed.  To modify data, use
+the DataEditor UI or scripted updates (see AGENTS.md §9).
+
+Usage (only if source CSVs reappear):
     python scripts/build_database.py
     python scripts/build_database.py --no-xenium-merge
 """
@@ -20,7 +24,7 @@ def main():
     project_root = Path(__file__).resolve().parent.parent
 
     # ── Source CSVs ──────────────────────────────────────────────────
-    cosmx_csv = project_root / "data" / "database_info_CosMX.csv"
+    cosmx_csv = project_root / "data" / "database_info_CosMx.csv"
     xenium_csv = project_root / "data" / "database_info_Xenium_temp.csv"
     merfish_csv = project_root / "data" / "database_info_MERFISH.csv"
 
