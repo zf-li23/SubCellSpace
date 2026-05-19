@@ -1,13 +1,14 @@
-"""Phase 6: Spatial Analysis step.
+"""Spatial Analysis step.
 
 Provides backends for:
-- SVG (spatially variable genes)  — squidpy
-- neighbourhood enrichment          — squidpy
-- cell co-occurrence                — squidpy
-- tree inference + pseudotime       — scFates
+- Spatial domain identification (spatial_leiden, spatial_kmeans)
+- SVG (spatially variable genes) — squidpy
+- neighbourhood enrichment — squidpy
+- cell co-occurrence — squidpy
+- tree inference + pseudotime — scFates
 
-Each backend declares its capabilities so the frontend can render only
-the analyses that the chosen backend actually supports.
+Domain identification runs as an optional pre-processing step inside the
+runner, controlled by the ``domain_backend`` parameter.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import scanpy as sc
 import squidpy as sq
+from sklearn.cluster import KMeans
 
 from ..models import StepResult
 from ..registry import declare_capabilities, register_backend, register_runner
@@ -33,9 +35,113 @@ _SCFATES_AVAILABLE: bool = False
 
 try:
     import scFates  # noqa: F401
+
     _SCFATES_AVAILABLE = True
 except ImportError:
     pass
+
+
+# ── Domain identification helpers ────────────────────────────────────
+
+
+def _ensure_spatial_neighbors(adata: sc.AnnData) -> None:
+    """Compute spatial neighbors if not already present."""
+    if "spatial_connectivities" not in adata.obsp:
+        sq.gr.spatial_neighbors(adata, spatial_key="spatial", coord_type="generic")
+
+
+def _run_domain_identification(
+    adata: sc.AnnData,
+    domain_backend: str,
+    domain_resolution: float,
+    n_spatial_domains: int | None,
+) -> str:
+    """Run spatial domain identification on *adata*.
+
+    Returns the actual backend used (may differ from requested due to
+    fallback).
+    """
+    _DOMAIN_FUNCS = {
+        "spatial_leiden": _domain_spatial_leiden,
+        "spatial_kmeans": _domain_spatial_kmeans,
+        "none": lambda a, r, n: "none",
+    }
+    if domain_backend not in _DOMAIN_FUNCS:
+        raise ValueError(
+            f"Unknown domain backend: {domain_backend}. "
+            f"Available: {list(_DOMAIN_FUNCS)}"
+        )
+    return _DOMAIN_FUNCS[domain_backend](adata, domain_resolution, n_spatial_domains)
+
+
+def _domain_spatial_leiden(
+    adata: sc.AnnData,
+    domain_resolution: float,
+    n_spatial_domains: int | None = None,  # noqa: ARG001
+) -> str:
+    """Spatial Leiden clustering on spatial neighbor graph.
+
+    Tries three strategies in order:
+    1. Leiden with igraph flavor
+    2. Leiden with default flavor
+    3. KMeans fallback on spatial coordinates
+    """
+    _ensure_spatial_neighbors(adata)
+
+    try:
+        sc.tl.leiden(
+            adata,
+            adjacency=adata.obsp["spatial_connectivities"],
+            resolution=domain_resolution,
+            key_added="spatial_domain",
+            flavor="igraph",
+            directed=False,
+            n_iterations=2,
+        )
+        return "spatial_leiden_igraph"
+    except Exception:
+        pass
+
+    try:
+        sc.tl.leiden(
+            adata,
+            adjacency=adata.obsp["spatial_connectivities"],
+            resolution=domain_resolution,
+            key_added="spatial_domain",
+        )
+        return "spatial_leiden_default"
+    except Exception:
+        pass
+
+    # Ultimate fallback: use KMeans-based spatial domain assignment
+    n_cells = adata.n_obs
+    n_domains = max(2, min(8, int(np.sqrt(n_cells) // 2 + 2)))
+    coords = adata.obsm.get("spatial")
+    if coords is None:
+        coords = np.zeros((n_cells, 2))
+    labels = KMeans(n_clusters=n_domains, n_init="auto", random_state=0).fit_predict(coords)
+    adata.obs["spatial_domain"] = labels.astype(str)
+    return "spatial_leiden_fallback_kmeans"
+
+
+def _domain_spatial_kmeans(
+    adata: sc.AnnData,
+    _domain_resolution: float = 1.0,
+    n_spatial_domains: int | None = None,
+) -> str:
+    """Spatial domain identification via KMeans on spatial coordinates."""
+    if "spatial" not in adata.obsm:
+        raise ValueError("`spatial` not found in adata.obsm.")
+
+    coords = adata.obsm["spatial"]
+    if n_spatial_domains is None:
+        n_spatial_domains = max(2, min(12, int(np.sqrt(max(adata.n_obs, 2)) // 2 + 2)))
+
+    n_spatial_domains = max(2, min(int(n_spatial_domains), adata.n_obs))
+    labels = KMeans(n_clusters=n_spatial_domains, n_init="auto", random_state=0).fit_predict(coords)
+    adata.obs["spatial_domain"] = labels.astype(str)
+    return "spatial_kmeans"
+
 
 # ── Squidpy backend ──────────────────────────────────────────────────
 
@@ -45,13 +151,7 @@ def _spatial_squidpy(
     n_top_svg: int = 100,
     cluster_key: str = "cluster",
 ) -> dict[str, Any]:
-    """Run squidpy-based spatial analyses: SVG, neighborhood, co-occurrence.
-
-    Returns a dict of results stored in ``adata.uns``:
-    - ``squidpy_svg_results``
-    - ``squidpy_neighborhood_enrichment``
-    - ``squidpy_co_occurrence``
-    """
+    """Run squidpy-based spatial analyses: SVG, neighborhood, co-occurrence."""
     results: dict[str, Any] = {}
 
     # ── 1. Spatially Variable Genes ─────────────────────────────────
@@ -101,9 +201,11 @@ def _spatial_squidpy(
             if "co_occurrence" in adata.uns:
                 cooc = adata.uns["co_occurrence"]
                 results["co_occurrence"] = {
-                    "clusters": adata.obs[cluster_key].cat.categories.tolist()
-                    if hasattr(adata.obs[cluster_key], "cat")
-                    else sorted(adata.obs[cluster_key].unique().tolist()),
+                    "clusters": (
+                        adata.obs[cluster_key].cat.categories.tolist()
+                        if hasattr(adata.obs[cluster_key], "cat")
+                        else sorted(adata.obs[cluster_key].unique().tolist())
+                    ),
                     "occ": cooc.get("occ", {}),
                     "interval": cooc.get("interval", []),
                 }
@@ -130,16 +232,7 @@ def _spatial_scfates(
     adata: sc.AnnData,
     cluster_key: str = "cluster",
 ) -> dict[str, Any]:
-    """Run scFates tree inference and pseudotime analysis.
-
-    Builds a minimum-spanning-tree trajectory on the UMAP embedding,
-    roots it at the cell with highest total counts, and computes
-    pseudotime ordering.
-
-    Results stored in:
-    - ``adata.uns["scfates_tree"]`` — tree topology info
-    - ``adata.obs["pseudotime"]``   — pseudotime per cell
-    """
+    """Run scFates tree inference and pseudotime analysis."""
     try:
         import scFates as scf
     except ImportError as exc:
@@ -152,21 +245,17 @@ def _spatial_scfates(
 
     # ── 1. Tree inference ───────────────────────────────────────────
     try:
-        # Ensure UMAP is available for tree inference
         if "X_umap" not in adata.obsm:
             logger.warning("scFates: no UMAP embedding found, computing it now.")
             sc.tl.umap(adata)
 
-        # Tree fitting on UMAP space (scFates stores result in adata.uns['ppt'])
         scf.tl.tree(adata, basis="umap")
         n_milestones = (
             len(adata.uns.get("ppt", {}).get("F", []))
             if "ppt" in adata.uns
             else 0
         )
-        results["tree_inference"] = {
-            "n_milestones": n_milestones,
-        }
+        results["tree_inference"] = {"n_milestones": n_milestones}
     except Exception as exc:
         logger.warning("scFates tree inference failed: %s", exc)
         results["tree_inference"] = None
@@ -174,14 +263,12 @@ def _spatial_scfates(
     # ── 2. Root + Pseudotime ────────────────────────────────────────
     try:
         if "ppt" in adata.uns and "X_R" in adata.obsm:
-            # scFates root() expects either an int (tip index) or a str (obs column).
             graph_tips = adata.uns.get("graph", {}).get("tips", [])
             if len(graph_tips) > 0:
                 root_id: int = int(graph_tips[0])
                 scf.tl.root(adata, root=root_id)
                 scf.tl.pseudotime(adata)
 
-                # scFates stores pseudotime in adata.obs['t']
                 pt_key = "t" if "t" in adata.obs else "pseudotime"
                 if pt_key in adata.obs:
                     pt = adata.obs[pt_key]
@@ -200,9 +287,7 @@ def _spatial_scfates(
         logger.warning("scFates pseudotime failed (non-critical): %s", exc)
         results["pseudotime"] = None
 
-    # Store in adata.uns
     adata.uns["scfates_results"] = results
-
     return results
 
 
@@ -214,17 +299,56 @@ def run_spatial_analysis(
     backend: str,
     cluster_key: str = "cluster",
     n_top_svg: int = 100,
+    domain_backend: str = "spatial_leiden",
+    domain_resolution: float = 1.0,
+    n_spatial_domains: int | None = None,
 ) -> StepResult:
-    if backend not in _SPATIAL_ANALYSIS_FUNCS:
-        raise ValueError(f"Unknown spatial analysis backend: {backend}. Available: {list(_SPATIAL_ANALYSIS_FUNCS)}")
+    """Run spatial analysis: optional domain identification + analysis.
 
+    Parameters
+    ----------
+    adata : AnnData
+    backend : str
+        Analysis backend ("squidpy" or "scfates").
+    domain_backend : str
+        Domain identification backend ("spatial_leiden", "spatial_kmeans",
+        or "none" to skip).
+    """
+    if backend not in _SPATIAL_ANALYSIS_FUNCS:
+        raise ValueError(
+            f"Unknown spatial analysis backend: {backend}. "
+            f"Available: {list(_SPATIAL_ANALYSIS_FUNCS)}"
+        )
+
+    # ── Phase 1: Spatial domain identification (optional) ───────────
+    domain_used = "none"
+    if domain_backend != "none":
+        domain_used = _run_domain_identification(
+            adata, domain_backend, domain_resolution, n_spatial_domains
+        )
+
+    # ── Phase 2: Spatial analysis ───────────────────────────────────
     if backend == "scfates":
         results = _SPATIAL_ANALYSIS_FUNCS[backend](adata, cluster_key=cluster_key)
     else:
         results = _SPATIAL_ANALYSIS_FUNCS[backend](adata, cluster_key=cluster_key, n_top_svg=n_top_svg)
 
-    # Build summary from available results
-    summary: dict[str, Any] = {"spatial_analysis_backend": backend}
+    # Build summary
+    summary: dict[str, Any] = {
+        "spatial_analysis_backend": backend,
+        "domain_backend_requested": domain_backend,
+        "domain_backend_used": domain_used,
+    }
+
+    # Domain-level summary
+    if domain_used != "none" and "spatial_domain" in adata.obs:
+        distribution = adata.obs["spatial_domain"].astype(str).value_counts().to_dict()
+        summary.update({
+            "n_spatial_domains": int(adata.obs["spatial_domain"].nunique()),
+            "spatial_domain_distribution": {str(k): int(v) for k, v in distribution.items()},
+        })
+
+    # Analysis-level summary
     if backend == "squidpy":
         for cap_key, result_key in [
             ("svg", "svg_results"),
@@ -272,7 +396,18 @@ def _run_spatial_analysis(
 
     cluster_key = params.get("cluster_key", "cluster")
     n_top_svg = params.get("n_top_svg", 100)
+    domain_backend = params.get("domain_backend", "spatial_leiden")
+    domain_resolution = params.get("domain_resolution", 1.0)
+    n_spatial_domains = params.get("n_spatial_domains")
 
-    result = run_spatial_analysis(ctx.adata, backend, cluster_key=cluster_key, n_top_svg=n_top_svg)
+    result = run_spatial_analysis(
+        ctx.adata,
+        backend,
+        cluster_key=cluster_key,
+        n_top_svg=n_top_svg,
+        domain_backend=domain_backend,
+        domain_resolution=domain_resolution,
+        n_spatial_domains=n_spatial_domains,
+    )
     ctx.adata = result.output
     return result

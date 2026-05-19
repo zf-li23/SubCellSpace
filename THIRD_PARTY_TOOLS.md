@@ -1,71 +1,95 @@
 # Third-Party Tool References
 
-The SubCellSpace repository is intended to remain lightweight for GitHub backup and collaboration.
-Large local datasets and full third-party tool source trees are kept out of version control.
+SubCellSpace now supports two tiers of backends:
+
+- **Core** (`pip install subcellspace`): All default backends are pip-installable.
+- **Optional extras** (`pip install subcellspace[<name>]`): Segmentation (cellpose, baysor), advanced analysis (scvi, celltypist), workflow engine (snakemake).
+- **Git-clone-only**: A few backends require manual cloning from their source repos (spARC, PhenoGraph, scFates).
+- **Cluster-only**: SCRIN requires MPI and is intended for HPC cluster use.
 
 ## Canonical Source: `tools/urls.yaml`
 
-All third-party tool registry information (URLs, install methods, notes) is now maintained in a single YAML file:
+All third-party tool registry information is maintained in:
 
 ```bash
 cat tools/urls.yaml
 ```
 
-This file tracks both HTTPS and SSH git URLs for each tool, making it easy to clone via either protocol.
-
 ## Quick Start
 
 ```bash
-# List all tools with their categories and URLs
-bash scripts/setup-tools.sh list
+# Core install (all default backends)
+pip install subcellspace
 
-# Clone specific tools
-bash scripts/setup-tools.sh clone spARC GraphST
+# With optional extras
+pip install subcellspace[cellpose,scvi,celltypist]
 
-# Clone all tools using SSH
-bash scripts/setup-tools.sh clone --ssh --all
+# All pip-installable extras
+pip install subcellspace[all]
 
-# Install all tools (pip install + clone if needed)
-bash scripts/setup-tools.sh install --all
+# Git-clone-only tools
+bash scripts/setup-tools.sh clone spARC PhenoGraph scFates
+cd tools/spARC && pip install -e .
 ```
 
-## Python Tool List (from `tools/urls.yaml`)
+## Python Tool List
 
-| Tool | Category | Install Method | Status |
-|------|----------|---------------|--------|
-| spARC | denoise | `pip install -e tools/spARC/` | ✅ 已验证 |
-| GraphST | spatial_analysis | `pip install -e tools/GraphST/` | ✅ 已验证 |
-| PhenoGraph | subcellular_analysis | `pip install -e tools/PhenoGraph/` | ✅ 已验证 |
-| CellTypist | annotation | `pip install -e tools/celltypist/` | ✅ 已验证 |
-| cellpose | segmentation | `pip install cellpose` | ⚠️ 需外部 DAPI 图像 |
-| scArches | annotation | `pip install scarches` | ✅ 备选 |
-| Sopa | pipeline (reference) | `pip install sopa` | ✅ 架构参考 |
-| scVI | analysis | `pip install scvi-tools` | ✅ 已验证 |
-| squidpy | spatial_analysis | `pip install squidpy` | ✅ SVG/neighborhood/co-occurrence |
-| scFates | spatial_analysis | `pip install -e tools/scFates/` | ✅ 树推断 + 伪时序 |
-| SCRIN | subcellular_analysis | MPI install (see tools/SCRIN/README.md) | ✅ MPI 环境已就绪，stub 可用 |
-| Snakemake | workflow | `pip install snakemake` | ✅ 已安装，供 patchify 并行调度 |
+### pip-installable (core)
 
-> 验证状态基于 2026-05-03 实际运行结果。
+| Tool | Category | Install |
+|------|----------|---------|
+| sopa | pipeline base | `pip install sopa` (core dep) |
+| hdbscan | subcellular domain | `pip install hdbscan` (core dep) |
+| squidpy | spatial analysis | `pip install squidpy` (core dep) |
+| scanpy | analysis | `pip install scanpy` (core dep) |
+| igraph + leidenalg | clustering | core deps |
 
-## Non-Python Tools
+### pip-installable (optional extras)
+
+| Tool | Category | Install |
+|------|----------|---------|
+| cellpose | segmentation | `pip install subcellspace[cellpose]` |
+| scvi-tools | analysis | `pip install subcellspace[scvi]` |
+| celltypist | annotation | `pip install subcellspace[celltypist]` |
+| baysor | segmentation | `pip install subcellspace[baysor]` + Julia Baysor binary |
+| snakemake | workflow | `pip install subcellspace[snakemake]` |
+
+### Git-clone-only (manual)
+
+| Tool | Category | Install |
+|------|----------|---------|
+| spARC | denoise | `pip install -e tools/spARC/` |
+| PhenoGraph | subcellular domain | `pip install -e tools/PhenoGraph/` |
+| scFates | spatial analysis | `pip install -e tools/scFates/` |
+
+### Non-Python
 
 | Tool | Category | Runtime | Status |
 |------|----------|---------|--------|
-| BayesSpace | deprecated | R package | Not integrated (R dependency) |
-| BANKSY | deprecated | R package | Not integrated (R dependency) |
-| Baysor | segmentation | Julia | ✅ Julia 1.10.9 + Baysor 已安装 |
-| Proseg | deprecated | Rust build | Not integrated |
+| Baysor | segmentation | Julia | Julia 1.10+ + Baysor binary required |
+| SCRIN | subcellular co-localization | MPI/C++ | Cluster-only, manual MPI install |
 
-Baysor is now installed via Julia Pkg in the conda environment.
-Other non-Python tools are not integrated.
+## Installation Patterns
 
-## Local usage recommendation
+### Core user
+```bash
+pip install subcellspace
+subcellspace run data.csv -o outputs/my_run/
+```
 
-1. Use `bash scripts/setup-tools.sh` to manage all third-party tools.
-2. Use `bash scripts/setup-step3.sh` for one-step clone + install of all tools.
-3. Keep cloned tool repositories under local `tools/` for development experiments.
-4. Keep large raw/intermediate files under local `data/` and `outputs/`.
-5. Commit only SubCellSpace source code, configs, and lightweight documentation.
-   - `tools/urls.yaml` is tracked in git (the canonical registry).
-   - `tools/*/` (cloned repos) is ignored by `.gitignore`.
+### Full-featured user
+```bash
+pip install subcellspace[cellpose,celltypist]
+# plus any git-clone-only tools as needed
+```
+
+### Developer
+```bash
+pip install -e ".[dev,all]"
+```
+
+### Cluster user
+```bash
+pip install subcellspace
+# SCRIN: install manually via MPI on the cluster
+```

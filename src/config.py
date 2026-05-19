@@ -209,8 +209,6 @@ class Settings:
                     "steps": [
                         "denoise",
                         "segmentation",
-                        "spatial_domain",
-                        "subcellular_spatial_domain",
                         "analysis",
                         "annotation",
                         "spatial_analysis",
@@ -227,15 +225,15 @@ class Settings:
                             "default_backend": "provided_cells",
                             "description": "Assign transcripts to cells",
                         },
-                        "spatial_domain": {
-                            "module": "src.steps.spatial_domain",
-                            "default_backend": "spatial_leiden",
-                            "description": "Identify tissue-level spatial domains",
+                        "spatial_analysis": {
+                            "module": "src.steps.spatial_analysis",
+                            "default_backend": "squidpy",
+                            "description": "Spatial domain identification + multi-faceted spatial analysis",
                         },
-                        "subcellular_spatial_domain": {
-                            "module": "src.steps.subcellular_spatial_domain",
-                            "default_backend": "hdbscan",
-                            "description": "Identify subcellular spatial domains within each cell",
+                        "subcellular_analysis": {
+                            "module": "src.steps.subcellular_analysis",
+                            "default_backend": "rna_localization",
+                            "description": "Subcellular domain clustering + RNA localization/co-localization",
                         },
                         "analysis": {
                             "module": "src.steps.analysis",
@@ -247,16 +245,7 @@ class Settings:
                             "default_backend": "rank_marker",
                             "description": "Cell-type annotation",
                         },
-                        "spatial_analysis": {
-                            "module": "src.steps.spatial_analysis",
-                            "default_backend": "squidpy",
-                            "description": "Multi-faceted spatial analysis",
-                        },
-                        "subcellular_analysis": {
-                            "module": "src.steps.subcellular_analysis",
-                            "default_backend": "rna_localization",
-                            "description": "Subcellular RNA analysis",
-                        },
+
                     },
                 }
             }

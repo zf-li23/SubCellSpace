@@ -28,6 +28,7 @@ from .base import (
 
 # Import platform modules to trigger @register_ingestor decorators
 from . import cosmx   # noqa: F401
+from . import generic  # noqa: F401 — minimal CSV (x, y, gene)
 from . import merfish  # noqa: F401
 from . import stereoseq  # noqa: F401
 from . import xenium   # noqa: F401
@@ -64,6 +65,16 @@ def _detect_by_columns(columns: set[str]) -> str | None:
     # CosMx fallback: x_global_px + target (without CellComp)
     if "x_global_px" in columns and "y_global_px" in columns and "target" in columns:
         return "cosmx"
+
+    # Generic fallback: any file with spatial x, y and a gene/feature column
+    from ..constants import _LEGACY_ALIASES as _aliases
+
+    has_x = "x" in columns or any(a in columns for a in _aliases.get("x", []))
+    has_y = "y" in columns or any(a in columns for a in _aliases.get("y", []))
+    has_gene = "gene" in columns or any(a in columns for a in _aliases.get("gene", []))
+    if has_x and has_y and has_gene:
+        return "generic"
+
     return None
 
 

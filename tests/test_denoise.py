@@ -2,9 +2,17 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.registry import get_available_backends
 from src.steps.denoise import apply_transcript_denoise
+
+_SPARC_AVAILABLE = False
+try:
+    import SPARC  # noqa: F401
+    _SPARC_AVAILABLE = True
+except ImportError:
+    pass
 
 
 class TestApplyTranscriptDenoise:
@@ -67,7 +75,8 @@ class TestApplyTranscriptDenoise:
         assert "none" in backends
         assert "intracellular" in backends
         assert "nuclear_only" in backends
-        assert "sparc" in backends
+        if _SPARC_AVAILABLE:
+            assert "sparc" in backends
 
     # ── spARC (bug fix: crosstab str conversion, bool graph params) ──────────
 
@@ -88,6 +97,7 @@ class TestApplyTranscriptDenoise:
                 )
         return pd.DataFrame(rows)
 
+    @pytest.mark.skipif(not _SPARC_AVAILABLE, reason="spARC not installed (git-clone-only backend)")
     def test_sparc_crosstab_str_conversion(self):
         """Verify that `target` values are cast to str before crosstab,
         preventing 'must have non-scalar value' errors from nested dtypes."""
@@ -103,6 +113,7 @@ class TestApplyTranscriptDenoise:
         assert "denoised_backend" in result.output.attrs
         assert result.output.attrs["denoised_backend"] == "sparc"
 
+    @pytest.mark.skipif(not _SPARC_AVAILABLE, reason="spARC not installed (git-clone-only backend)")
     def test_sparc_denoised_expression_shape(self):
         """spARC should produce a cell×gene expression matrix with correct shape."""
         df = self._make_sparc_compatible_df(n_cells=50)

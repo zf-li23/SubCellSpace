@@ -7,14 +7,14 @@
 # can be set up and run on a fresh machine.
 #
 # Usage:
-#   bash scripts/reproduce.sh
+#   bash reproduce.sh
 #
-# This script corresponds to a simplified Step 0 + Step 1 workflow.
-# For the full setup (including frontend and tools), run the individual steps:
-#   bash scripts/setup-step0.sh
-#   bash scripts/setup-step1.sh
-#   bash scripts/setup-step2.sh
-#   bash scripts/setup-step3.sh
+# For full setup (frontend + tools), run:
+#   conda env create -f environment.yml
+#   conda activate subcellspace
+#   pip install -e ".[dev]"
+#   cd frontend && npm install
+#   bash setup-tools.sh clone spARC PhenoGraph scFates
 #
 # Outputs:
 #   - All stdout/stderr logged to  reproduce_report.log
@@ -64,7 +64,7 @@ REPRODUCE_DATE=$(date)
 cat << EOF > "$REPORT_MD"
 # SubCellSpace Reproduction Report
 
-> Generated automatically by \`scripts/reproduce.sh\`
+> Generated automatically by \`reproduce.sh\`
 > Date: $REPRODUCE_DATE
 
 ## Environment
@@ -152,7 +152,7 @@ fi
 if ls "$PROJECT_DIR/tools/"*/setup.py &>/dev/null 2>&1; then
     pass "tools/ cloned repositories are present"
 else
-    warn "tools/ cloned repositories NOT present — run 'bash scripts/setup-tools.sh clone --all' to clone optional backends"
+    warn "tools/ cloned repositories NOT present — run 'bash setup-tools.sh clone --all' to clone optional backends"
 fi
 
 # =============================================================================
@@ -202,7 +202,7 @@ info "Running pytest (core tests only, skipping tools-dependent tests)..."
 if $PYTHON_BIN -m pytest "$PROJECT_DIR/tests/" \
     --tb=line \
     -q \
-    -k "not sparc and not graphst and not stagate and not spagcn and not phenograph and not celltypist and not scvi" \
+    -k "not sparc and not phenograph and not celltypist and not scvi" \
     2>&1 | tee -a "$REPORT_LOG"; then
     pass "All core unit tests passed"
 else
@@ -358,8 +358,8 @@ fi
         echo ""
         echo "Optional backends that will be unavailable without tools/:"
         echo "- \`sparc\` (denoise)"
-        echo "- \`graphst\`, \`stagate\`, \`spagcn\` (spatial domain)"
         echo "- \`phenograph\` (subcellular domain)"
+        echo "- \`scfates\` (spatial analysis)"
         echo "- \`celltypist\` (annotation)"
         echo ""
         echo "To clone them:"

@@ -145,7 +145,12 @@ class CosMxIngestor(BaseIngestor):
 
     def _parse_transcripts(self, input_path: str | Path) -> pd.DataFrame:
         resolved = self._resolve_path(input_path)
-        df = pd.read_csv(resolved)
+        if resolved.suffix == ".gz":
+            import gzip
+            with gzip.open(resolved, "rt") as f:
+                df = pd.read_csv(f)
+        else:
+            df = pd.read_csv(resolved)
         if "Unnamed: 0" in df.columns:
             df = df.drop(columns=["Unnamed: 0"])
         self._validate_raw_columns(df, {"x_global_px", "y_global_px", "target"})

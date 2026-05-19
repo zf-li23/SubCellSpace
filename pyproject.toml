@@ -12,7 +12,7 @@ license = {text = "MIT"}
 authors = [
   {name = "SubCellSpace Contributors"},
 ]
-keywords = ["spatial-transcriptomics", "subcellular", "single-cell", "spatialdata", "scanpy"]
+keywords = ["spatial-transcriptomics", "subcellular", "single-cell", "spatialdata", "scanpy", "sopa"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -23,53 +23,56 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-  "anndata>=0.12",
-  "fastapi>=0.115",
-  "numpy>=2.0",
-  "pandas>=2.2",
-  "pydantic>=2.8",
-  "pyyaml>=6.0",
+  # ── sopa + spatialdata stack (IO, patchify, aggregation) ──
+  "sopa>=2.2",
+  "spatialdata>=0.7",
+  "spatialdata-io>=0.3",
+
+  # ── Core analysis stack ──
   "scanpy>=1.11",
+  "squidpy>=1.7",
+  "anndata>=0.12",
   "scikit-learn>=1.5",
   "scipy>=1.13",
-  "spatialdata>=0.3",
-  "squidpy>=1.7",
-  "geopandas>=1.0",
-  "shapely>=2.0",
-  "uvicorn[standard]>=0.30",
+  "numpy>=2.0",
+  "pandas>=2.2",
   "igraph>=0.11",
   "leidenalg>=0.10",
+  "hdbscan>=0.8.42",
+  "shapely>=2.0",
+  "geopandas>=1.0",
+
+  # ── Web / API / CLI ──
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.8",
+  "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
+# ── Segmentation backends ──
+cellpose = ["cellpose>=3.0"]
+baysor = ["toml>=0.10.2", "loompy>=3.0.7"]  # Julia binary required separately
+
+# ── Analysis backends ──
+scvi = ["scvi-tools>=1.0"]
+
+# ── Annotation backends ──
+celltypist = ["celltypist>=1.6"]
+
+# ── Workflow engine ──
+snakemake = ["snakemake>=9.0"]
+
+# ── All pip-installable extras ──
+all = ["subcellspace[cellpose,baysor,scvi,celltypist,snakemake]"]
+
+# ── Development ──
 dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.6", "mypy>=1.11", "httpx>=0.28.1"]
 
-# Denoise backends
-sparc = []  # installed via -e tools/spARC/
-
-# Segmentation backends
-cellpose = ["cellpose>=3.0"]  # requires external microscopy image (DAPI) for segmentation pipeline step
-baysor = []  # NOT available: requires Julia runtime; not tracked in Python toolchain
-
-# Spatial domain backends
-graphst = ["pot"]
-
-# Spatial analysis backends (Phase 6)
-scfates = []  # installed via -e tools/scFates/ (tree inference + pseudotime)
-snakemake = ["snakemake>=9.0"]  # workflow engine for patchify scheduling
-
-# Subcellular spatial domain backends
-phenograph = []  # installed via -e tools/PhenoGraph/
-hdbscan = ["hdbscan>=0.8.42"]
-
-# Analysis backends
-scvi = ["scvi-tools"]
-
-# Annotation backends
-celltypist = []  # installed via -e tools/celltypist/
-
-# All optional tools combined (Python-installable only; excludes baysor)
-all = ["subcellspace[dev,sparc,cellpose,graphst,phenograph,hdbscan,scvi,celltypist]"]
+# ── Git-clone-only backends (NOT pip-installable) ──
+# spARC, PhenoGraph, scFates — clone from tools/ and `pip install -e tools/<name>/`
+# SCRIN — MPI-based, cluster-only manual install
+# See THIRD_PARTY_TOOLS.md for details.
 
 
 [project.urls]
@@ -140,4 +143,3 @@ addopts = "-v --tb=short"
 dev = [
     "httpx>=0.28.1",
 ]
-

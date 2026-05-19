@@ -51,12 +51,10 @@
 | 1 | Denoise | intracellular | none / nuclear_only / sparc |
 | 2 | Patchify | none | grid (Snakemake 并行) |
 | 3 | Segmentation | provided_cells | fov_cell_id / cellpose / baysor |
-| 4 | Spatial Domain | spatial_leiden | spatial_kmeans / graphst |
-| 5 | Subcellular Domain | hdbscan | dbscan / leiden_spatial / phenograph / none |
-| 6 | Analysis | leiden | kmeans / scvi |
-| 7 | Annotation | rank_marker | cluster_label / celltypist |
-| 8 | Spatial Analysis | squidpy | scfates |
-| 9 | Subcellular Analysis | rna_localization | scrin |
+| 4 | Analysis | leiden | kmeans / scvi |
+| 5 | Annotation | rank_marker | cluster_label / celltypist |
+| 6 | Spatial Analysis | squidpy (domain=spatial_leiden) | domain: spatial_kmeans / none; analysis: scfates |
+| 7 | Subcellular Analysis | rna_localization (domain=hdbscan) | domain: dbscan / leiden_spatial / phenograph / none; analysis: scrin |
 
 ---
 

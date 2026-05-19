@@ -3,7 +3,7 @@
 SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台，支持 CosMx / Xenium / MERFISH / Stereo-seq 四个平台，25 个后端，9 个 Pipeline 步骤。内置统一数据集数据库（1437 条记录），含静态前端浏览器与开发模式编辑器。
 
 - 统一数据层：SpatialData (.zarr) 为中心容器
-- 插件式管线：9 步骤、25 后端、每个后端可独立替换
+- 插件式管线：7 步骤、20+ 后端、每个后端可独立替换
 - 能力声明：后端通过 `@declare_capabilities` 声明支持的分析，前端动态渲染
 - **一键运行**：`subcellspace run data.csv` 自动检测平台 → 摄入 → 分析 → 导出
 - **CLI 优先**：所有分析通过命令行执行，适合计算集群；前端是纯数据浏览器
@@ -17,10 +17,8 @@ SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台�
 ## 快速开始
 
 ```bash
-# 1. 创建环境 & 安装依赖
-conda env create -f environment.yml
-conda activate subcellspace
-pip install -e ".[dev]"
+# 1. 安装（一行搞定所有默认后端）
+pip install subcellspace
 
 # 2. 一键运行（自动检测平台类型）
 subcellspace run data/test/Mouse_brain_CosMx_1000cells.csv -o outputs/my_run/
@@ -30,10 +28,17 @@ subcellspace run data/test/Mouse_brain_CosMx_1000cells.csv -o outputs/my_run/
 subcellspace run data.csv -o outputs/my_run/ \
     --clustering-backend kmeans --subcellular-domain-backend none
 
-# 4. (可选) 启动 API + 前端浏览
+# 4. 安装可选后端
+pip install subcellspace[cellpose,scvi,celltypist]  # 分割/聚类/注释
+pip install subcellspace[baysor]                     # Baysor 分割 (需 Julia)
+pip install subcellspace[all]                        # 全部
+
+# 5. (可选) 启动 API + 前端浏览
 subcellspace-api &              # 后端 API: http://127.0.0.1:8000
 cd frontend && npm run dev      # 前端: http://127.0.0.1:5173
 ```
+
+> **Conda 用户**: `conda env create -f environment.yml && conda activate subcellspace && pip install -e .`
 
 ### 分步使用（高级）
 
@@ -56,6 +61,7 @@ subcellspace export data.zarr -o outputs/export/
 | **Xenium** | `x_location` + `feature_name` + `cell_id` 或 `.parquet` | `.csv` / `.parquet` |
 | **MERFISH** | `global_x` + `global_y` + `gene` + `barcode_id` | `.csv` |
 | **Stereo-seq** | `geneID` + `x` + `y` 或 `.gem` | `.gem` / `.tsv` |
+| **Generic** | `x` + `y` + `gene` (任何 CSV，自动检测列名) | `.csv` / `.tsv` / `.csv.gz` |
 
 > 也可以显式指定：`--platform xenium`
 
@@ -82,30 +88,39 @@ subcellspace backends              # 查看所有后端
 | `--no-export` | off | 跳过前端文件导出 |
 | `--keep-zarr` | off | 保留中间 .zarr 文件 |
 
-## 环境安装（分步）
+## 环境安装
 
-项目提供分步安装脚本，每步可独立运行：
+### pip 用户（推荐）
 
-| 脚本 | 作用 |
-|------|------|
-| `scripts/setup-step0.sh` | 创建 conda 环境 (Python 3.12) |
-| `scripts/setup-step1.sh` | 安装核心 Python 依赖 + 运行测试 |
-| `scripts/setup-step2.sh` | 安装前端 npm 依赖 |
-| `scripts/setup-step3.sh` | 克隆并安装第三方后端工具 |
-| `scripts/setup-tools.sh` | 第三方工具管理（list/clone/install） |
-| `scripts/reproduce.sh` | 一键完整安装 (Step 0-3) |
+```bash
+pip install subcellspace              # 核心安装（所有默认后端）
+pip install subcellspace[all]         # 全部可选后端
+pip install subcellspace[cellpose]    # 按需选择
+```
 
-## Pipeline 步骤 (9 步)
+### Conda 用户
+
+```bash
+conda env create -f environment.yml
+conda activate subcellspace
+pip install -e ".[dev]"
+cd frontend && npm install
+```
+
+如需第三方工具（spARC, PhenoGraph, scFates）：
+```bash
+bash setup-tools.sh clone spARC PhenoGraph scFates
+```
+
+## Pipeline 步骤 (7 步)
 
 1. **Denoise** — 转录本去噪（4: none / intracellular / nuclear_only / sparc）
 2. **Patchify** — 空间网格分块（2: none / grid），支持 Snakemake 并行调度
 3. **Segmentation** — 细胞分割（4: provided_cells / fov_cell_id / cellpose / baysor）
-4. **Spatial Domain** — 组织级空间域识别（3: spatial_leiden / spatial_kmeans / graphst）
-5. **Subcellular Spatial Domain** — 亚细胞聚类（5: hdbscan / dbscan / leiden_spatial / phenograph / none）
-6. **Analysis** — 表达聚类（3: leiden / kmeans / scvi）
-7. **Annotation** — 细胞注释（3: cluster_label / rank_marker / celltypist）
-8. **Spatial Analysis** — 空间分析（2: squidpy - SVG/邻域/共定位, scfates - 树推断/伪时间）
-9. **Subcellular Analysis** — 亚细胞分析（2: rna_localization / scrin）
+4. **Analysis** — 表达聚类（3: leiden / kmeans / scvi）
+5. **Annotation** — 细胞注释（3: cluster_label / rank_marker / celltypist）
+6. **Spatial Analysis** — 空间域识别 + 空间分析（spatial_leiden / spatial_kmeans → squidpy: SVG/邻域/共定位, scfates: 树推断/伪时间）
+7. **Subcellular Analysis** — 亚细胞域聚类 + 亚细胞分析（hdbscan / dbscan / leiden_spatial / phenograph → rna_localization / scrin）
 
 详细后端列表与能力声明：`subcellspace backends` 或 GET `/api/meta/backends`。完整状态见 [plan.md](plan.md)。
 

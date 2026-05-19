@@ -3,7 +3,7 @@
 # SubCellSpace — Unified Tool Management Script
 # =============================================================================
 # Usage:
-#   bash scripts/setup-tools.sh [command] [options]
+#   bash setup-tools.sh [command] [options]
 #
 # Commands:
 #   list                 List all available tools (default if no command given)
@@ -15,13 +15,13 @@
 #   info   [name...]     Show detailed info about specified tool(s)
 #
 # Examples:
-#   bash scripts/setup-tools.sh list
-#   bash scripts/setup-tools.sh clone spARC GraphST
-#   bash scripts/setup-tools.sh clone --all
-#   bash scripts/setup-tools.sh clone --ssh --all
-#   bash scripts/setup-tools.sh install spARC CellTypist
-#   bash scripts/setup-tools.sh install --all
-#   bash scripts/setup-tools.sh info spARC
+#   bash setup-tools.sh list
+#   bash setup-tools.sh clone spARC PhenoGraph scFates
+#   bash setup-tools.sh clone --all
+#   bash setup-tools.sh clone --ssh --all
+#   bash setup-tools.sh install spARC PhenoGraph scFates
+#   bash setup-tools.sh install --all
+#   bash setup-tools.sh info spARC
 #
 # Prerequisites:
 #   Step 1 completed (subcellspace conda environment exists)
@@ -230,7 +230,7 @@ cmd_clone() {
         if $USE_PYTHON; then
             IFS=' ' read -r -a target_names <<< "$(get_all_tool_names "$PYTHON_BIN")"
         else
-            fail "Cannot parse YAML without PyYAML. Use: bash scripts/setup-tools.sh clone <tool_name>"
+            fail "Cannot parse YAML without PyYAML. Use: bash setup-tools.sh clone <tool_name>"
             return 1
         fi
     fi
@@ -358,7 +358,7 @@ cmd_install() {
             # Resolve path relative to project dir
             local full_path="$PROJECT_DIR/$local_path"
             if [ ! -d "$full_path" ]; then
-                warn "Tool '$name' not cloned yet — run 'bash scripts/setup-tools.sh clone $name' first"
+                warn "Tool '$name' not cloned yet — run 'bash setup-tools.sh clone $name' first"
                 skipped=$((skipped + 1))
                 continue
             fi
@@ -428,7 +428,7 @@ case "$COMMAND" in
         ;;
     *)
         echo "Unknown command: $COMMAND"
-        echo "Usage: bash scripts/setup-tools.sh [list|clone|install|info] [options]"
+        echo "Usage: bash setup-tools.sh [list|clone|install|info] [options]"
         exit 1
         ;;
 esac

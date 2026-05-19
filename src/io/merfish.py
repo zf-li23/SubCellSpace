@@ -35,7 +35,12 @@ class MERFISHIngestor(BaseIngestor):
 
     def _parse_transcripts(self, input_path: str | Path) -> pd.DataFrame:
         resolved = self._resolve_path(input_path)
-        df = pd.read_csv(resolved)
+        if resolved.suffix == ".gz":
+            import gzip
+            with gzip.open(resolved, "rt") as f:
+                df = pd.read_csv(f)
+        else:
+            df = pd.read_csv(resolved)
 
         # Accept either long or short coordinate column names.
         # If BOTH sets exist (e.g. vizgen data), prefer long names

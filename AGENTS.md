@@ -1,13 +1,13 @@
 # SubCellSpace — AGENTS.md
 
-> **Last updated**: 2026-05-14  
-> **Current phase**: Phase 0-3 complete, Phase 4 in progress (Xenium 53→350), Phase 5 pending
+> **Last updated**: 2026-05-19  
+> **Current phase**: Phase 0-4 complete, Phase 5 in progress (Xenium data completion)
 
 ---
 
 ## 1. Project Overview
 
-SubCellSpace is a modular **subcellular spatial transcriptomics** analysis platform supporting CosMx / Xenium / MERFISH platforms with 9 pipeline steps and 25 backend implementations. The frontend is a pure static viewer; all analysis runs via CLI on a compute cluster.
+SubCellSpace is a modular **subcellular spatial transcriptomics** analysis platform supporting CosMx / Xenium / MERFISH platforms with 7 pipeline steps and 20+ backend implementations, built on top of sopa + spatialdata. The frontend is a pure static viewer; all analysis runs via CLI on a compute cluster.
 
 - **Python backend**: CLI + FastAPI server (`src/`)
 - **React frontend**: Pure data browser (no business logic) (`frontend/`)
@@ -235,13 +235,19 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 - Pagination
 - Auto-re-export after each mutation
 
-### 🔄 Phase 4: Data completion (in progress)
+### ✅ Phase 4: Usability refactor (completed 2026-05-19)
+- Pipeline simplified from 9→7 steps (spatial_domain/subcellular_spatial_domain merged)
+- GraphST removed; Baysor/SCRIN kept as optional extras
+- Core dependency: `sopa>=2.2` added; all default backends pip-installable
+- Install: `pip install subcellspace` (was 4-step setup)
+- Removed: `scripts/setup-step3.sh`, STAGATE/SpaGCN/GraphST from tools registry
+
+### 🔄 Phase 5: Data completion (in progress)
 - Xenium expanded 53 → 350 rows (128 ready, 222 pending)
 - Fill in missing `project_url` and `download_url` for all Xenium rows
 - Compute `estimated_cell_count` from actual data files on cluster
-- Extract remaining Xenium GEO tarballs (37 files on cluster)
 
-### ⏳ Phase 5: CI/CD & docs
+### ⏳ Phase 6: CI/CD & docs
 - `DATASETS.md` auto-generated summary
 - Validate URLs (HEAD request check)
 
@@ -304,3 +310,107 @@ This ensures:
 - Changes are version-controlled locally in `scripts/`
 - The cluster never has its raw data directly modified
 - Scripts can be re-run or audited later
+
+---
+
+## 10. Cluster Pipeline Workflow
+
+The compute cluster (`a-cluster`, 192.168.1.2, 377 GB RAM, 20 CPUs) has **no internet access**. All Python packages must be transferred from the local machine. Data files live on `/data3/yangxr002/` (218 TB, 18T free) and do NOT need to be copied.
+
+### Infrastructure
+
+| Component | Local | Cluster |
+|-----------|-------|---------|
+| conda version | 25.7.0 | 25.7.0 (in `~/miniconda3/`) |
+| Python | 3.12.13 | 3.13.5 (base); our env = 3.12.13 (copied) |
+| SubCellSpace env | `~/miniconda3/envs/subcellspace/` | `~/miniconda3/envs/subcellspace/` (rsync'd) |
+| Work dir | `~/SubCellSpace/` | `~/zf-li23/subcellspace/` |
+| Data | `data/test/` (small test sets) | `/data3/yangxr002/CosMx/`, `Xenium/`, `MERFISH/` |
+| Network | Internet ✅ | **No internet** ❌ |
+
+### Initial Setup (one-time)
+
+```bash
+# 1. Create work dir on cluster
+ssh -J bio-download a-cluster "mkdir -p ~/zf-li23/subcellspace"
+
+# 2. Transfer conda environment (3 GB, ~10 min through jumpbox)
+rsync -avz -e "ssh -J bio-download" \
+  ~/miniconda3/envs/subcellspace/ \
+  a-cluster:~/miniconda3/envs/subcellspace/
+
+# 3. Transfer source code (1 MB, instant)
+rsync -avz -e "ssh -J bio-download" \
+  ~/SubCellSpace/src/ ~/SubCellSpace/pyproject.toml \
+  a-cluster:~/zf-li23/subcellspace/
+
+# 4. Transfer helper scripts
+scp -o ProxyJump=bio-download \
+  scripts/cluster_subcellspace.py \
+  a-cluster:~/zf-li23/subcellspace/
+```
+
+### Environment Caveats
+
+- **Environment is NOT relocatable out-of-the-box.** The copied conda env has hardcoded shebangs pointing to local paths. Do NOT run `pip` or scripts with shebangs directly.
+- **Workaround**: Always invoke Python via the full path:
+  ```bash
+  ~/miniconda3/envs/subcellspace/bin/python cluster_subcellspace.py run ...
+  ```
+- **`pip install -e` won't work** (setuptools subprocess fails on shebangs). Instead, use `cluster_subcellspace.py` which does `sys.path.insert(0, ".")` before importing `src.cli.main()`. All deps are already in the copied env — no pip install needed.
+
+### Syncing Code Changes
+
+After any local code edit, push to cluster in seconds:
+
+```bash
+rsync -avz -e "ssh -J bio-download" \
+  ~/SubCellSpace/src/ \
+  a-cluster:~/zf-li23/subcellspace/src/
+```
+
+If `pyproject.toml` dependencies changed, re-transfer the entire env (3 GB).
+
+### Running Pipelines
+
+On the cluster (via SSH):
+```bash
+ssh -J bio-download a-cluster
+cd ~/zf-li23/subcellspace
+PY=~/miniconda3/envs/subcellspace/bin/python
+
+# Data files are already on /data3 — no transfer needed
+$PY cluster_subcellspace.py run \
+  /data3/yangxr002/CosMx/P0032/D0059/GSM8522533_6226_S496622_tx_file.csv \
+  -o outputs/cosmx_D0059 \
+  --min-transcripts 10 --min-genes 5
+
+# For long runs, use nohup:
+nohup $PY cluster_subcellspace.py run [args] > outputs/run.log 2>&1 &
+```
+
+### Test Datasets on Cluster
+
+Three representative datasets selected for QA testing (2026-05-19):
+
+| ID | Platform | File | Size | Transcripts | Cells |
+|----|----------|------|------|-------------|-------|
+| D0059 | CosMx | `…/P0032/D0059/GSM8522533_6226_S496622_tx_file.csv` | 167 MB | 2.4M | 8,726 |
+| D1033 | Xenium | `…/P1012/D1033/transcripts.csv.gz` | 205 MB | 5.1M | 56,510 |
+| D2010 | MERFISH | `…/P2005/D2010/HumanOvarianCancerPatient2Slice2_detected_transcripts.csv` | 1.4 GB | 32.1M | 550 |
+
+Full paths: `/data3/yangxr002/{CosMx|Xenium|MERFISH}/...` as above.
+
+### Pulling Results
+
+```bash
+rsync -avz -e "ssh -J bio-download" \
+  a-cluster:~/zf-li23/subcellspace/outputs/ \
+  ~/SubCellSpace/outputs/
+```
+
+### Known Issues
+
+- **Xenium/MERFISH don't have `CellComp` column.** Use `--denoise-backend none` for these platforms. The `intracellular` fallback has a bug that drops all transcripts instead of passing through. Fix pending.
+- **`anndata.settings.allow_write_nullable_strings`** must be `True` for Xenium/MERFISH (fixed in `pipeline_engine.py` 2026-05-19).
+- **hdbscan domain clustering** may show "not available" warning on cluster — falls back to `rna_localization` gracefully.

@@ -25,7 +25,7 @@ def _suppress_noise() -> None:
 
 _suppress_noise()
 
-from .constants import STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS, STEP_ANNOTATION, STEP_SUBCELLULAR_SPATIAL_DOMAIN, STEP_SPATIAL_ANALYSIS
+from .constants import STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS, STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS, STEP_SUBCELLULAR_ANALYSIS
 from .io import get_available_platforms, ingest, detect_platform
 from .registry import get_available_backends, registry
 
@@ -49,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run full pipeline: auto-ingest → analyze → export")
     run_parser.add_argument("input_path", type=Path, help="Path to .zarr or raw data file (.csv/.parquet/.gem)")
     run_parser.add_argument("--platform", type=str, default="auto",
-                            help="Platform: auto (detect) / cosmx / xenium / merfish / stereoseq")
+                            help="Platform: auto (detect) / cosmx / xenium / merfish / stereoseq / generic")
     run_parser.add_argument("--output-dir", "-o", type=Path, default=Path("outputs/pipeline_run"))
     run_parser.add_argument("--min-transcripts", type=int, default=10)
     run_parser.add_argument("--min-genes", type=int, default=10)
@@ -61,11 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--clustering-backend", choices=get_available_backends("analysis"), default="leiden")
     run_parser.add_argument("--leiden-resolution", type=float, default=1.0)
     run_parser.add_argument("--annotation-backend", choices=get_available_backends("annotation"), default="rank_marker")
-    run_parser.add_argument("--spatial-domain-backend", choices=get_available_backends("spatial_domain"), default="spatial_leiden")
-    run_parser.add_argument("--spatial-domain-resolution", type=float, default=1.0)
-    run_parser.add_argument("--n-spatial-domains", type=int, default=None)
-    run_parser.add_argument("--subcellular-domain-backend", choices=get_available_backends("subcellular_spatial_domain"), default="hdbscan")
+    run_parser.add_argument("--domain-backend", choices=["spatial_leiden", "spatial_kmeans", "none"], default="spatial_leiden",
+                            help="Spatial domain identification backend (part of spatial_analysis step)")
     run_parser.add_argument("--spatial-analysis-backend", choices=get_available_backends("spatial_analysis"), default="squidpy")
+    run_parser.add_argument("--subcellular-domain-backend", choices=["hdbscan", "dbscan", "leiden_spatial", "phenograph", "none"], default="hdbscan",
+                            help="Subcellular domain clustering backend (part of subcellular_analysis step)")
     run_parser.add_argument("--strict-contracts", action="store_true", help="Treat data contract violations as hard errors")
     run_parser.add_argument("--no-export", action="store_true", help="Skip export step")
     run_parser.add_argument("--keep-zarr", action="store_true", help="Keep intermediate .zarr file")
@@ -234,10 +234,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
         clustering_backend=args.clustering_backend,
         leiden_resolution=args.leiden_resolution,
         annotation_backend=args.annotation_backend,
-        spatial_domain_backend=args.spatial_domain_backend,
-        spatial_domain_resolution=args.spatial_domain_resolution,
-        n_spatial_domains=args.n_spatial_domains,
-        subcellular_spatial_domain_backend=args.subcellular_domain_backend,
+        domain_backend=args.domain_backend,
+        subcellular_domain_backend=args.subcellular_domain_backend,
         spatial_analysis_backend=args.spatial_analysis_backend,
         strict_contracts=getattr(args, "strict_contracts", False),
     )
@@ -271,9 +269,8 @@ def _do_export(sdata, output_dir: Path) -> None:
 
     caps = get_all_capabilities()
     backend_options = {}
-    for step_name in [STEP_DENOISE, STEP_SEGMENTATION, "spatial_domain",
-                       STEP_SUBCELLULAR_SPATIAL_DOMAIN, STEP_ANALYSIS,
-                       STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS]:
+    for step_name in [STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS,
+                       STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS, STEP_SUBCELLULAR_ANALYSIS]:
         backends = {}
         for b in get_available_backends(step_name):
             backends[b] = {"available": True, "capabilities": caps.get(step_name, {}).get(b, [])}
@@ -339,9 +336,8 @@ def _cmd_export(args: argparse.Namespace) -> None:
     from .registry import get_all_capabilities, get_available_backends
     caps = get_all_capabilities()
     backend_options = {}
-    for step_name in [STEP_DENOISE, STEP_SEGMENTATION, "spatial_domain",
-                       STEP_SUBCELLULAR_SPATIAL_DOMAIN, STEP_ANALYSIS,
-                       STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS]:
+    for step_name in [STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS,
+                       STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS, STEP_SUBCELLULAR_ANALYSIS]:
         backends = {}
         available = get_available_backends(step_name)
         step_caps = caps.get(step_name, {})
@@ -448,9 +444,8 @@ def _cmd_backends(args: argparse.Namespace) -> None:
 
     caps = get_all_capabilities()
     result = {}
-    for step_name in [s for s in [STEP_DENOISE, STEP_SEGMENTATION, "spatial_domain",
-                                   STEP_SUBCELLULAR_SPATIAL_DOMAIN, STEP_ANALYSIS,
-                                   STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS]]:
+    for step_name in [s for s in [STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS,
+                                   STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS, STEP_SUBCELLULAR_ANALYSIS]]:
         backends = {}
         available = get_available_backends(step_name)
         step_caps = caps.get(step_name, {})

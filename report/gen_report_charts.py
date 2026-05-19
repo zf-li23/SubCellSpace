@@ -214,7 +214,7 @@ def fig3():
                   f"{val}", va="center", fontsize=9, fontweight="bold", color="#333")
     ax_b.set_xlim(0, 6.5)
     ax_b.set_xlabel("Available backends")
-    ax_b.set_title("(b) Pipeline: 9 steps, 28 backends", fontweight="bold", loc="left", fontsize=10)
+    ax_b.set_title("(b) Pipeline: 7 steps, 20+ backends", fontweight="bold", loc="left", fontsize=10)
     ax_b.spines["top"].set_visible(False); ax_b.spines["right"].set_visible(False)
     ax_b.tick_params(left=False, labelsize=7)
 

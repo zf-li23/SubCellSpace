@@ -10,6 +10,15 @@ import pytest
 from src.models import StepResult
 from src.steps.segmentation import _CELLPOSE_AVAILABLE, assign_cells
 
+
+@pytest.fixture
+def _mock_baysor_exe(monkeypatch):
+    """Mock _find_baysor_executable so Baysor tests work without the CLI."""
+    monkeypatch.setattr(
+        "src.steps.segmentation._find_baysor_executable",
+        lambda: "fake_baysor",
+    )
+
 # ═══════════════════════════════════════════════════════════════════════
 # Existing tests (preserved and extended)
 # ═══════════════════════════════════════════════════════════════════════
@@ -213,7 +222,7 @@ class TestBaysorBackend:
         })
 
     @patch("src.steps.segmentation.subprocess.run")
-    def test_baysor_success(self, mock_run):
+    def test_baysor_success(self, mock_run, _mock_baysor_exe):
         """Baysor assigns transcripts to cells successfully."""
         df = self._make_transcript_df(30)
 
@@ -253,7 +262,7 @@ class TestBaysorBackend:
         assert all(c.startswith("baysor_") for c in result.output["cell"].unique())
 
     @patch("src.steps.segmentation.subprocess.run")
-    def test_baysor_filters_noise(self, mock_run):
+    def test_baysor_filters_noise(self, mock_run, _mock_baysor_exe):
         """Baysor cell '0' is treated as noise and filtered out."""
         df = self._make_transcript_df(20)
 
@@ -287,7 +296,7 @@ class TestBaysorBackend:
         assert result.summary["n_cells_assigned"] == 3
 
     @patch("src.steps.segmentation.subprocess.run")
-    def test_baysor_cli_not_found_raises(self, mock_run):
+    def test_baysor_cli_not_found_raises(self, mock_run, _mock_baysor_exe):
         """When Baysor CLI is not installed, a RuntimeError should be raised."""
         df = self._make_transcript_df(10)
         mock_run.side_effect = FileNotFoundError()
@@ -296,7 +305,7 @@ class TestBaysorBackend:
             assign_cells(df, "baysor")
 
     @patch("src.steps.segmentation.subprocess.run")
-    def test_baysor_failure_raises(self, mock_run):
+    def test_baysor_failure_raises(self, mock_run, _mock_baysor_exe):
         """When Baysor returns non-zero exit code, a RuntimeError should be raised."""
         df = self._make_transcript_df(10)
 

@@ -21,8 +21,6 @@ class TestHealthAndMeta:
         data = response.json()
         assert "denoise" in data
         assert "segmentation" in data
-        assert "spatial_domain" in data
-        assert "subcellular_spatial_domain" in data
         assert "spatial_analysis" in data
         assert "subcellular_analysis" in data
         for key in data:
@@ -103,7 +101,7 @@ class TestCorsMiddleware:
 
 class TestPlotsEndpoint:
     def test_plots_without_params(self):
-        """Test that /api/plots without params returns 404 or 200 (run-dependent)."""
+        """Test that /api/plots without params returns 400 or 404 (run-dependent)."""
         response = client.get("/api/plots")
         # Will fail because there's no default report, but shouldn't crash
-        assert response.status_code in (200, 404)
+        assert response.status_code in (200, 400, 404)

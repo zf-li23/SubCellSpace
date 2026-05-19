@@ -76,8 +76,6 @@ STEP_TO_KWARG: dict[str, str] = {
     "patchify": "patchify_backend",
     "analysis": "clustering_backend",
     "annotation": "annotation_backend",
-    "spatial_domain": "spatial_domain_backend",
-    "subcellular_spatial_domain": "subcellular_spatial_domain_backend",
     "spatial_analysis": "spatial_analysis_backend",
     "subcellular_analysis": "subcellular_analysis_backend",
 }

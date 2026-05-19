@@ -79,8 +79,8 @@ class TestRunPipeline:
             segmentation_backend="provided_cells",
             clustering_backend="leiden",
             annotation_backend="rank_marker",
-            spatial_domain_backend="spatial_leiden",
-            subcellular_spatial_domain_backend="none",
+            domain_backend="spatial_leiden",
+            subcellular_domain_backend="none",
         )
         assert result is not None
 
@@ -96,7 +96,7 @@ class TestRunPipeline:
             segmentation_backend="provided_cells",
             clustering_backend="kmeans",
             annotation_backend="cluster_label",  # avoids rank_marker crash on singleton clusters
-            spatial_domain_backend="spatial_kmeans",
+            domain_backend="spatial_kmeans",
             subcellular_domain_backend="none",
             spatial_analysis_backend="squidpy",
         )

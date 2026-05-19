@@ -34,8 +34,13 @@ class StereoSeqIngestor(BaseIngestor):
 
     def _parse_transcripts(self, input_path: str | Path) -> pd.DataFrame:
         resolved = self._resolve_path(input_path)
-        sep = "\t" if resolved.suffix == ".gem" else ","
-        df = pd.read_csv(resolved, sep=sep)
+        sep = "\t" if resolved.suffix in (".gem", ".tsv") else ","
+        if resolved.suffix == ".gz":
+            import gzip
+            with gzip.open(resolved, "rt") as f:
+                df = pd.read_csv(f, sep=sep)
+        else:
+            df = pd.read_csv(resolved, sep=sep)
 
         # geneID is preferred; fall back to gene
         if "geneID" in df.columns:

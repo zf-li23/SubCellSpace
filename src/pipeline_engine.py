@@ -282,8 +282,8 @@ def run_pipeline(
         _run_step(step_cfg.name, backend, ctx, step_params)
 
         # Build AnnData right after segmentation so downstream steps
-        # (spatial_domain, subcellular_spatial_domain, analysis,
-        #  annotation) have access to it.
+        # (analysis, annotation, spatial_analysis, subcellular_analysis)
+        #  have access to it.
         if step_cfg.name == "segmentation" and ctx.adata is None and ctx.segmented_df is not None:
             ctx.adata = build_cell_level_adata(ctx.segmented_df)
             # ── QC guard: skip downstream if no cells survived ──────
@@ -399,6 +399,8 @@ def run_pipeline(
     # Extract qc_metrics from adata.uns for the report (R2)
     qc_metrics = dict(ctx.adata.uns.get("qc_metrics", {}))
 
+    import anndata
+    anndata.settings.allow_write_nullable_strings = True
     ctx.adata.write_h5ad(adata_path)
     if ctx.segmented_df is not None:
         # Strip non-JSON-serializable attrs before writing parquet

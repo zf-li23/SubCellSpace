@@ -14,8 +14,9 @@ PLATFORM_COSMX = "cosmx"
 PLATFORM_XENIUM = "xenium"
 PLATFORM_MERFISH = "merfish"
 PLATFORM_STEREOSEQ = "stereoseq"
+PLATFORM_GENERIC = "generic"  # minimal CSV: x, y, gene columns only
 
-ALL_PLATFORMS = [PLATFORM_COSMX, PLATFORM_XENIUM, PLATFORM_MERFISH, PLATFORM_STEREOSEQ]
+ALL_PLATFORMS = [PLATFORM_COSMX, PLATFORM_XENIUM, PLATFORM_MERFISH, PLATFORM_STEREOSEQ, PLATFORM_GENERIC]
 
 # ── Canonical column names for raw_transcripts ───────────────────────
 #
@@ -130,8 +131,6 @@ ATTRS_CELL_ID_SOURCE = "cell_id_source"  # "native" | "inferred" | "missing"
 STEP_DENOISE = "denoise"
 STEP_SEGMENTATION = "segmentation"
 STEP_PATCHIFY = "patchify"
-STEP_SPATIAL_DOMAIN = "spatial_domain"
-STEP_SUBCELLULAR_SPATIAL_DOMAIN = "subcellular_spatial_domain"
 STEP_ANALYSIS = "analysis"
 STEP_ANNOTATION = "annotation"
 STEP_SPATIAL_ANALYSIS = "spatial_analysis"
@@ -141,7 +140,7 @@ STEP_SUBCELLULAR_ANALYSIS = "subcellular_analysis"
 #
 # The CLI uses abbreviated names (e.g. ``--subcellular-domain-backend``)
 # but the pipeline engine resolves backends by ``{step_name}_backend``
-# (e.g. ``subcellular_spatial_domain_backend``).  This table bridges
+# (e.g. ``subcellular_analysis_backend``).  This table bridges
 # the gap so that adding a new step or CLI flag only requires one entry.
 
 STEP_ARG_ALIASES: dict[str, str] = {
@@ -149,12 +148,11 @@ STEP_ARG_ALIASES: dict[str, str] = {
     "denoise_backend":          STEP_DENOISE,
     "patchify_backend":         STEP_PATCHIFY,
     "segmentation_backend":     STEP_SEGMENTATION,
-    "spatial_domain_backend":   STEP_SPATIAL_DOMAIN,
-    "subcellular_domain_backend": STEP_SUBCELLULAR_SPATIAL_DOMAIN,
-    "subcellular_spatial_domain_backend": STEP_SUBCELLULAR_SPATIAL_DOMAIN,
     "clustering_backend":       STEP_ANALYSIS,
     "analysis_backend":         STEP_ANALYSIS,
     "annotation_backend":       STEP_ANNOTATION,
     "spatial_analysis_backend": STEP_SPATIAL_ANALYSIS,
     "subcellular_analysis_backend": STEP_SUBCELLULAR_ANALYSIS,
+    "domain_backend":           STEP_SPATIAL_ANALYSIS,   # spatial domain is now part of spatial_analysis
+    "subcellular_domain_backend": STEP_SUBCELLULAR_ANALYSIS,  # subcellular domain now part of subcellular_analysis
 }

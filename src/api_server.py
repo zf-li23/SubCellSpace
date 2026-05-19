@@ -91,9 +91,7 @@ class CosmxRunRequest(BaseModel):
     clustering_backend: str = "leiden"
     leiden_resolution: float = 1.0
     annotation_backend: str = "rank_marker"
-    spatial_domain_backend: str = "spatial_leiden"
-    spatial_domain_resolution: float = 1.0
-    n_spatial_domains: int | None = None
+    domain_backend: str = "spatial_leiden"
     subcellular_domain_backend: str = "hdbscan"
     spatial_analysis_backend: str = "squidpy"
 
@@ -158,14 +156,12 @@ def _resolve_output_dir(request: CosmxRunRequest) -> Path:
                 request.segmentation_backend,
                 request.clustering_backend,
                 request.annotation_backend,
-                request.spatial_domain_backend,
+                request.domain_backend,
                 request.subcellular_domain_backend,
                 request.spatial_analysis_backend,
                 str(request.min_transcripts),
                 str(request.min_genes),
                 str(request.leiden_resolution),
-                str(request.spatial_domain_resolution),
-                str(request.n_spatial_domains),
             ]
         ).encode("utf-8")
     ).hexdigest()[:12]
@@ -178,14 +174,8 @@ def _run_pipeline_from_request(request: CosmxRunRequest) -> dict[str, Any]:
     _validate_backend("segmentation_backend", request.segmentation_backend, get_available_backends("segmentation"))
     _validate_backend("clustering_backend", request.clustering_backend, get_available_backends("analysis"))
     _validate_backend("annotation_backend", request.annotation_backend, get_available_backends("annotation"))
-    _validate_backend(
-        "spatial_domain_backend", request.spatial_domain_backend, get_available_backends("spatial_domain")
-    )
-    _validate_backend(
-        "subcellular_domain_backend",
-        request.subcellular_domain_backend,
-        get_available_backends("subcellular_spatial_domain"),
-    )
+    # domain_backend and subcellular_domain_backend are sub-parameters of
+    # spatial_analysis / subcellular_analysis steps, validated by the runner.
     _validate_backend(
         "spatial_analysis_backend",
         request.spatial_analysis_backend,
@@ -212,10 +202,8 @@ def _run_pipeline_from_request(request: CosmxRunRequest) -> dict[str, Any]:
         clustering_backend=request.clustering_backend,
         leiden_resolution=request.leiden_resolution,
         annotation_backend=request.annotation_backend,
-        spatial_domain_backend=request.spatial_domain_backend,
-        spatial_domain_resolution=request.spatial_domain_resolution,
-        n_spatial_domains=request.n_spatial_domains,
-        subcellular_spatial_domain_backend=request.subcellular_domain_backend,
+        domain_backend=request.domain_backend,
+        subcellular_domain_backend=request.subcellular_domain_backend,
         spatial_analysis_backend=request.spatial_analysis_backend,
     )
 
@@ -251,8 +239,7 @@ def backends() -> dict[str, Any]:
     """Return all backends with capabilities."""
     caps = get_all_capabilities()
     result: dict[str, Any] = {}
-    for step_name in ["denoise", "segmentation", "spatial_domain",
-                       "subcellular_spatial_domain", "analysis",
+    for step_name in ["denoise", "segmentation", "analysis",
                        "annotation", "spatial_analysis", "subcellular_analysis"]:
         available = get_available_backends(step_name)
         step_caps = caps.get(step_name, {})
@@ -281,9 +268,7 @@ def pipeline_run(
     clustering_backend: str = Body(default="leiden"),
     leiden_resolution: float = Body(default=1.0),
     annotation_backend: str = Body(default="rank_marker"),
-    spatial_domain_backend: str = Body(default="spatial_leiden"),
-    spatial_domain_resolution: float = Body(default=1.0),
-    n_spatial_domains: int | None = Body(default=None),
+    domain_backend: str = Body(default="spatial_leiden"),
     subcellular_domain_backend: str = Body(default="hdbscan"),
     spatial_analysis_backend: str = Body(default="squidpy"),
     subcellular_analysis_backend: str = Body(default="rna_localization"),
@@ -304,9 +289,7 @@ def pipeline_run(
         clustering_backend=clustering_backend,
         leiden_resolution=leiden_resolution,
         annotation_backend=annotation_backend,
-        spatial_domain_backend=spatial_domain_backend,
-        spatial_domain_resolution=spatial_domain_resolution,
-        n_spatial_domains=n_spatial_domains,
+        domain_backend=domain_backend,
         subcellular_domain_backend=subcellular_domain_backend,
         spatial_analysis_backend=spatial_analysis_backend,
         subcellular_analysis_backend=subcellular_analysis_backend,
@@ -348,8 +331,8 @@ def stats_by_backend() -> dict[str, Any]:
         "segmentation": "segmentation",
         "analysis": "analysis",
         "annotation": "annotation",
-        "spatial_domain": "spatial_domain",
-        "subcellular_spatial_domain": "subcellular_spatial_domain",
+        "spatial_analysis": "spatial_analysis",
+        "subcellular_analysis": "subcellular_analysis",
     }
 
     steps: dict[str, dict[str, Any]] = {}
@@ -445,7 +428,7 @@ def _collect_run(dirpath: Path, run_name: str, runs: list[dict[str, Any]]) -> No
             "segmentation_backend": params.get("segmentation_backend"),
             "clustering_backend": params.get("clustering_backend"),
             "annotation_backend": params.get("annotation_backend"),
-            "spatial_domain_backend": params.get("spatial_domain_backend"),
+            "domain_backend": params.get("domain_backend"),
             "input_csv": params.get("input_csv"),
         }
     )
@@ -624,9 +607,7 @@ def cosmx_report(
     clustering_backend: str = Query(default="leiden"),
     leiden_resolution: float = Query(default=1.0, gt=0),
     annotation_backend: str = Query(default="rank_marker"),
-    spatial_domain_backend: str = Query(default="spatial_leiden"),
-    spatial_domain_resolution: float = Query(default=1.0, gt=0),
-    n_spatial_domains: int | None = Query(default=None, ge=1),
+    domain_backend: str = Query(default="spatial_leiden"),
     subcellular_domain_backend: str = Query(default="hdbscan"),
 ) -> dict[str, Any]:
     request = CosmxRunRequest(
@@ -639,9 +620,7 @@ def cosmx_report(
         clustering_backend=clustering_backend,
         leiden_resolution=leiden_resolution,
         annotation_backend=annotation_backend,
-        spatial_domain_backend=spatial_domain_backend,
-        spatial_domain_resolution=spatial_domain_resolution,
-        n_spatial_domains=n_spatial_domains,
+        domain_backend=domain_backend,
         subcellular_domain_backend=subcellular_domain_backend,
     )
     return _run_pipeline_from_request(request)
@@ -661,8 +640,6 @@ def cosmx_benchmark(
     min_transcripts: int = Body(default=10),
     min_genes: int = Body(default=10),
     leiden_resolution: float = Body(default=1.0),
-    spatial_domain_resolution: float = Body(default=1.0),
-    n_spatial_domains: int | None = Body(default=None),
 ) -> dict[str, Any]:
     """Run the CosMx benchmark (grid search over all backend combinations).
 
@@ -683,8 +660,7 @@ def cosmx_benchmark(
         min_transcripts=min_transcripts,
         min_genes=min_genes,
         leiden_resolution=leiden_resolution,
-        spatial_domain_resolution=spatial_domain_resolution,
-        n_spatial_domains=n_spatial_domains,
+        domain_backend="spatial_leiden",
     )
 
 
