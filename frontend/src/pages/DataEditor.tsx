@@ -44,11 +44,11 @@ export default function DataEditor() {
   const [message, setMessage] = useState<string | null>(null)
 
   // Edit state
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<Partial<DatasetRow>>({})
   const [addingNew, setAddingNew] = useState(false)
   const [newRow, setNewRow] = useState<DatasetRow>(emptyRow())
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   // Filters & sort
   const [search, setSearch] = useState('')
@@ -93,7 +93,7 @@ export default function DataEditor() {
       flash('Added ✓'); setAddingNew(false); setNewRow(emptyRow()); await loadRows()
     } catch (e) { flash(`Error: ${e}`) }
   }
-  const deleteRow = async (id: number) => {
+  const deleteRow = async (id: string) => {
     if (!confirm(`Delete #${id}?`)) return
     try { await fetchJSON(`${API}/datasets/${id}`, { method: 'DELETE' }); flash('Deleted ✓'); await loadRows() }
     catch (e) { flash(`Error: ${e}`) }
@@ -112,7 +112,7 @@ export default function DataEditor() {
     } catch (e) { flash(`Error: ${e}`) }
   }
   const doExport = async () => { try { await fetchJSON(`${API}/export`, { method: 'POST' }); flash('Exported ✓') } catch (e) { flash(`Error: ${e}`) } }
-  const toggleSelect = (id: number) => setSelectedIds(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleSelect = (id: string) => setSelectedIds(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   // ── Filter + sort + paginate ────────────────────────────────────
   const platforms = useMemo(() => [...new Set(rows.map(r => r.platform))].sort(), [rows])

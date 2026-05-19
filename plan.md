@@ -1,6 +1,6 @@
 # SubCellSpace — 开发路线图
 
-> **最后更新**: 2026-05-12
+> **最后更新**: 2026-05-14
 
 ---
 
@@ -13,14 +13,16 @@
 | CLI + API + 前端 Viewer | ✅ |
 | 数据库层 (SQLite + 静态浏览 + 开发编辑器) | ✅ |
 | CI/CD + Docker + PyPI | ⏳ |
-| Xenium/MERFISH 数据补录 | ⏳ |
+| Xenium 数据补录 (53→350 行) | 🔄 |
+| MERFISH/Stereo-seq 数据完善 | ⏳ |
 
 ---
 
 ## 短期规划 (Phase 4-5)
 
-### Phase 4: 数据补录
-- 为 Xenium/MERFISH 行填充 `project_url`、`download_url`
+### Phase 4: 数据补录 (进行中)
+- Xenium 数据从 53 → 350 行已完成导入（128 ready, 222 pending）
+- 为 Xenium 行填充 `project_url`、`download_url`
 - 从集群实际数据文件计算 `estimated_cell_count`
 - 解压集群上剩余的 Xenium GEO tarball (37 个)
 
@@ -65,4 +67,6 @@
 | 平台覆盖不均衡导致发表审稿质疑 | 中 | 高 | 统一 benchmark 四平台 |
 | 第三方工具依赖断裂 | 中 | 中 | `tools/urls.yaml` 注册 + 版本锁定 |
 | 数据库损坏 | 低 | 中 | SQLite 事务 + `subcellspace db validate` |
+| API Schema 漂移 (Pydantic 模型与 DB 不一致) | 中 | 中 | 定期对比 `COLUMNS` 与 api_server 模型；2026-05-14 已修复 |
+| 文档数据过期 | 高 | 低 | 每次数据变更后更新 AGENTS.md 统计表 |
 | 前端适配移动端需求 | 低 | 低 | 表格横向滚动，非优先 |

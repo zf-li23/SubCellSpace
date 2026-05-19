@@ -1,7 +1,7 @@
 # SubCellSpace — AGENTS.md
 
-> **Last updated**: 2026-05-13  
-> **Current phase**: Phase 0-3 complete, Phase 4-5 pending
+> **Last updated**: 2026-05-14  
+> **Current phase**: Phase 0-3 complete, Phase 4 in progress (Xenium 53→350), Phase 5 pending
 
 ---
 
@@ -97,9 +97,11 @@ data/                          scripts/
 | Platform | Rows | Standard | Merged | Raw_Fragment |
 |----------|-----:|----------|--------|-------------|
 | CosMx    | 1069 | 62       | 8      | 999 |
-| Xenium   | 53   | 53       | 0      | 0 |
+| Xenium   | 350  | 350      | 0      | 0 |
 | MERFISH  | 18   | 18       | 0      | 0 |
-| **Total**| 1140 | 133      | 8      | 999 (5 pending) |
+| **Total**| 1437 | 430      | 8      | 999 |
+
+> Xenium expanded from 53 → 350 rows (128 ready, 222 pending). Most new rows are GEO datasets awaiting URL/cell-count completion.
 
 ### Frontend pages
 
@@ -233,9 +235,9 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 - Pagination
 - Auto-re-export after each mutation
 
-### ⏳ Phase 4: Data completion
-- Fill in missing columns for Xenium and MERFISH rows
-- Add `project_url` and `download_url` for all datasets
+### 🔄 Phase 4: Data completion (in progress)
+- Xenium expanded 53 → 350 rows (128 ready, 222 pending)
+- Fill in missing `project_url` and `download_url` for all Xenium rows
 - Compute `estimated_cell_count` from actual data files on cluster
 - Extract remaining Xenium GEO tarballs (37 files on cluster)
 
@@ -277,6 +279,8 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 - **Cluster directory naming**: Uses `P0001/D0001/` format with new ID scheme. DB `local_path` is always consistent.
 - **Jumpbox** (`bio-download`) contents differ from older docs. Xenium tarballs are on the cluster at `/data3/yangxr002/Xenium/*.tar`.
 - **`database_info_Xenium.csv`** is a GEO collection plan (200+ rows) on the cluster — reference only, not a data source.
+- **`api_server.py` DatasetRowModel** now matches the 19-column schema. `id`/`project_id` are `str` (e.g. "D1001"), and deleted fields (`name_zh`, `name_en`, `record_type`, `merged_from_ids`) have been removed. The DataEditor frontend has been updated to use `string` IDs.
+- **227/1437 rows are `pending`** — they have been added to the database but lack `project_url`, `download_url`, and/or `estimated_cell_count`.
 
 ---
 

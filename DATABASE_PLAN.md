@@ -1,8 +1,8 @@
 # SubCellSpace 统一数据库开发计划
 
-> **版本**: v2.0  
-> **日期**: 2026-05-13  
-> **状态**: Phase 0-3 完成，Phase 4-5 待实施
+> **版本**: v2.1  
+> **日期**: 2026-05-14  
+> **状态**: Phase 0-3 完成，Phase 4 进行中 (Xenium 53→350)，Phase 5 待实施
 
 ---
 
@@ -162,7 +162,7 @@
 - `DataEditor.tsx`：仅 `import.meta.env.DEV` 时注册路由 `/editor`
 - 行内编辑、添加/删除行、批量重编号、列显隐管理
 
-### Phase 4：数据补录 & QA
+### Phase 4：数据补录 ### Phase 4：数据补录 & QA QA (进行中)
 
 - Xenium / MERFISH 缺失列补录
 - GEO Xenium 数据延后导入
@@ -208,5 +208,5 @@ SubCellSpace/
 | 风险 | 缓解措施 |
 |------|---------|
 | SQLite 文件 Git 冲突 | `subcellspace db import` 从 CSV 重新导入即可 |
-| 前端 JSON 过大 | 当前 1140 行 × 19 列，未来超 5000 行考虑分页 |
+| 前端 JSON 过大 | 当前 1437 行 × 19 列，未来超 5000 行考虑分页 |
 | `local_path` 环境不一致 | 本地开发环境此列留空或使用相对路径映射 |

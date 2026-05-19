@@ -539,7 +539,7 @@ def _cmd_db(args: argparse.Namespace) -> None:
         count = cur.fetchone()[0]
         print(f"  [validate] {count} rows in {args.db}")
         # Check required columns are non-null
-        cur.execute("SELECT COUNT(*) FROM datasets WHERE id IS NULL OR platform IS NULL OR name_zh IS NULL")
+        cur.execute("SELECT COUNT(*) FROM datasets WHERE id IS NULL OR platform IS NULL OR name IS NULL")
         nulls = cur.fetchone()[0]
         if nulls:
             print(f"  [validate] WARNING: {nulls} rows with null required fields")

@@ -866,13 +866,16 @@ DB_PATH = REPO_ROOT / "data" / "datasets.db"
 
 
 class DatasetRowModel(BaseModel):
-    id: int | None = None
-    project_id: int
+    """Dataset row matching the 19-column schema (schema.py).
+
+    ``id`` and ``project_id`` are ``str`` because the current ID scheme
+    uses non-numeric prefixes (D/M/R + platform digit + seq).  The
+    ``db_add_dataset`` endpoint auto-generates the next available ID.
+    """
+    id: str | None = None
+    project_id: str = ""
     platform: str
-    name_zh: str
-    name_en: str | None = None
-    record_type: str
-    merged_from_ids: str | None = None
+    name: str
     project_url: str | None = None
     download_url: str | None = None
     publication_doi: str | None = None
@@ -903,13 +906,22 @@ def db_list_datasets():
 @app.post("/api/db/datasets")
 def db_add_dataset(row: DatasetRowModel):
     import sqlite3
+    # Map platform name to digit used in the ID scheme
+    platform_digit = {"CosMx": "0", "Xenium": "1", "MERFISH": "2"}.get(row.platform, "0")
     conn = sqlite3.connect(str(DB_PATH))
+    # Generate next D-type ID for the given platform
     conn.row_factory = sqlite3.Row
-    cur = conn.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM datasets")
-    next_id = cur.fetchone()[0]
+    cur = conn.execute(
+        "SELECT MAX(CAST(SUBSTR(id, 3) AS INTEGER)) FROM datasets "
+        "WHERE id LIKE ? AND id GLOB '[DM]' || ? || '*'",
+        (f"D{platform_digit}%", platform_digit),
+    )
+    max_seq = cur.fetchone()[0]
+    next_seq = (max_seq or 0) + 1
+    next_id = f"D{platform_digit}{next_seq:03d}"
     row.id = next_id
-    if row.project_id == 0:
-        row.project_id = next_id
+    if not row.project_id:
+        row.project_id = f"P{platform_digit}{next_seq:03d}"
     col_names = [c["name"] for c in COLUMNS]
     values = tuple(getattr(row, c, None) for c in col_names)
     placeholders = ", ".join("?" for _ in col_names)
@@ -924,7 +936,7 @@ def db_add_dataset(row: DatasetRowModel):
 
 
 @app.put("/api/db/datasets/{dataset_id}")
-def db_update_dataset(dataset_id: int, row: DatasetRowModel):
+def db_update_dataset(dataset_id: str, row: DatasetRowModel):
     import sqlite3
     conn = sqlite3.connect(str(DB_PATH))
     existing = conn.execute("SELECT id FROM datasets WHERE id = ?", (dataset_id,)).fetchone()
@@ -942,7 +954,7 @@ def db_update_dataset(dataset_id: int, row: DatasetRowModel):
 
 
 @app.delete("/api/db/datasets/{dataset_id}")
-def db_delete_dataset(dataset_id: int):
+def db_delete_dataset(dataset_id: str):
     import sqlite3
     conn = sqlite3.connect(str(DB_PATH))
     conn.execute("DELETE FROM datasets WHERE id = ?", (dataset_id,))
@@ -953,7 +965,7 @@ def db_delete_dataset(dataset_id: int):
 
 
 @app.post("/api/db/reorder")
-def db_reorder_ids(id_order: list[int] = Body(...)):
+def db_reorder_ids(id_order: list[str] = Body(...)):
     import sqlite3
     conn = sqlite3.connect(str(DB_PATH))
     with conn:

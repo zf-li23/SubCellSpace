@@ -1,6 +1,6 @@
 # SubCellSpace：亚细胞空间转录组学分析平台
 
-SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台，支持 CosMx / Xenium / MERFISH / Stereo-seq 四个平台，25 个后端，9 个 Pipeline 步骤。
+SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台，支持 CosMx / Xenium / MERFISH / Stereo-seq 四个平台，25 个后端，9 个 Pipeline 步骤。内置统一数据集数据库（1437 条记录），含静态前端浏览器与开发模式编辑器。
 
 - 统一数据层：SpatialData (.zarr) 为中心容器
 - 插件式管线：9 步骤、25 后端、每个后端可独立替换
