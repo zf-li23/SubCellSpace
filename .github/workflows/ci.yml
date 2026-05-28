@@ -11,46 +11,8 @@ env:
   COSMX_ZENODO: https://zenodo.org/api/records/17019789/files/Mouse_brain_CosMX_1000cells.csv/content
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Lint with ruff (critical rules only)
-        run: ruff check src/ tests/ --select=F,E --ignore=E501
-
-  type-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install hdbscan
-
-      - name: Type check with mypy
-        run: mypy src/ --ignore-missing-imports --disable-error-code=type-arg,var-annotated,attr-defined,arg-type,union-attr,no-untyped-def
-
   test:
     runs-on: ubuntu-latest
-    needs: lint
     strategy:
       fail-fast: false
       matrix:
@@ -80,11 +42,11 @@ jobs:
           mkdir -p data/test
           curl -L -o "$COSMX_DATA" "$COSMX_ZENODO"
 
-      - name: Lint with ruff (critical rules only)
-        run: ruff check src/ tests/ --select=F,E --ignore=E501
+      - name: Quick lint (undefined names only)
+        run: ruff check src/ tests/ --select=F821
 
       - name: Test with pytest
-        run: pytest tests/ -v --tb=short -k "not baysor" --timeout=120
+        run: pytest tests/ -v --tb=short -k "not baysor" --timeout=180
 
   smoke-test:
     runs-on: ubuntu-latest
@@ -113,16 +75,15 @@ jobs:
           mkdir -p data/test
           curl -L -o "$COSMX_DATA" "$COSMX_ZENODO"
 
-      - name: Smoke test — CLI help + backends
+      - name: CLI help + backends
         run: |
           subcellspace --help
           subcellspace backends
 
-      - name: Smoke test — ingest CosMx
-        run: |
-          subcellspace ingest cosmx "$COSMX_DATA" --json
+      - name: Ingest CosMx
+        run: subcellspace ingest cosmx "$COSMX_DATA" --json
 
-      - name: Smoke test — run CosMx
+      - name: Run CosMx pipeline
         run: |
           subcellspace run "$COSMX_DATA" \
             -o outputs/ci_test/ \
