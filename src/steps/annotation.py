@@ -3,9 +3,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-import anndata as ad
-import numpy as np
-import pandas as pd
 import scanpy as sc
 
 from ..models import StepResult

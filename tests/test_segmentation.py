@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -43,7 +43,7 @@ class TestAssignCells:
         summary = result.summary
         assert summary["segmentation_backend"] == "fov_cell_id"
         # Column name is the resolved column (cell_ID via alias)
-        from src.constants import resolve_col_strict, COL_CELL_ID
+        from src.constants import COL_CELL_ID, resolve_col_strict
         cell_col = resolve_col_strict(df_no_cell.columns, COL_CELL_ID)
         assert cell_col in assigned.columns
         expected_cell = f"{df_no_cell['fov'].iloc[0]}_{df_no_cell[cell_col].iloc[0]}"
@@ -236,7 +236,6 @@ class TestBaysorBackend:
 
         # Mock subprocess.run to return the segments CSV on disk
         def _mock_run(cmd, **kwargs):
-            import tempfile
             # Write the segments CSV to the output directory
             # The command is: baysor run <input_csv> <output_dir> ...
             output_dir = Path(cmd[3])  # output_dir is the 4th arg

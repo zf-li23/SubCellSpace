@@ -16,12 +16,10 @@ import base64
 import io
 import json
 import logging
-import struct
 from datetime import datetime
 from pathlib import Path
 
 import matplotlib
-import numpy as np
 import pandas as pd
 
 matplotlib.use("Agg")

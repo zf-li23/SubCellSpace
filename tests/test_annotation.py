@@ -46,6 +46,7 @@ class TestRunCellTypeAnnotation:
     def test_celltypist_lognorm_recovery(self, sample_anndata, monkeypatch):
         """celltypist should auto-recover lognorm layer if present in adata.layers."""
         import sys
+
         import pandas as pd
 
         sample_anndata.obs["cluster"] = [str(i % 3) for i in range(sample_anndata.n_obs)]
@@ -85,6 +86,7 @@ class TestRunCellTypeAnnotation:
 
         # Reload the annotation module to pick up the patched imports
         import importlib
+
         import src.steps.annotation as anno_mod
         importlib.reload(anno_mod)
 
@@ -104,6 +106,7 @@ class TestRunCellTypeAnnotation:
         The fix uses prediction.probability_matrix.max(axis=1) as fallback.
         """
         import sys
+
         import pandas as pd
 
         sample_anndata.obs["cluster"] = [str(i % 3) for i in range(sample_anndata.n_obs)]
@@ -141,6 +144,7 @@ class TestRunCellTypeAnnotation:
         monkeypatch.setitem(sys.modules, "celltypist.classifier", type(sys)("celltypist.classifier"))
 
         import importlib
+
         import src.steps.annotation as anno_mod
         importlib.reload(anno_mod)
 
@@ -154,6 +158,7 @@ class TestRunCellTypeAnnotation:
     def test_celltypist_no_conf_score_with_prob_matrix(self, sample_anndata, monkeypatch):
         """celltypist should fall back to probability_matrix when conf_score is missing."""
         import sys
+
         import pandas as pd
 
         sample_anndata.obs["cluster"] = [str(i % 3) for i in range(sample_anndata.n_obs)]
@@ -189,6 +194,7 @@ class TestRunCellTypeAnnotation:
         monkeypatch.setitem(sys.modules, "celltypist.classifier", type(sys)("celltypist.classifier"))
 
         import importlib
+
         import src.steps.annotation as anno_mod
         importlib.reload(anno_mod)
 
@@ -201,6 +207,7 @@ class TestRunCellTypeAnnotation:
     def test_celltypist_missing_lognorm_recovery(self, sample_anndata, monkeypatch):
         """celltypist should handle when lognorm layer is missing by using X directly."""
         import sys
+
         import pandas as pd
 
         sample_anndata.obs["cluster"] = [str(i % 3) for i in range(sample_anndata.n_obs)]
@@ -235,6 +242,7 @@ class TestRunCellTypeAnnotation:
         monkeypatch.setitem(sys.modules, "celltypist.classifier", type(sys)("celltypist.classifier"))
 
         import importlib
+
         import src.steps.annotation as anno_mod
         importlib.reload(anno_mod)
 

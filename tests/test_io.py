@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import pytest
-
 from src.constants import REQUIRED_CANONICAL_COLUMNS
-from src.io.base import DataValidationError
+from src.io import detect_platform, ingest
 from src.io.cosmx import (
     build_cell_level_adata,
     build_spatialdata_from_adata,
 )
-from src.io import ingest, detect_platform
 
 
 class TestDetectPlatform:
@@ -58,7 +55,7 @@ class TestBuildCellLevelAdata:
 
 class TestBuildSpatialdata:
     def test_build_from_anndata(self, sample_anndata):
-        from src.constants import KEY_RAW_TRANSCRIPTS, KEY_MAIN_TABLE
+        from src.constants import KEY_MAIN_TABLE, KEY_RAW_TRANSCRIPTS
 
         sdata = build_spatialdata_from_adata(sample_anndata)
         assert KEY_RAW_TRANSCRIPTS in sdata.points

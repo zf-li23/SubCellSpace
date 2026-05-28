@@ -32,7 +32,6 @@ from ..constants import (
 )
 from .base import BaseIngestor, register_ingestor
 
-
 # ── Helper: build cell-level AnnData from canonical transcripts ──────
 
 
@@ -59,7 +58,7 @@ def build_cell_level_adata(
     -------
     AnnData
     """
-    from ..constants import COL_CELL_ID, COL_GENE, COL_X, COL_Y, COL_FOV, resolve_col_strict, resolve_col
+    from ..constants import COL_CELL_ID, COL_FOV, COL_GENE, COL_X, COL_Y, resolve_col, resolve_col_strict
 
     gene_col = resolve_col_strict(df.columns, COL_GENE)
     cell_col = resolve_col_strict(df.columns, COL_CELL_ID)

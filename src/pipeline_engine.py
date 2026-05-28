@@ -169,8 +169,8 @@ def run_pipeline(
     PipelineDataError
         If data loading fails.
     """
-    from .constants import KEY_RAW_TRANSCRIPTS
     from .config import settings as default_settings
+    from .constants import KEY_RAW_TRANSCRIPTS
 
     settings = settings or default_settings
 

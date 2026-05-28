@@ -25,7 +25,7 @@ import scanpy as sc
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import kneighbors_graph
 
-from ..constants import COL_CELL_ID, COL_CELLCOMP, COL_GENE, COL_X, COL_Y, resolve_col_strict
+from ..constants import COL_CELL_ID, COL_GENE, COL_X, COL_Y, resolve_col_strict
 from ..models import StepResult
 from ..registry import declare_capabilities, register_backend, register_runner
 

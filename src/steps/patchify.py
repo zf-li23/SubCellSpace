@@ -23,7 +23,7 @@ import pandas as pd
 import shapely
 from shapely.geometry import Polygon
 
-from ..constants import COL_CELL_ID, COL_X, COL_Y, COL_FOV, COL_GENE, resolve_col_strict
+from ..constants import COL_CELL_ID, COL_X, COL_Y, resolve_col_strict
 from ..models import StepResult
 from ..registry import declare_capabilities, register_backend, register_runner
 

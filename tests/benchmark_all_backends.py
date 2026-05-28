@@ -31,7 +31,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.io import ingest, get_available_platforms
+from src.io import ingest
 from src.pipeline_engine import run_pipeline
 from src.registry import get_available_backends, load_backends
 
@@ -313,7 +313,7 @@ def main() -> None:
                 print(f"  ❌  [{tag}] FAIL  ({elapsed:.1f}s)  {str(e)[:200]}")
 
             # List available backends
-            print(f"  Available backends:")
+            print("  Available backends:")
             for step_name in BENCHMARK_STEPS:
                 backends = get_available_backends(step_name)
                 print(f"    {step_name}: {', '.join(backends)}")

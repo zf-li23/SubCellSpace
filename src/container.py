@@ -36,7 +36,7 @@ def _resolve_obs_column(obs: pd.DataFrame, candidates: list[str]) -> str | None:
 
 
 def generate_container(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     report_json: dict,
     output_dir: str | Path,
 ) -> Path:
@@ -80,7 +80,7 @@ def generate_container(
 
 
 def _build_metadata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     report_json: dict,
     output_dir: Path,
 ) -> dict:
@@ -128,7 +128,7 @@ def _safe_dist(series: pd.Series) -> dict[str, int]:
     return {str(k): int(v) for k, v in series.astype(str).value_counts().sort_index().items()}
 
 
-def _build_cells_dataframe(adata: "anndata.AnnData") -> pd.DataFrame:
+def _build_cells_dataframe(adata: anndata.AnnData) -> pd.DataFrame:
     obs = adata.obs
     n = adata.n_obs
     records: dict[str, list] = {}

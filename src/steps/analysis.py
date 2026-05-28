@@ -8,7 +8,6 @@ import scanpy as sc
 import squidpy as sq
 from sklearn.cluster import KMeans
 
-from ..constants import COL_CELL_ID, COL_GENE, resolve_col_strict
 from ..models import StepResult
 from ..registry import register_backend, register_runner
 
@@ -205,7 +204,7 @@ def run_expression_and_spatial_analysis(
             "clustering_backend_requested": clustering_backend,
             "clustering_backend_used": "none",
             "leiden_resolution": float(leiden_resolution),
-            "qc_note": "Too few cells after QC. Try lowering --min-genes (used: {}).".format(min_genes) if adata.n_obs == 0 else "Only %d cell(s) after QC." % adata.n_obs,
+            "qc_note": f"Too few cells after QC. Try lowering --min-genes (used: {min_genes})." if adata.n_obs == 0 else "Only %d cell(s) after QC." % adata.n_obs,
         }
         return StepResult(output=adata, summary=summary, backend_used="none")
 

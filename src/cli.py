@@ -25,8 +25,15 @@ def _suppress_noise() -> None:
 
 _suppress_noise()
 
-from .constants import STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS, STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS, STEP_SUBCELLULAR_ANALYSIS
-from .io import get_available_platforms, ingest, detect_platform
+from .constants import (
+    STEP_ANALYSIS,
+    STEP_ANNOTATION,
+    STEP_DENOISE,
+    STEP_SEGMENTATION,
+    STEP_SPATIAL_ANALYSIS,
+    STEP_SUBCELLULAR_ANALYSIS,
+)
+from .io import detect_platform, get_available_platforms, ingest
 from .registry import get_available_backends, registry
 
 
@@ -185,6 +192,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
     For raw files: auto-detect platform → ingest → run → export.
     """
     import spatialdata
+
     from .pipeline_engine import run_pipeline
 
     input_path = Path(args.input_path)
@@ -245,7 +253,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     # ── Export frontend files (default: yes) ──
     if not getattr(args, "no_export", False):
-        print(f"\nExporting frontend files …")
+        print("\nExporting frontend files …")
         _do_export(sdata, output_dir)
 
 
@@ -286,6 +294,7 @@ def _do_export(sdata, output_dir: Path) -> None:
 def _cmd_export(args: argparse.Namespace) -> None:
     """Handle the ``subcellspace export`` command."""
     import json
+
     import spatialdata
 
     sdata_path = Path(args.sdata_path)
@@ -440,6 +449,7 @@ def _cmd_export(args: argparse.Namespace) -> None:
 def _cmd_backends(args: argparse.Namespace) -> None:
     """Handle ``subcellspace backends`` — dump capabilities as JSON."""
     import json
+
     from .registry import get_all_capabilities, get_available_backends
 
     caps = get_all_capabilities()
@@ -526,7 +536,6 @@ def _cmd_db(args: argparse.Namespace) -> None:
         export_csv(str(args.db), str(args.csv))
         export_json(str(args.db), str(args.json))
     elif args.db_command == "validate":
-        from .database.schema import SCHEMA_SQL
         import sqlite3
         conn = sqlite3.connect(str(args.db))
         cur = conn.cursor()
@@ -539,7 +548,7 @@ def _cmd_db(args: argparse.Namespace) -> None:
         if nulls:
             print(f"  [validate] WARNING: {nulls} rows with null required fields")
         else:
-            print(f"  [validate] No null required fields")
+            print("  [validate] No null required fields")
         conn.close()
     elif args.db_command == "import":
         import_csv(str(args.csv), str(args.db), backup=not args.no_backup)
@@ -556,6 +565,7 @@ def _cmd_patchify_split(args: argparse.Namespace) -> None:
       - ``{cache_dir}/n_patches.txt`` with the patch count
     """
     import spatialdata
+
     from .constants import KEY_RAW_TRANSCRIPTS
     from .steps.denoise import apply_transcript_denoise
     from .steps.patchify import _make_patch_grid
@@ -587,8 +597,8 @@ def _cmd_patchify_split(args: argparse.Namespace) -> None:
 def _cmd_patchify_segment(args: argparse.Namespace) -> None:
     """Segment a single patch and write results to its output directory."""
     import pandas as pd
+
     from .steps.segmentation import assign_cells
-    from .io.cosmx import build_cell_level_adata
 
     patch_df = pd.read_csv(args.patch_csv)
     output_dir = Path(args.output_dir)
@@ -612,9 +622,10 @@ def _cmd_patchify_segment(args: argparse.Namespace) -> None:
 
 def _cmd_patchify_resolve(args: argparse.Namespace) -> None:
     """Merge all patch segmentation parquets into a single unified DataFrame."""
-    import pandas as pd
     from pathlib import Path
-    from .steps.segmentation import _seg_provided_cells
+
+    import pandas as pd
+
 
     patch_dir = Path(args.patch_dir)
     n_patches = int((patch_dir.parent / "n_patches.txt").read_text().strip())
@@ -642,7 +653,6 @@ def _cmd_patchify_run(args: argparse.Namespace) -> None:
     """
     import subprocess
     import sys
-
     from pathlib import Path
 
     # Find the Snakefile relative to the project root

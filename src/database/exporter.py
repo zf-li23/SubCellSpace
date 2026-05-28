@@ -5,9 +5,8 @@ import csv
 import json
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
-from .schema import SCHEMA_SQL, COLUMNS, COLUMN_CATEGORIES, PRIORITY_COLUMNS
+from .schema import COLUMN_CATEGORIES, COLUMNS, PRIORITY_COLUMNS, SCHEMA_SQL
 
 
 def export_csv(db_path: str, csv_path: str) -> str:
@@ -125,7 +124,7 @@ def import_csv(csv_path: str, db_path: str, *, backup: bool = True) -> int:
 
     # ── Read CSV ─────────────────────────────────────────────────────
     rows: list[dict] = []
-    with open(csv_path, "r", encoding="utf-8") as f:
+    with open(csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         if set(reader.fieldnames or []) != set(col_names):
             raise ValueError(
@@ -134,7 +133,7 @@ def import_csv(csv_path: str, db_path: str, *, backup: bool = True) -> int:
             )
         for row in reader:
             # Convert empty strings to None for nullable columns
-            cleaned: dict[str, Optional[str]] = {}
+            cleaned: dict[str, str | None] = {}
             for col in COLUMNS:
                 val = row.get(col["name"], "").strip()
                 cleaned[col["name"]] = val if val else None
