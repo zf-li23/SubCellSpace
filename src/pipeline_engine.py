@@ -452,6 +452,25 @@ def run_pipeline(
         encoding="utf-8",
     )
 
+    # ── Generate flat container files & interactive HTML report ──
+    try:
+        from .container import generate_container
+        generate_container(ctx.adata, report, output_dir)
+        report["outputs"]["metadata"] = str(output_dir / "metadata.json")
+        report["outputs"]["cells"] = str(output_dir / "cells.parquet")
+
+        from .html_report import generate_html_report
+        html_path = generate_html_report(output_dir)
+        report["outputs"]["html_report"] = str(html_path)
+    except Exception as exc:
+        logger.warning("Container/HTML report generation failed: %s", exc)
+
+    # Rewrite report.json with updated outputs
+    report_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+
     logger.info(
         "Pipeline finished — %d transcripts, %d cells, %d genes",
         summary_ds.n_transcripts,
