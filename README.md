@@ -1,6 +1,6 @@
 # SubCellSpace：亚细胞空间转录组学分析平台
 
-SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台，支持 CosMx / Xenium / MERFISH / Stereo-seq 四个平台，25 个后端，9 个 Pipeline 步骤。内置统一数据集数据库（1437 条记录），含静态前端浏览器与开发模式编辑器。
+SubCellSpace 是一个面向亚细胞空间转录组学的模块化分析平台，支持 CosMx / Xenium / MERFISH / Stereo-seq 四个平台，7 个管线步骤，20+ 可替换后端。内置统一数据集数据库（1437 条记录），含静态前端浏览器与开发模式编辑器。
 
 - 统一数据层：SpatialData (.zarr) 为中心容器
 - 插件式管线：7 步骤、20+ 后端、每个后端可独立替换
@@ -114,28 +114,7 @@ bash setup-tools.sh clone spARC PhenoGraph scFates
 
 ## Pipeline 步骤 (7 步)
 
-1. **Denoise** — 转录本去噪（4: none / intracellular / nuclear_only / sparc）
-2. **Patchify** — 空间网格分块（2: none / grid），支持 Snakemake 并行调度
-3. **Segmentation** — 细胞分割（4: provided_cells / fov_cell_id / cellpose / baysor）
-4. **Analysis** — 表达聚类（3: leiden / kmeans / scvi）
-5. **Annotation** — 细胞注释（3: cluster_label / rank_marker / celltypist）
-6. **Spatial Analysis** — 空间域识别 + 空间分析（spatial_leiden / spatial_kmeans → squidpy: SVG/邻域/共定位, scfates: 树推断/伪时间）
-7. **Subcellular Analysis** — 亚细胞域聚类 + 亚细胞分析（hdbscan / dbscan / leiden_spatial / phenograph → rna_localization / scrin）
-
-详细后端列表与能力声明：`subcellspace backends` 或 GET `/api/meta/backends`。完整状态见 [plan.md](plan.md)。
-
-## 第三方工具
-
-第三方工具通过 `tools/urls.yaml` 统一管理：
-
-```bash
-bash scripts/setup-tools.sh list          # 列出所有可用工具
-bash scripts/setup-tools.sh clone --all   # 克隆全部
-bash scripts/setup-tools.sh install --all # 安装全部
-bash scripts/setup-tools.sh clone --ssh --all  # 使用 SSH
-```
-
-详见 [THIRD_PARTY_TOOLS.md](THIRD_PARTY_TOOLS.md)。
+完整步骤与后端速查见 [plan.md](plan.md#pipeline-步骤速查-7-步)，后端能力声明见 `subcellspace backends` 或 GET `/api/meta/backends`。第三方工具安装见 [THIRD_PARTY_TOOLS.md](THIRD_PARTY_TOOLS.md)。
 
 ## 项目结构
 
@@ -152,20 +131,16 @@ bash scripts/setup-tools.sh clone --ssh --all  # 使用 SSH
 | `data/` | 本地数据与大文件 | ❌ |
 | `docs/` | 项目文档（已整合到 README + plan.md） | ✅ |
 
-## 已知限制
+## 项目结构
 
-| 问题 | 状态 |
-|------|:---:|
-| cellpose 需外部 DAPI 图像 | 🟡 已安装，需图像数据 |
-| baysor 需 Julia CLI | 🟢 Julia 1.10.9 + Baysor 已预装 |
-| Stereo-seq 需分割后端（无预置 cell_id） | 🟡 需 cellpose/baysor |
-| MERFISH barcode 非真实细胞 ID（测试数据特性） | 🟡 数据语义限制 |
-| SCRIN 计算开销大 | 🟢 已集成，默认不调用 |
-| 无 CI/CD | 🟢 本地开发阶段 |
+| 目录 | 用途 |
+|------|------|
+| `src/` | Python 核心源码（CLI、引擎、步骤、IO） |
+| `frontend/` | React 前端（Vite + TypeScript） |
+| `tests/` | Pytest 测试套件（146 passed） |
+| `scripts/` | 集群运行 & 工具管理脚本 |
+| `tools/` | 第三方工具本地克隆 |
+| `outputs/` | 管线运行输出 |
+| `data/` | 本地数据与大文件 |
 
-## 后续方向
-
-1. 论文发表
-2. Docker 容器化（含 Julia + Baysor + Python 全部依赖）
-3. CI/CD (GitHub Actions)
-4. 前端浏览器端到端适配
+> 已知限制与后续方向见 [plan.md](plan.md#短期计划-2026-06) 和 [plan.md](plan.md#风险矩阵)。
