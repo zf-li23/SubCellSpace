@@ -1,36 +1,162 @@
 # SubCellSpace — 开发路线图
 
-> **当前版本**: 2026-05-28  
-> **上一版**: 2026-05-14（见下方 §历史记录）
+> **最后更新**: 2026-05-28
 
 ---
 
-## 当前阶段
+## 全阶段时间线
 
-| 阶段 | 状态 |
-|------|:----:|
-| 管线引擎 (7 步, ~20 后端) | ✅ |
-| 四平台摄入 (CosMx/Xenium/MERFISH/Stereo-seq) | ✅ |
-| CLI + API + 前端 Viewer | ✅ |
-| 数据库层 (SQLite + DataBrowser + DataEditor) | ✅ — 1437 条记录 |
-| 输出标准化 (HTML 报告 + container 扁平文件) | ✅ — 2026-05-28 合并 |
-| Xenium 数据补录 (53→350 行, 1247 ready) | ✅ — 完成 |
-| CI/CD + Docker + PyPI | ⏳ |
-| MERFISH/Stereo-seq 数据验证 | ⏳ |
+### ✅ Phase 0（2026-05-01 ~ 05-05）— 项目骨架
+
+**目标**: 建立 Python 包结构、命令行入口、配置系统
+
+| 任务 | 完成 | 说明 |
+|------|:----:|------|
+| Python 包结构 `src/` | ✅ | setuptools pyproject.toml |
+| 命令行入口 `cli.py` | ✅ | argparse CLI |
+| 集中配置系统 | ✅ | `src/config.py` + YAML |
+| 统一日志与报告格式 | ✅ | 分层 JSON 报告 |
+| conda 环境 `environment.yml` | ✅ | Python 3.12 + pip |
+| 一键复现脚本 `reproduce.sh` | ✅ | 全自动安装 |
+| 分步安装脚本 step0/1/2/3 | ✅ | 后于 Phase 4 删除 |
+
+---
+
+### ✅ Phase 1（2026-05-05 ~ 05-09）— CosMx 最小主流程
+
+**目标**: 以 `Mouse_brain_CosMx_1000cells.csv` 跑通最小闭环
+
+| 任务 | 完成 | 说明 |
+|------|:----:|------|
+| 读取 CosMx transcript table | ✅ | `src/io/cosmx.py` |
+| 聚合到 cell level | ✅ | `build_cell_level_adata()` |
+| AnnData + SpatialData 封装 | ✅ | 含空间坐标 |
+| Scanpy QC / 归一化 / PCA / UMAP / Leiden | ✅ | `src/steps/analysis.py` |
+| Squidpy 空间邻接图 | ✅ | `src/steps/spatial_analysis.py` |
+| 分层 JSON 报告输出 | ✅ | `cosmx_report.json` |
+| 测试数据下载 | ✅ | 117MB 1.6M transcripts |
+
+---
+
+### ✅ Phase 2（2026-05-09 ~ 05-13）— 工具可替换 + Benchmark
+
+**目标**: 为每步建立多后端 + 统一 benchmark 框架
+
+**可用后端（阶段峰值）**:
+
+| 步骤 | 后端数 | 后端列表 |
+|------|:------:|---------|
+| Denoise | 4 | none, intracellular, nuclear_only, sparc |
+| Segmentation | 4 | provided_cells, fov_cell_id, cellpose, baysor |
+| Spatial Domain | 5 | spatial_leiden, spatial_kmeans, graphst, stagate, spagcn |
+| Subcellular Domain | 5 | hdbscan, dbscan, leiden_spatial, phenograph, none |
+| Analysis | 3 | leiden, kmeans, scvi |
+| Annotation | 3 | cluster_label, rank_marker, celltypist |
+| Subcellular Analysis | 2 | rna_localization, scrin |
+
+| 任务 | 完成 | 说明 |
+|------|:----:|------|
+| 插件式引擎 `pipeline_engine.py` | ✅ | YAML 驱动, 无 if/elif 链 |
+| 后端注册机制 `registry.py` | ✅ | `@register_backend` + `@register_runner` |
+| Benchmark 网格运行 | ✅ | `scripts/benchmark_all_backends.py` (后移入 `tests/`) |
+| 评估指标 `evaluation/metrics.py` | ✅ | 每层评分 |
+| CLI 集成 | ✅ | `subcellspace benchmark-cosmx` |
+| 数据契约校验 `validation.py` | ✅ | 步骤间输入输出验证 |
+| 第三方工具克隆 (15 个仓库) | ✅ | `tools/` + `tools/urls.yaml` |
+| 单元测试 16 个文件 | ✅ | 涵盖所有步骤 + 引擎 + IO |
+
+---
+
+### ✅ Phase 3（2026-05-13 ~ 05-15）— 前端 + 数据库
+
+**目标**: 搭建 React 前端 + SQLite 数据集数据库
+
+| 任务 | 完成 | 说明 |
+|------|:----:|------|
+| Vite + React + TypeScript 脚手架 | ✅ | `frontend/` |
+| FastAPI 后端 `api_server.py` | ✅ | Uvicorn + CORS 安全加固 |
+| DataBrowser 静态数据浏览 | ✅ | 分类分组表头、搜索、筛选、排序 |
+| DataEditor CRUD 页面 (dev 模式) | ✅ | 行内编辑、新增/删除、批量操作 |
+| ReportPage 管线结果可视化 | ✅ | 卡片、指标、步骤摘要 |
+| BenchmarkPage 基准比较 | ✅ | Silhouette 对比表 |
+| PipelineFlowChart | ✅ | 后于 Phase 4 删除 |
+| HomePage 导航 | ✅ | 仍保留 |
+| SQLite 数据库 schema | ✅ | 19 列、5 类别 |
+| 数据库 CLI 命令 | ✅ | `subcellspace db export\|import\|validate` |
+| 安全加固 (CORS + 路径校验 + ID 注入防护) | ✅ | 2026-05-11 |
+
+---
+
+### ✅ Phase 4（2026-05-17 ~ 05-28）— 可用性重构与输出标准化
+
+**目标**: 精简管线、标准化输出
+
+| 任务 | 完成 | 日期 |
+|------|:----:|:----:|
+| 管线 9→7 步合并 | ✅ | 05-19 |
+| 删除 GraphST/STAGATE/SpaGCN 核心依赖 | ✅ | 05-19 |
+| 合并 `spatial_domain` + `subcellular_spatial_domain` 步骤 | ✅ | 05-19 |
+| 核心依赖 `sopa>=2.2` 加入 | ✅ | 05-19 |
+| 安装流程简化为 `pip install subcellspace` | ✅ | 05-19 |
+| 删除 4 个安装脚本 (setup-step0/1/2/3) | ✅ | 05-19 |
+| `container.py` 扁平输出生成器 | ✅ | 05-28 |
+| `html_report.py` 自包含交互式 HTML 报告 | ✅ | 05-28 |
+| 删除旧 `report.py` | ✅ | 05-28 |
+| 三平台真实数据运行验证 | ✅ | 05-11 |
+| 测试数据升级为真实 GEO 规模 | ✅ | 05-11 |
+
+**三平台输出验证**:
+
+| 平台 | 输入 | 输出大小 | #细胞 |
+|------|------|---------|:----:|
+| CosMx | data/test/cosmx_D0059.csv (167 MB) | 105 MB | ? |
+| Xenium | data/test/xenium_D1033.csv.gz (205 MB) | 486 MB | 1000 |
+| MERFISH | data/test/merfish_D2010.csv (2.4 GB) | 353 MB | 461 |
+
+---
+
+### 🔄 Phase 5（2026-05-15 ~ 进行中）— 数据补录
+
+**目标**: 从 GEO 批量收录公开数据集至统一数据库
+
+| 任务 | 完成 | 说明 |
+|------|:----:|------|
+| 数据库 schema 定型 (19 列) | ✅ | 05-14 |
+| CosMx 数据入库 | ✅ | 1,069 行 (62 standard + 8 merged + 999 Raw_Fragment) |
+| Xenium 数据入库 (53→350) | ✅ | 350 行 (128 ready, 222 pending) |
+| MERFISH 数据入库 | ✅ | 18 行 |
+| 数据库总计 1,437 条记录 | ✅ | 1,247 ready verified |
+| 集群路径验证与 ID 编号修正 | ✅ | 05-19 |
+| **集群上 37 个 Xenium tarball 解压** | ⏳ | |
+| **222 条 pending 行填充 URL/cell count** | ⏳ | |
+| **`estimated_cell_count` 批量计算** | ⏳ | |
+
+---
+
+### 🔄 Phase 6（2026-05-28 ~ 进行中）— CI/CD 与文档
+
+| 任务 | 完成 | 说明 |
+|------|:----:|------|
+| `uv.lock` 重建 | ✅ | 268 包, 05-28 |
+| `plan.md` 时间线重写 | ✅ | 05-28 本文件 |
+| `frontend/README.md` 重建 | ✅ | 05-28 |
+| 文档去重 (README → plan/THIRD_PARTY) | ✅ | 05-28 |
+| CI GitHub Actions | ⏳ | 已配 ruff+mypy, 未验证 |
+| DATASETS.md 自动生成 | ⏳ | |
+| URL 可达性校验 | ⏳ | |
 
 ---
 
 ## 短期计划 (2026-06)
 
-### Phase 5: 数据补录收尾
-- 222 条 pending 行填充 `project_url`、`download_url`
-- 集群上 37 个 Xenium GEO tarball 解压与验证
-- `estimated_cell_count` 批量计算脚本
+### Phase 5 收尾
+1. 集群上 37 个 Xenium GEO tarball 解压与内容验证
+2. 222 条 pending 行填充 `project_url`、`download_url`
+3. `estimated_cell_count` 批量计算脚本（从 `cells.parquet` 读取）
 
-### Phase 6: 依赖与文档
-- `uv.lock` 重建完成 (268 包) — 2026-05-28
-- 文档去重：`README.md` 保持总览，`plan.md` 保持路线，`THIRD_PARTY_TOOLS.md` 保持工具详情
-- 前端前端 `frontend/README.md` 重建
+### Phase 6 推进
+4. CI 验证：GitHub Actions 中 pytest 通过
+5. Dockerfile 构建（Python + Julia + Baysor 一体化）
 
 ---
 
@@ -38,74 +164,16 @@
 
 | 方向 | 内容 |
 |------|------|
-| **部署** | Dockerfile, Docker Compose, PyPI 发布 |
-| **平台均衡** | Xenium/MERFISH/Stereo-seq 端到端基准评估 |
-| **评估可视化** | 交互式 HTML 报告完善, ground truth 对比, 论文图表 |
-| **代码质量** | 集成测试, ruff 修复全开, mypy 严格模式 |
-| **社区** | conda-forge 发布, 社区插件机制 |
+| **论文发表** | 基于统一数据库的四平台基准评估 |
+| **Docker** | 含 Julia + Baysor + Python 全部依赖 |
+| **平台均衡** | Xenium/MERFISH/Stereo-seq 端到端验证, 统一 benchmark |
+| **评估可视化** | ground truth 对比, 论文图表 |
+| **代码质量** | ruff 全开, mypy 严格模式 |
+| **PyPI / conda-forge** | 正式发布 |
 
 ---
 
-## Pipeline 步骤速查 (7 步)
-
-| # | 步骤 | 默认后端 | 可选后端 | 说明 |
-|---|------|---------|---------|------|
-| 1 | Denoise | intracellular | none / nuclear_only / sparc | 转录本去噪 |
-| 2 | Patchify | none | grid (Snakemake 并行) | 空间网格分块 |
-| 3 | Segmentation | provided_cells | fov_cell_id / cellpose / baysor | 细胞分割 |
-| 4 | Analysis | leiden | kmeans / scvi | 表达聚类 |
-| 5 | Annotation | rank_marker | cluster_label / celltypist | 细胞注释 |
-| 6 | Spatial Analysis | squidpy(spatial_leiden) | domain: spatial_kmeans / none; analysis: scfates | 空间域 + SVG + 邻域 |
-| 7 | Subcellular Analysis | rna_localization(hdbscan) | domain: dbscan/leiden_spatial/phenograph/none; analysis: scrin | 亚细胞域 + 共定位 |
-
-> Phase 4 重构说明：`spatial_domain` / `subcellular_spatial_domain` 两个独立步骤已合并入步骤 6/7 的空间分析和亚细胞分析步骤中，GraphST/STAGATE/SpaGCN 已移出核心依赖。
-
----
-
-## 风险矩阵
-
-| 风险 | 概率 | 影响 | 缓解 |
-|------|:----:|:----:|------|
-| 平台覆盖不均衡导致发表审稿质疑 | 中 | 高 | 统一 benchmark 四平台 |
-| 第三方工具依赖断裂 | 中 | 中 | `tools/urls.yaml` 注册 + `uv.lock` 锁定 |
-| 数据库损坏 | 低 | 中 | SQLite 事务 + `subcellspace db validate` |
-| API Schema 漂移 | 中 | 中 | 定期对比 `COLUMNS` 与 api_server 模型 |
-| 文档数据过期 | 高 | 低 | 每次数据变更后更新 |
-| 前端适配移动端需求 | 低 | 低 | 表格横向滚动，非优先 |
-
----
-
-## 历史记录
-
-> 以下为 2026-05-14 及之前的规划内容，保留以追踪项目演进。
-
-### 2026-05-14 版本
-
-#### 当时阶段
-
-| 阶段 | 状态 |
-|------|:----:|
-| 管线引擎 (9 步, ~25 后端) | ✅ |
-| 四平台摄入 | ✅ |
-| CLI + API + 前端 Viewer | ✅ |
-| 数据库层 (SQLite + 静态浏览 + 开发编辑器) | ✅ |
-| CI/CD + Docker + PyPI | ⏳ |
-| Xenium 数据补录 (53→350 行) | 🔄 |
-| MERFISH/Stereo-seq 数据完善 | ⏳ |
-
-#### 当时短期规划 (Phase 4-5)
-
-**Phase 4: 数据补录**（当时进行中）
-- Xenium 数据从 53 → 350 行导入（128 ready, 222 pending）
-- 为 Xenium 行填充 `project_url`、`download_url`
-- 从集群实际数据文件计算 `estimated_cell_count`
-- 解压集群上剩余的 Xenium GEO tarball (37 个)
-
-**Phase 5: CI/CD & 文档**
-- `DATASETS.md` 自动生成
-- URL 可达性校验
-
-#### 当时管线步骤 (9 步，已合并为 7 步)
+## Pipeline 步骤速查 (当前 7 步)
 
 | # | 步骤 | 默认后端 | 可选后端 |
 |---|------|---------|---------|
@@ -114,7 +182,19 @@
 | 3 | Segmentation | provided_cells | fov_cell_id / cellpose / baysor |
 | 4 | Analysis | leiden | kmeans / scvi |
 | 5 | Annotation | rank_marker | cluster_label / celltypist |
-| 6 | Spatial Analysis | squidpy (domain=spatial_leiden) | domain: spatial_kmeans / none; analysis: scfates |
-| 7 | Subcellular Analysis | rna_localization (domain=hdbscan) | domain: dbscan / leiden_spatial / phenograph / none; analysis: scrin |
+| 6 | Spatial Analysis | squidpy(spatial_leiden) | domain: spatial_kmeans / none; analysis: scfates |
+| 7 | Subcellular Analysis | rna_localization(hdbscan) | domain: dbscan/leiden_spatial/phenograph/none; analysis: scrin |
 
-> 注：2026-05-19 Phase 4 重构后：GraphST/STAGATE/SpaGCN 从工具注册表移除；`spatial_domain` 和 `subcellular_spatial_domain` 独立步骤合并入步骤 6/7；安装流程简化为 `pip install subcellspace`。
+> 注: Phase 4 重构后 `spatial_domain` / `subcellular_spatial_domain` 独立步骤合并入步骤 6/7；GraphST/STAGATE/SpaGCN 移出核心依赖。
+
+---
+
+## 风险矩阵
+
+| 风险 | 概率 | 影响 | 缓解 |
+|------|:----:|:----:|------|
+| 平台覆盖不均衡 | 中 | 高 | 统一 benchmark 四平台 |
+| 第三方工具依赖断裂 | 中 | 中 | `tools/urls.yaml` + `uv.lock` 锁定 |
+| 数据库损坏 | 低 | 中 | SQLite 事务 + `subcellspace db validate` |
+| API Schema 漂移 | 中 | 中 | 定期对比 `COLUMNS` 与 api_server 模型 |
+| 文档数据过期 | 高 | 低 | 每次数据变更后更新 |
