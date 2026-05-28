@@ -4,6 +4,38 @@
 
 ---
 
+## 开发线路总览
+
+项目当前分为 **5 条并行开发线路**，按投入量排序：
+
+| # | 线路 | 投入占比 | 状态 | 负责人 |
+|---|------|---------|------|--------|
+| 🔴 | **数据层**（数据库 + 数据补录） | ~45% | Phase 5 进行中 | 最活跃 |
+| 🟡 | **管线核心**（引擎 + 步骤 + 输出标准化） | ~25% | Phase 4 已完成 | 趋于收敛 |
+| 🟡 | **前端**（React Viewer + DataEditor） | ~20% | Phase 3 已完成 | 维护模式 |
+| 🔵 | **文档**（README + API + plan） | ~7% | Phase 6 进行中 | 按需更新 |
+| 🔵 | **基础设施**（CI/CD + 环境 + 工具链） | ~3% | Phase 6 进行中 | CI 已通 |
+
+### 线路说明
+
+**🔴 数据层** — 最活跃。SQLite 数据库（1437 条）、Xenium GEO 数据补录、集群路径验证、`estimated_cell_count` 批量计算。当前 Phase 5 核心工作。
+
+**🟡 管线核心** — 已完成 Phase 4 重构（9→7 步合并、GraphST 移除、输出标准化）。`container.py` + `html_report.py` 已提交。后续以维护和 bug 修复为主。
+
+**🟡 前端** — 5 页面（Home / Report / Browser / Editor / Benchmark），数据驱动。`BackendSwitch`/`PipelineFlowChart` 等管线控制组件已在 Phase 4 重构中删除。当前维护模式。
+
+**🔵 文档** — `plan.md` 已重写为时间线，`frontend/README.md` 已重建，`README.md` 已精简去重。剩余工作：`IMPLEMENTATION_STATUS.md` 清理。
+
+**🔵 基础设施** — CI 已调通（3 个 job 全部通过），`uv.lock` 已重建。剩余：Docker、PyPI 发布。
+
+### 当前优先级
+
+1. **Phase 5 收尾** — 222 条 pending 行填充 URL/cell count，集群 tarball 解压
+2. **Phase 6 推进** — CI 已验证，Dockerfile 构建
+3. **文档清理** — 删除过时的 `frontend/IMPLEMENTATION_STATUS.md`
+
+---
+
 ## 全阶段时间线
 
 ### ✅ Phase 0（2026-05-01 ~ 05-05）— 项目骨架
