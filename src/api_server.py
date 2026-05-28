@@ -13,11 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .config import settings as _settings
+from .database import export_csv, export_json
+from .database.schema import COLUMNS
 from .io import get_available_platforms
 from .pipeline_engine import run_pipeline
 from .registry import get_all_capabilities, get_available_backends
-from .database import export_csv, export_json
-from .database.schema import COLUMNS
 
 # ── Configurable defaults (from centralized configuration system) ─────────
 DEFAULT_INPUT_CSV = Path(_settings.get("input_csv", "data/test/Mouse_brain_CosMx_1000cells.csv"))
@@ -631,37 +631,6 @@ def cosmx_run(request: CosmxRunRequest | None = None) -> dict[str, Any]:
     if request is None:
         request = CosmxRunRequest()
     return _run_pipeline_from_request(request)
-
-
-@app.post("/api/benchmarks/cosmx/run")
-def cosmx_benchmark(
-    input_csv: str = Body(default=str(DEFAULT_INPUT_CSV)),
-    output_dir: str = Body(default="outputs/cosmx_benchmark"),
-    min_transcripts: int = Body(default=10),
-    min_genes: int = Body(default=10),
-    leiden_resolution: float = Body(default=1.0),
-) -> dict[str, Any]:
-    """Run the CosMx benchmark (grid search over all backend combinations).
-
-    Both input_csv and output_dir are validated for path security.
-    """
-    # Validate input_csv path
-    input_csv_path = _resolve_under_repo(input_csv)
-    if not input_csv_path.exists():
-        raise HTTPException(status_code=404, detail=f"Input file not found: {input_csv_path}")
-
-    # Validate output_dir and ensure it's under outputs/
-    output_dir_path = _resolve_under_repo(output_dir)
-    output_dir_path = _ensure_under_outputs(output_dir_path)
-
-    return run_cosmx_backend_benchmark(
-        input_csv=str(input_csv_path),
-        output_dir=str(output_dir_path),
-        min_transcripts=min_transcripts,
-        min_genes=min_genes,
-        leiden_resolution=leiden_resolution,
-        domain_backend="spatial_leiden",
-    )
 
 
 @app.get("/api/cells/{cell_id}/transcripts")

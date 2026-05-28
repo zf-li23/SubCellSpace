@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from src.models import PipelineResult
 from src.pipeline_engine import ExecutionContext, _run_step, run_pipeline
 
 # ── Fixtures ─────────────────────────────────────────────────────────
@@ -288,8 +289,8 @@ class TestRunPipelineErrors:
 
     def test_disabled_step_skipped(self, sample_transcripts_csv, tmp_path):
         """Disabled steps should be skipped."""
-        from src.io import get_ingestor
         from src.config import Settings
+        from src.io import get_ingestor
 
         sdata = get_ingestor("cosmx").ingest(sample_transcripts_csv)
         settings = Settings(config_path="/nonexistent/path.yaml")

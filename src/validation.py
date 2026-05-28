@@ -7,7 +7,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .constants import COL_CELL_ID, COL_GENE, COL_X, COL_Y, COL_CELLCOMP, COL_FOV, resolve_col
+import pandas as pd
+
+from .constants import COL_CELL_ID, COL_CELLCOMP, COL_FOV, COL_GENE, COL_X, COL_Y, resolve_col
 
 # ── Required column schemas per step ─────────────────────────────────
 

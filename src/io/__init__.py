@@ -14,9 +14,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
+# Import platform modules to trigger @register_ingestor decorators
+from . import (
+    cosmx,  # noqa: F401
+    generic,  # noqa: F401 — minimal CSV (x, y, gene)
+    merfish,  # noqa: F401
+    stereoseq,  # noqa: F401
+    xenium,  # noqa: F401
+)
 from .base import (
     BaseIngestor,
     DataLoadError,
@@ -25,14 +34,6 @@ from .base import (
     get_ingestor,
     register_ingestor,
 )
-
-# Import platform modules to trigger @register_ingestor decorators
-from . import cosmx   # noqa: F401
-from . import generic  # noqa: F401 — minimal CSV (x, y, gene)
-from . import merfish  # noqa: F401
-from . import stereoseq  # noqa: F401
-from . import xenium   # noqa: F401
-
 
 # ── Platform auto-detection ─────────────────────────────────────────
 

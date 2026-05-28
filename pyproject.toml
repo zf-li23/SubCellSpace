@@ -67,7 +67,7 @@ snakemake = ["snakemake>=9.0"]
 all = ["subcellspace[cellpose,baysor,scvi,celltypist,snakemake]"]
 
 # ── Development ──
-dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.6", "mypy>=1.11", "httpx>=0.28.1"]
+dev = ["pytest>=8.0", "pytest-cov>=4.0", "pytest-timeout>=2.3", "ruff>=0.6", "mypy>=1.11", "httpx>=0.28.1"]
 
 # ── Git-clone-only backends (NOT pip-installable) ──
 # spARC, PhenoGraph, scFates — clone from tools/ and `pip install -e tools/<name>/`

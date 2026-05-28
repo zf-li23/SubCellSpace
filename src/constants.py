@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import pandas as pd
+
 # ── Platform identifiers ─────────────────────────────────────────────
 
 PLATFORM_COSMX = "cosmx"
@@ -51,7 +53,7 @@ _LEGACY_ALIASES: dict[str, list[str]] = {
 }
 
 
-def resolve_col(df_columns: "pd.Index | set[str]", canonical: str) -> str | None:
+def resolve_col(df_columns: pd.Index | set[str], canonical: str) -> str | None:
     """Return the actual column name in *df_columns* matching *canonical*.
 
     Checks the canonical name first, then legacy aliases.  Returns
@@ -72,7 +74,7 @@ def resolve_col(df_columns: "pd.Index | set[str]", canonical: str) -> str | None
     return None
 
 
-def resolve_col_strict(df_columns: "pd.Index | set[str]", canonical: str) -> str:
+def resolve_col_strict(df_columns: pd.Index | set[str], canonical: str) -> str:
     """Like :func:`resolve_col` but raises ``KeyError`` if not found."""
     col = resolve_col(df_columns, canonical)
     if col is None:
