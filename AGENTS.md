@@ -7,35 +7,30 @@
 
 ## 1. Project Overview
 
-SubCellSpace is a modular **subcellular spatial transcriptomics** analysis platform supporting CosMx / Xenium / MERFISH platforms with 7 pipeline steps and 20+ backend implementations, built on top of sopa + spatialdata. The frontend is a pure static viewer; all analysis runs via CLI on a compute cluster.
+SubCellSpace is a **scverse-native** subcellular spatial transcriptomics analysis platform supporting CosMx / Xenium / MERFISH platforms with a single unified 6-step pipeline. Built on scanpy + squidpy + spatialdata. The frontend is a pure static viewer; all analysis runs via CLI on a compute cluster.
 
 - **Python backend**: CLI + FastAPI server (`src/`)
 - **React frontend**: Pure data browser (no business logic) (`frontend/`)
 - **Data layer**: Unified SQLite database of datasets with static JSON export for frontend browsing + dev-mode Web UI editor
+- **Design**: Single pipeline config (`config/pipeline.yaml`), scverse-native backends only, zero external dependencies
 
 ---
 
 ## 2. Quick Start
 
 ```bash
-# Activate environment
 conda activate subcellspace
 
-# Start dev environment (backend on :8000 + frontend on :5173)
-cd frontend && npm run dev
-
-# Production build
-cd frontend && npm run build
-
-# CLI: full pipeline run
+# CLI: full pipeline run (auto-detect platform + companion files)
 subcellspace run data.csv -o outputs/my_run/
+
+# With specific backends
+subcellspace run data.csv --subcellular-analysis-backend scrin
 
 # CLI: database management
 subcellspace db export     # export to CSV + frontend JSON
 subcellspace db validate   # check DB integrity
 ```
-
-The launcher (`frontend/scripts/dev.mjs`) auto-detects Python from `subcellspace` conda env → `~/.venv/bin/python` → `zf-li23` conda env → system `python3`.
 
 ---
 
@@ -45,21 +40,24 @@ The launcher (`frontend/scripts/dev.mjs`) auto-detects Python from `subcellspace
 frontend/src/                  Python src/
 ├── App.tsx         routes     ├── cli.py             argparse CLI
 ├── main.tsx        entry      ├── api_server.py      FastAPI (uvicorn)
-├── api.ts          HTTP       ├── pipeline.py        merge logic
-├── pages/                     ├── pipeline_engine.py  step runner
-│   ├── HomePage.tsx           ├── registry.py        backend registry
-│   ├── ReportPage.tsx         ├── io/                ingestion (cosmx,xenium,merfish,stereoseq)
-│   ├── DataBrowser.tsx  ← NEW ├── steps/             9 pipeline steps
-│   ├── DataEditor.tsx   ← NEW ├── database/          ← NEW: DB module
-│   └── BenchmarkPage.tsx      │   ├── schema.py      19-column schema
-├── components/                │   └── exporter.py     SQLite→CSV/JSON
-├── types/datasets.ts   ← NEW  └── evaluation/        layer metrics
-└── styles.css                 
-                               
+├── api.ts          HTTP       ├── pipeline_engine.py  step runner
+├── pages/                     ├── registry.py        backend registry
+│   ├── HomePage.tsx           ├── io/                ingestion (cosmx,xenium,merfish)
+│   ├── ReportPage.tsx         ├── steps/             6 pipeline steps
+│   ├── DataBrowser.tsx        ├── database/          DB module
+│   ├── DataEditor.tsx         │   ├── schema.py      19-column schema
+│   └── BenchmarkPage.tsx      │   └── exporter.py     SQLite→CSV/JSON
+├── components/                ├── container.py       flat output generator
+├── types/datasets.ts          ├── html_report.py     HTML report
+└── styles.css                 └── evaluation/        layer metrics
+
+config/
+├── pipeline.yaml              single unified config
+
 data/                          scripts/
 ├── datasets.db         ← NEW  └── setup-*.sh
-├── datasets.csv        ← NEW
-├── DATA_FORMATS.md            (data format reference)
+├── datasets.csv
+└── DATA_FORMATS.md
 ```
 
 ---
@@ -235,12 +233,18 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 - Pagination
 - Auto-re-export after each mutation
 
-### ✅ Phase 4: Usability refactor (completed 2026-05-19)
-- Pipeline simplified from 9→7 steps (spatial_domain/subcellular_spatial_domain merged)
+### ✅ Phase 4: Usability refactor (2026-05-19)
+- Pipeline simplified from 9→7 steps
 - GraphST removed; Baysor/SCRIN kept as optional extras
-- Core dependency: `sopa>=2.2` added; all default backends pip-installable
 - Install: `pip install subcellspace` (was 4-step setup)
 - Removed: `scripts/setup-step3.sh`, STAGATE/SpaGCN/GraphST from tools registry
+
+### ✅ Phase 4b: Pipeline simplification (2026-06-02)
+- **Single scverse-native pipeline** replacing plugin architecture
+- All external backends removed (cellpose, scvi, celltypist, spARC, etc.)
+- 3 platform configs merged into 1 unified `config/pipeline.yaml`
+- CosMx/Xenium/MERFISH ingestors now auto-integrate all companion files
+- SCRIN kept as optional `--subcellular-analysis-backend scrin`
 
 ### 🔄 Phase 5: Data completion (in progress)
 - Xenium expanded 53 → 350 rows (128 ready, 222 pending)
@@ -248,8 +252,9 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 - Compute `estimated_cell_count` from actual data files on cluster
 
 ### ⏳ Phase 6: CI/CD & docs
-- `DATASETS.md` auto-generated summary
-- Validate URLs (HEAD request check)
+- CI pipeline (ruff + mypy + pytest)
+- Docker image
+- Documentation cleanup (README, API, plan)
 
 ---
 
@@ -285,7 +290,8 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 - **Cluster directory naming**: Uses `P0001/D0001/` format with new ID scheme. DB `local_path` is always consistent.
 - **Jumpbox** (`bio-download`) contents differ from older docs. Xenium tarballs are on the cluster at `/data3/yangxr002/Xenium/*.tar`.
 - **`database_info_Xenium.csv`** is a GEO collection plan (200+ rows) on the cluster — reference only, not a data source.
-- **`api_server.py` DatasetRowModel** now matches the 19-column schema. `id`/`project_id` are `str` (e.g. "D1001"), and deleted fields (`name_zh`, `name_en`, `record_type`, `merged_from_ids`) have been removed. The DataEditor frontend has been updated to use `string` IDs.
+- **Pipeline is NOT plugin-based anymore** — it's a single scverse-native pipeline. See `config/pipeline.yaml` for the only config. Do NOT try to add new backends via decorators; modify the source code directly.
+- **Three ingestors** (CosMx, Xenium, MERFISH) each auto-detect companion files from the same directory. See `src/io/` for details.
 - **227/1437 rows are `pending`** — they have been added to the database but lack `project_url`, `download_url`, and/or `estimated_cell_count`.
 
 ---

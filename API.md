@@ -1,112 +1,50 @@
 # SubCellSpace API
 
-SubCellSpace 提供 HTTP API，用于：
+SubCellSpace 提供 HTTP API，用于读取已生成的报告、运行管线、查询后端能力。
 
-- 读取已生成的报告和统计数据
-- 运行参数化管线（从预摄取的 .zarr）
-- 获取后端列表与能力声明
-- 查询细胞级转录本数据
-
-> ⚠️ 管线执行是**同步的**，完整 7 步耗时约 2-5 分钟。无鉴权/限流，仅适合本地开发。
-
-## 启动服务
+## 启动
 
 ```bash
 conda activate subcellspace
-subcellspace-api                 # 默认 http://127.0.0.1:8000
+subcellspace-api
+# 默认 http://127.0.0.1:8000
 ```
 
 ## 核心端点
 
 ### `GET /api/health`
-健康检查。返回 `{"status":"ok"}`。
+健康检查。
 
 ### `GET /api/meta/backends`
-返回所有后端及其 capabilities。前端动态渲染的数据源。示例返回：
-
-```json
-{
-  "spatial_analysis": {
-    "squidpy": { "available": true, "capabilities": ["svg", "neighborhood", "co_occurrence"] }
-  },
-  "subcellular_analysis": {
-    "rna_localization": { "available": true, "capabilities": ["rna_localization"] }
-  }
-}
-```
+返回所有后端及其 capabilities。前端数据源。
 
 ### `GET /api/meta/platforms`
-返回支持的平台列表：`{"platforms": ["cosmx","merfish","stereoseq","xenium"]}`.
+返回支持的平台：`["cosmx", "xenium", "merfish"]`。
 
 ### `POST /api/pipeline/run`
-从预摄取的 .zarr 运行全链路管线。请求体：
+从 .zarr 运行管线。请求体参数：
 
-```json
-{
-  "sdata_path": "outputs/ingested/experiment.zarr",
-  "output_dir": "outputs/run_001",
-  "min_transcripts": 10,
-  "min_genes": 10,
-  "denoise_backend": "intracellular",
-  "segmentation_backend": "provided_cells",
-  "clustering_backend": "leiden",
-  "annotation_backend": "rank_marker",
-  "spatial_domain_backend": "spatial_leiden",
-  "spatial_analysis_backend": "squidpy",
-  "subcellular_analysis_backend": "rna_localization"
-}
-```
-
-返回完整 pipeline report JSON。
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| sdata_path | str | 必填 | .zarr 路径 |
+| output_dir | str | - | 输出目录 |
+| min_transcripts | int | 10 | QC 阈值 |
+| min_genes | int | 10 | QC 阈值 |
+| denoise_backend | str | intracellular | denoise 后端 |
+| segmentation_backend | str | fov_cell_id | 分割后端 |
+| clustering_backend | str | leiden | 聚类后端 |
+| annotation_backend | str | rank_marker | 注释后端 |
+| spatial_analysis_backend | str | squidpy | 空间分析后端 |
+| subcellular_analysis_backend | str | none | 亚细胞分析后端 |
 
 ### `GET /api/runs`
-列出 outputs/ 下所有已完成的 run。每个 run 包含 name、n_cells、n_genes、backend 选择等。
+列出 outputs/ 下所有已完成的 run。
 
 ### `GET /api/reports/{run_name}`
-读取 `outputs/{run_name}/cosmx_minimal_report.json`。
+读取管线报告 JSON。
 
 ### `GET /api/plots/{run_name}`
-返回 UMAP 和空间散点图数据（从 h5ad 读取）。
-
-### `GET /api/stats/by-backend`
-遍历 `outputs/backend_validation/` 下的所有 run，按步骤+后端聚合统计。
+返回 UMAP 和空间散点图数据。
 
 ### `GET /api/cells/{cell_id}/transcripts?run_name=xxx`
-返回指定细胞的转录本坐标、基因和子细胞域信息。
-
-### Legacy endpoints (向后兼容)
-`POST /api/cosmx/run`、`GET /api/cosmx/report`、`POST /api/benchmarks/cosmx/run` 仍可用，但推荐使用新的 `/api/pipeline/run`。
-
-未提供参数时默认读取 `cosmx_try_again_round`。
-
-示例：
-
-```bash
-curl "http://127.0.0.1:8000/api/plots?report_path=outputs/cosmx_try_again_round/cosmx_minimal_report.json"
-```
-
-## 参数化 CosMx 运行
-
-### `GET /api/cosmx/report`
-
-按查询参数运行 CosMx 管线，并直接返回报告 JSON。适合前端调试或简单联调。
-
-常用查询参数：
-
-- `input_csv`
-- `output_dir`
-- `min_transcripts`
-- `min_genes`
-- `denoise_backend` (`none`, `intracellular`, `nuclear_only`, `sparc`)
-- `segmentation_backend` (`provided_cells`, `fov_cell_id`)
-- `clustering_backend` (`leiden`, `kmeans`, `scvi`)
-- `leiden_resolution`
-- `annotation_backend` (`cluster_label`, `rank_marker`, `celltypist`)
-- `domain_backend` (`spatial_leiden`, `spatial_kmeans`, `none`) — spatial domain clustering
-- `spatial_domain_resolution`
-- `n_spatial_domains`
-- `subcellular_domain_backend` (`hdbscan`, `dbscan`, `leiden_spatial`, `phenograph`, `none`)
-
-示例：
-
-```bash
+返回指定细胞的转录本信息。

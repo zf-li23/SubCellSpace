@@ -179,6 +179,30 @@
 
 ---
 
+## 架构变更记录
+
+### 2026-06-02 — 管线简化为 Scverse 原生单一线
+
+**变更**：放弃插件式多后端架构，转为单一 scverse 原生管线。
+
+| 变更 | 之前 | 之后 |
+|------|------|------|
+| 设计哲学 | 插件式，7 步 20+ 后端 | **单一线**，每步一个可靠后端 |
+| 后端来源 | pip 可选依赖 + git clone | **Scverse 原生**（scanpy + squidpy） |
+| 后端数量 | 21 个（含 spARC, cellpose, scvi, celltypist 等） | **6 个**（intracellular, fov_cell_id, leiden, rank_marker, squidpy, none） |
+| 配置 | prod/baseline/xenium 三个 YAML | **单一** config/pipeline.yaml |
+| 额外依赖 | cellpose 需下载 2GB 模型，scvi 需 GPU，celltypist 需网络 | **零外部依赖**，无需网络/GPU |
+| 平台输入 | 仅 tx_file | **自动整合所有伴侣文件**（polygon, exprMat, metadata, FOV） |
+| 亚细胞分析 | SCRIN + hdbscan 域聚类 | `none`（可选 SCRIN） |
+
+**保留的能力**：
+- SCRIN 仍可通过 `--subcellular-analysis-backend scrin` 使用
+- CLI `--config` 仍支持自定义 YAML 覆盖
+- 三种平台的完整伴侣文件整合（CosMx 4 种、Xenium 5 种、MERFISH 2 种）
+- 所有历史 Phase 0-4 的设计文档保留不变
+
+---
+
 ## 短期计划 (2026-06)
 
 ### Phase 5 收尾
