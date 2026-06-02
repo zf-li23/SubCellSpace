@@ -146,6 +146,7 @@ def _run_step(
 def run_pipeline(
     settings: Settings | None = None,
     sdata: Any = None,   # ← NEW: pre-ingested SpatialData (Phase 0)
+    skip_container: bool = False,
     **overrides: Any,
 ) -> PipelineResult:
     """Run the full pipeline with plugin-style step execution.
@@ -453,17 +454,18 @@ def run_pipeline(
     )
 
     # ── Generate flat container files & interactive HTML report ──
-    try:
-        from .container import generate_container
-        generate_container(ctx.adata, report, output_dir)
-        report["outputs"]["metadata"] = str(output_dir / "metadata.json")
-        report["outputs"]["cells"] = str(output_dir / "cells.parquet")
+    if not skip_container:
+        try:
+            from .container import generate_container
+            generate_container(ctx.adata, report, output_dir)
+            report["outputs"]["metadata"] = str(output_dir / "metadata.json")
+            report["outputs"]["cells"] = str(output_dir / "cells.parquet")
 
-        from .html_report import generate_html_report
-        html_path = generate_html_report(output_dir)
-        report["outputs"]["html_report"] = str(html_path)
-    except Exception as exc:
-        logger.warning("Container/HTML report generation failed: %s", exc)
+            from .html_report import generate_html_report
+            html_path = generate_html_report(output_dir)
+            report["outputs"]["html_report"] = str(html_path)
+        except Exception as exc:
+            logger.warning("Container/HTML report generation failed: %s", exc)
 
     # Rewrite report.json with updated outputs
     report_path.write_text(

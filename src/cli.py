@@ -74,7 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--subcellular-domain-backend", choices=["hdbscan", "dbscan", "leiden_spatial", "phenograph", "none"], default="hdbscan",
                             help="Subcellular domain clustering backend (part of subcellular_analysis step)")
     run_parser.add_argument("--strict-contracts", action="store_true", help="Treat data contract violations as hard errors")
-    run_parser.add_argument("--no-export", action="store_true", help="Skip export step")
+    run_parser.add_argument("--no-export", action="store_true", help="Skip frontend JSON export")
+    run_parser.add_argument("--skip-container", action="store_true", help="Skip cells.parquet + metadata.json + report.html generation")
     run_parser.add_argument("--keep-zarr", action="store_true", help="Keep intermediate .zarr file")
 
     # ── Export frontend-friendly files ──────────────────────────────
@@ -246,6 +247,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         subcellular_domain_backend=args.subcellular_domain_backend,
         spatial_analysis_backend=args.spatial_analysis_backend,
         strict_contracts=getattr(args, "strict_contracts", False),
+        skip_container=getattr(args, "skip_container", False),
     )
     print(result.summary.to_text())
     print(f"AnnData: {result.adata_path}")

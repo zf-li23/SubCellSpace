@@ -414,3 +414,56 @@ rsync -avz -e "ssh -J bio-download" \
 - **Xenium/MERFISH don't have `CellComp` column.** Use `--denoise-backend none` for these platforms. The `intracellular` fallback has a bug that drops all transcripts instead of passing through. Fix pending.
 - **`anndata.settings.allow_write_nullable_strings`** must be `True` for Xenium/MERFISH (fixed in `pipeline_engine.py` 2026-05-19).
 - **hdbscan domain clustering** may show "not available" warning on cluster — falls back to `rna_localization` gracefully.
+
+---
+
+## 11. Data Transfer Between Jumpbox and Cluster
+
+### Topology
+
+```
+bio-download (101.6.122.79, internal: 192.168.1.1)  ← Jumpbox with internet
+a-cluster (192.168.1.2)                              ← Compute cluster (no internet)
+```
+
+Both machines are on the same internal network (192.168.1.x). **Always transfer data on the internal network** to avoid routing through your local machine.
+
+### ❌ Don't do this (routes through local machine)
+
+```bash
+# From local laptop — data goes: jumpbox → laptop → cluster (slow, wastes bandwidth)
+scp -3 -o ProxyJump=bio-download bio@bio-download:/data/... a-cluster:/data/...
+```
+
+### ✅ Do this instead (internal network only)
+
+**From a-cluster, pull files from bio-download:**
+
+```bash
+# SSH into cluster first
+ssh -J bio-download a-cluster
+
+# Then run scp on the internal network
+scp -r bio@192.168.1.1:/data/yangxrlab/file.txt /data3/yangxr002/target_dir/
+```
+
+Since `192.168.1.1` is bio-download's internal interface, the data flows directly:
+`bio-download → a-cluster` without touching the internet or your local machine.
+
+### File transfer workflow for GEO downloads
+
+When GEO data is downloaded to bio-download (`/data/yangxrlab/cosmx_geo_downloads/`) and needs to reach the cluster:
+
+```bash
+# 1. On local machine, generate the sync script
+python3 scripts/gen_cluster_sync.py
+
+# 2. Push it to cluster
+scp /tmp/cluster_sync.sh a-cluster:/tmp/
+
+# 3. Run it on cluster (internal network transfer)
+ssh -J bio-download a-cluster "nohup bash /tmp/cluster_sync.sh > /tmp/sync.log 2>&1 &"
+
+# 4. Monitor progress (no local bandwidth used)
+ssh -J bio-download a-cluster "tail -20 /tmp/sync.log"
+```

@@ -511,9 +511,11 @@ def run_subcellular_analysis(
 
 # ── Register ─────────────────────────────────────────────────────────
 
+register_backend("subcellular_analysis", "none")(lambda: None)
 register_backend("subcellular_analysis", "rna_localization")(_subcell_rna_localization)
 register_backend("subcellular_analysis", "scrin")(_subcell_scrin)
 
+declare_capabilities("subcellular_analysis", "none", [])
 declare_capabilities("subcellular_analysis", "rna_localization", [
     "subcellular_domains", "rna_localization",
 ])
@@ -522,6 +524,7 @@ declare_capabilities("subcellular_analysis", "scrin", [
 ])
 
 _SUBCELLULAR_ANALYSIS_FUNCS = {
+    "none": lambda df, ad, **kw: {"subcellular_analysis": "skipped"},
     "rna_localization": lambda df, ad, **kw: _subcell_rna_localization(df, ad),
     "scrin": _subcell_scrin,
 }
@@ -540,6 +543,9 @@ def _run_subcellular_analysis(
         raise ValueError("No segmented data or adata before subcellular analysis")
 
     domain_backend = params.get("subcellular_domain_backend", params.get("domain_backend", "hdbscan"))
+    # When the entire subcellular analysis is skipped, skip domain clustering too
+    if backend == "none":
+        domain_backend = "none"
     scrin_radius = params.get("scrin_radius", 4.16)
     scrin_mode = params.get("scrin_mode", "fast")
     scrin_background = params.get("scrin_background", "cooccurrence")
