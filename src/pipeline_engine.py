@@ -465,7 +465,10 @@ def run_pipeline(
             html_path = generate_html_report(output_dir)
             report["outputs"]["html_report"] = str(html_path)
         except Exception as exc:
-            logger.warning("Container/HTML report generation failed: %s", exc)
+            logger.error(
+                "Container/HTML report generation failed: %s",
+                exc, exc_info=True,
+            )
 
     # Rewrite report.json with updated outputs
     report_path.write_text(

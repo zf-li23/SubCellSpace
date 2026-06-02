@@ -130,7 +130,7 @@ class StepConfig:
 class PipelineConfig:
     """Full pipeline configuration."""
 
-    name: str = "cosmx_minimal"
+    name: str = "default"
     description: str = ""
     version: str = "0.1.0"
     steps: list[StepConfig] = field(default_factory=list)
@@ -157,7 +157,7 @@ class PipelineConfig:
             )
 
         return cls(
-            name=pipeline.get("name", "cosmx_minimal"),
+            name=pipeline.get("name", "default"),
             description=pipeline.get("description", ""),
             version=pipeline.get("version", "0.1.0"),
             steps=steps,
@@ -203,8 +203,8 @@ class Settings:
             # Fallback to default minimal config
             self._raw = {
                 "pipeline": {
-                    "name": "cosmx_minimal",
-                    "description": "Minimal CosMx spatial transcriptomics analysis pipeline",
+                    "name": "default",
+                    "description": "Default SubCellSpace pipeline (config/pipeline.yaml not found)",
                     "version": "0.1.0",
                     "steps": [
                         "denoise",

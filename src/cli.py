@@ -77,6 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--no-export", action="store_true", help="Skip frontend JSON export")
     run_parser.add_argument("--skip-container", action="store_true", help="Skip cells.parquet + metadata.json + report.html generation")
     run_parser.add_argument("--keep-zarr", action="store_true", help="Keep intermediate .zarr file")
+    run_parser.add_argument("--config", type=str, default=None,
+                            help="Path to pipeline YAML config (e.g. config/pipeline.prod.yaml). "
+                                 "Overrides defaults; individual CLI flags still take precedence.")
 
     # ── Export frontend-friendly files ──────────────────────────────
     export_parser = subparsers.add_parser("export", help="Export .zarr → frontend-friendly static files")
@@ -196,6 +199,18 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     from .pipeline_engine import run_pipeline
 
+    # ── Load config file if specified ──
+    settings_obj = None
+    if getattr(args, "config", None):
+        from .config import Settings as _Settings
+        config_path = Path(args.config)
+        if not config_path.exists():
+            print(f"Error: Config file not found: {config_path}")
+            return
+        settings_obj = _Settings(config_path=str(config_path))
+        print(f"Loaded config: {config_path} \u2192 pipeline '{settings_obj.pipeline.name}'")
+
+
     input_path = Path(args.input_path)
     if not input_path.exists():
         print(f"Error: Input file not found: {input_path}")
@@ -234,6 +249,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     # ── Run pipeline ──
     result = run_pipeline(
+        settings=settings_obj,
         sdata=sdata,
         output_dir=output_dir,
         min_transcripts=args.min_transcripts,

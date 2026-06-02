@@ -381,6 +381,22 @@ def _run_segmentation(
             if key in _params:
                 kwargs[key] = _params[key]
 
-    result = assign_cells(ctx.denoised_df, backend, **kwargs)
+    # Attempt segmentation with graceful fallback
+    # Cellpose needs image_path; if unavailable, fall back to fov_cell_id
+    try:
+        result = assign_cells(ctx.denoised_df, backend, **kwargs)
+    except (ValueError, FileNotFoundError, ImportError, RuntimeError) as exc:
+        if backend == "cellpose":
+            logger.warning(
+                "Cellpose backend failed (%s). Falling back to 'fov_cell_id'. "
+                "To use Cellpose, set 'image_path' in config's segmentation.params.",
+                exc,
+            )
+            result = assign_cells(ctx.denoised_df, "fov_cell_id")
+            # Tag the result so downstream can see the fallback
+            result.summary["segmentation_fallback"] = f"cellpose → fov_cell_id ({exc})"
+        else:
+            raise
+
     ctx.segmented_df = result.output
     return result
