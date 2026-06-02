@@ -203,9 +203,9 @@ class Settings:
             # Fallback to default minimal config
             self._raw = {
                 "pipeline": {
-                    "name": "default",
-                    "description": "Default SubCellSpace pipeline (config/pipeline.yaml not found)",
-                    "version": "0.1.0",
+                    "name": "subcellspace",
+                    "description": "Unified SubCellSpace pipeline (config/pipeline.yaml not found)",
+                    "version": "0.2.0",
                     "steps": [
                         "denoise",
                         "patchify",
@@ -219,7 +219,7 @@ class Settings:
                         "denoise": {
                             "module": "src.steps.denoise",
                             "default_backend": "intracellular",
-                            "description": "Filter transcripts based on cell compartment",
+                            "description": "Filter transcripts by cell compartment",
                         },
                         "patchify": {
                             "module": "src.steps.patchify",
@@ -229,8 +229,18 @@ class Settings:
                         },
                         "segmentation": {
                             "module": "src.steps.segmentation",
-                            "default_backend": "provided_cells",
-                            "description": "Assign transcripts to cells",
+                            "default_backend": "fov_cell_id",
+                            "description": "Assign transcripts to cells with FOV-prefixed IDs",
+                        },
+                        "analysis": {
+                            "module": "src.steps.analysis",
+                            "default_backend": "leiden",
+                            "description": "Leiden clustering & expression analysis",
+                        },
+                        "annotation": {
+                            "module": "src.steps.annotation",
+                            "default_backend": "rank_marker",
+                            "description": "Marker-gene based cell type annotation",
                         },
                         "spatial_analysis": {
                             "module": "src.steps.spatial_analysis",
@@ -239,20 +249,9 @@ class Settings:
                         },
                         "subcellular_analysis": {
                             "module": "src.steps.subcellular_analysis",
-                            "default_backend": "rna_localization",
-                            "description": "Subcellular domain clustering + RNA localization/co-localization",
+                            "default_backend": "none",
+                            "description": "Subcellular analysis (disabled — no scverse-native backend)",
                         },
-                        "analysis": {
-                            "module": "src.steps.analysis",
-                            "default_backend": "leiden",
-                            "description": "Clustering & expression analysis",
-                        },
-                        "annotation": {
-                            "module": "src.steps.annotation",
-                            "default_backend": "rank_marker",
-                            "description": "Cell-type annotation",
-                        },
-
                     },
                 }
             }

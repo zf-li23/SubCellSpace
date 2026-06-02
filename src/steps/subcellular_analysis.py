@@ -375,12 +375,12 @@ def _subcell_scrin(
 
         cmd = [
             "scrin",
-            "--input", str(input_csv),
-            "--output", str(output_dir),
+            "--data_path", str(input_csv),
+            "--save_path", str(output_dir),
             "--r_check", str(scrin_radius),
             "--mode", scrin_mode,
             "--background", scrin_background,
-            "--detection", scrin_detection,
+            "--detection_method", scrin_detection,
         ]
         if scrin_mpi_np > 1:
             cmd = ["mpirun", "-np", str(scrin_mpi_np)] + cmd

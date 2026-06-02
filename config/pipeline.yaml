@@ -1,18 +1,17 @@
 # ═════════════════════════════════════════════════════════════════════
-# SubCellSpace — Baseline Pipeline Configuration
+# SubCellSpace — Unified Pipeline Configuration
 #
-# Minimal-overhead baseline for ablation studies:
-#   none denoise  →  provided_cells segmentation  →  Leiden clustering
-#   →  rank_marker annotation  →  Squidpy spatial  →  SCRIN + none
+# Single scverse-native pipeline using only scanpy + squidpy + numpy.
+# No external model downloads, no GPU requirements, no network access.
 #
-# SCRIN is kept (same as prod) so that the only variables are:
-#   denoise, segmentation, annotation
+# Integrated with CosMx companion files (polygons, expression matrix,
+# cell metadata, FOV positions) when available.
 # ═════════════════════════════════════════════════════════════════════
 
 pipeline:
-  name: "baseline"
-  description: "Baseline pipeline: no denoising, platform-provided segmentation, rank-marker annotation, no spatial analysis"
-  version: "0.1.0"
+  name: "subcellspace"
+  description: "Unified SubCellSpace pipeline — scverse ecosystem, zero external dependencies"
+  version: "0.2.0"
 
   steps:
     - denoise
@@ -26,14 +25,14 @@ pipeline:
   steps_config:
     denoise:
       module: "src.steps.denoise"
-      default_backend: "none"
-      description: "No denoising (pass-through)"
+      default_backend: "intracellular"
+      description: "Filter non-coding transcripts by CellComp (Nuclear/Cytoplasm only)"
       enabled: true
 
     patchify:
       module: "src.steps.patchify"
       default_backend: "none"
-      description: "No patching"
+      description: "Spatial grid patching (disabled in single-threaded mode)"
       params:
         patch_width: 500.0
         patch_overlap: 50.0
@@ -41,14 +40,14 @@ pipeline:
 
     segmentation:
       module: "src.steps.segmentation"
-      default_backend: "provided_cells"
-      description: "Use platform-provided cell assignments (no re-segmentation)"
+      default_backend: "fov_cell_id"
+      description: "Assign transcripts to cells using FOV-prefixed cell IDs"
       enabled: true
 
     analysis:
       module: "src.steps.analysis"
       default_backend: "leiden"
-      description: "Leiden clustering (same as prod)"
+      description: "Leiden clustering + PCA + UMAP + QC filtering (scanpy)"
       params:
         min_transcripts: 10
         min_genes: 10
@@ -59,25 +58,19 @@ pipeline:
     annotation:
       module: "src.steps.annotation"
       default_backend: "rank_marker"
-      description: "Marker-gene based annotation (no external reference)"
+      description: "Marker-gene based cell type annotation (scanpy rank_genes_groups)"
       enabled: true
 
     spatial_analysis:
       module: "src.steps.spatial_analysis"
-      default_backend: "none"
-      description: "No spatial analysis (baseline)"
+      default_backend: "squidpy"
+      description: "Multi-faceted spatial analysis: domains, SVG, neighborhood enrichment, co-occurrence"
       params:
-        domain_backend: "none"
+        domain_backend: "spatial_leiden"
       enabled: true
 
     subcellular_analysis:
       module: "src.steps.subcellular_analysis"
-      default_backend: "scrin"
-      description: "SCRIN co-localization (same as prod, for fair comparison)"
-      params:
-        subcellular_domain_backend: "hdbscan"
-        scrin_radius: 4.16
-        scrin_mode: "fast"
-        scrin_background: "cooccurrence"
-        scrin_detection: "radius"
+      default_backend: "none"
+      description: "Subcellular analysis (disabled — no scverse-native backend available)"
       enabled: true

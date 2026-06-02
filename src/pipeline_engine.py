@@ -286,7 +286,13 @@ def run_pipeline(
         # (analysis, annotation, spatial_analysis, subcellular_analysis)
         #  have access to it.
         if step_cfg.name == "segmentation" and ctx.adata is None and ctx.segmented_df is not None:
-            ctx.adata = build_cell_level_adata(ctx.segmented_df)
+            # Note: expr_matrix from CosMx uses original cell IDs (not fov_cell_id),
+            # so build adata from tx_file directly and enrich with metadata separately.
+            cell_metadata = ctx.sdata.attrs.get("cosmx_cell_metadata") if ctx.sdata is not None else None
+            ctx.adata = build_cell_level_adata(
+                ctx.segmented_df,
+                cell_metadata=cell_metadata,
+            )
             # ── QC guard: skip downstream if no cells survived ──────
             if ctx.adata.n_obs == 0:
                 logger.warning(

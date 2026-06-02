@@ -382,14 +382,14 @@ def _run_segmentation(
                 kwargs[key] = _params[key]
 
     # Attempt segmentation with graceful fallback
-    # Cellpose needs image_path; if unavailable, fall back to fov_cell_id
+    # Cellpose needs image_path + model download; if unavailable, fall back to fov_cell_id
     try:
         result = assign_cells(ctx.denoised_df, backend, **kwargs)
-    except (ValueError, FileNotFoundError, ImportError, RuntimeError) as exc:
+    except Exception as exc:
         if backend == "cellpose":
             logger.warning(
                 "Cellpose backend failed (%s). Falling back to 'fov_cell_id'. "
-                "To use Cellpose, set 'image_path' in config's segmentation.params.",
+                "To use Cellpose, set 'image_path' in config and ensure model is cached.",
                 exc,
             )
             result = assign_cells(ctx.denoised_df, "fov_cell_id")
