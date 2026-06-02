@@ -62,16 +62,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--min-genes", type=int, default=10)
     run_parser.add_argument("--cell-id-column", type=str, default=None,
                             help="Override cell ID column name for ingestion (e.g. 'fov' for MERFISH data)")
-    run_parser.add_argument("--denoise-backend", choices=get_available_backends("denoise"), default="intracellular")
-    run_parser.add_argument("--patchify-backend", choices=get_available_backends("patchify"), default="none")
-    run_parser.add_argument("--segmentation-backend", choices=get_available_backends("segmentation"), default="provided_cells")
-    run_parser.add_argument("--clustering-backend", choices=get_available_backends("analysis"), default="leiden")
+    run_parser.add_argument("--denoise-backend", choices=get_available_backends("denoise"), default=None)
+    run_parser.add_argument("--patchify-backend", choices=get_available_backends("patchify"), default=None)
+    run_parser.add_argument("--segmentation-backend", choices=get_available_backends("segmentation"), default=None)
+    run_parser.add_argument("--clustering-backend", choices=get_available_backends("analysis"), default=None)
     run_parser.add_argument("--leiden-resolution", type=float, default=1.0)
-    run_parser.add_argument("--annotation-backend", choices=get_available_backends("annotation"), default="rank_marker")
-    run_parser.add_argument("--domain-backend", choices=["spatial_leiden", "spatial_kmeans", "none"], default="spatial_leiden",
+    run_parser.add_argument("--annotation-backend", choices=get_available_backends("annotation"), default=None)
+    run_parser.add_argument("--domain-backend", choices=["spatial_leiden", "spatial_kmeans", "none"], default=None,
                             help="Spatial domain identification backend (part of spatial_analysis step)")
-    run_parser.add_argument("--spatial-analysis-backend", choices=get_available_backends("spatial_analysis"), default="squidpy")
-    run_parser.add_argument("--subcellular-domain-backend", choices=["hdbscan", "dbscan", "leiden_spatial", "phenograph", "none"], default="hdbscan",
+    run_parser.add_argument("--spatial-analysis-backend", choices=get_available_backends("spatial_analysis"), default=None)
+    run_parser.add_argument("--subcellular-domain-backend", choices=["hdbscan", "dbscan", "leiden_spatial", "phenograph", "none"], default=None,
                             help="Subcellular domain clustering backend (part of subcellular_analysis step)")
     run_parser.add_argument("--strict-contracts", action="store_true", help="Treat data contract violations as hard errors")
     run_parser.add_argument("--no-export", action="store_true", help="Skip frontend JSON export")
@@ -248,22 +248,22 @@ def _cmd_run(args: argparse.Namespace) -> None:
             print(f"  Saved: {zarr_path}")
 
     # ── Run pipeline ──
+    # Only pass non-None CLI args as overrides (so --config values take precedence)
+    overrides: dict[str, Any] = {}
+    for key in ("min_transcripts", "min_genes", "denoise_backend", "patchify_backend",
+                "segmentation_backend", "clustering_backend", "leiden_resolution",
+                "annotation_backend", "domain_backend", "subcellular_domain_backend",
+                "spatial_analysis_backend", "strict_contracts"):
+        val = getattr(args, key, None)
+        if val is not None:
+            overrides[key] = val
+    overrides["skip_container"] = getattr(args, "skip_container", False)
+
     result = run_pipeline(
         settings=settings_obj,
         sdata=sdata,
         output_dir=output_dir,
-        min_transcripts=args.min_transcripts,
-        min_genes=args.min_genes,
-        denoise_backend=args.denoise_backend,
-        segmentation_backend=args.segmentation_backend,
-        clustering_backend=args.clustering_backend,
-        leiden_resolution=args.leiden_resolution,
-        annotation_backend=args.annotation_backend,
-        domain_backend=args.domain_backend,
-        subcellular_domain_backend=args.subcellular_domain_backend,
-        spatial_analysis_backend=args.spatial_analysis_backend,
-        strict_contracts=getattr(args, "strict_contracts", False),
-        skip_container=getattr(args, "skip_container", False),
+        **overrides,
     )
     print(result.summary.to_text())
     print(f"AnnData: {result.adata_path}")

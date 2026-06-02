@@ -370,13 +370,21 @@ def run_spatial_analysis(
 
 # ── Register ─────────────────────────────────────────────────────────
 
+def _spatial_none(adata: sc.AnnData, **kwargs: Any) -> dict[str, Any]:
+    """No-op spatial analysis (baseline)."""
+    return {"spatial_analysis": "skipped"}
+
+
+register_backend("spatial_analysis", "none")(_spatial_none)
 register_backend("spatial_analysis", "squidpy")(_spatial_squidpy)
 register_backend("spatial_analysis", "scfates")(_spatial_scfates)
 
+declare_capabilities("spatial_analysis", "none", [])
 declare_capabilities("spatial_analysis", "squidpy", ["svg", "neighborhood", "co_occurrence"])
 declare_capabilities("spatial_analysis", "scfates", ["tree_inference", "pseudotime"])
 
 _SPATIAL_ANALYSIS_FUNCS = {
+    "none": _spatial_none,
     "squidpy": _spatial_squidpy,
     "scfates": _spatial_scfates,
 }

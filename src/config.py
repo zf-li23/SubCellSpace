@@ -208,6 +208,7 @@ class Settings:
                     "version": "0.1.0",
                     "steps": [
                         "denoise",
+                        "patchify",
                         "segmentation",
                         "analysis",
                         "annotation",
@@ -219,6 +220,12 @@ class Settings:
                             "module": "src.steps.denoise",
                             "default_backend": "intracellular",
                             "description": "Filter transcripts based on cell compartment",
+                        },
+                        "patchify": {
+                            "module": "src.steps.patchify",
+                            "default_backend": "none",
+                            "description": "Spatial grid patching for parallel processing",
+                            "params": {"patch_width": 500.0, "patch_overlap": 50.0},
                         },
                         "segmentation": {
                             "module": "src.steps.segmentation",

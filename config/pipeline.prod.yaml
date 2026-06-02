@@ -10,7 +10,7 @@
 
 pipeline:
   name: "prod"
-  description: "Production pipeline with spARC denoise, Cellpose segmentation, CellTypist annotation, and SCRIN subcellular analysis"
+  description: "Production pipeline: spARC denoise, Cellpose segmentation, scVI clustering, CellTypist annotation, Squidpy spatial, SCRIN subcellular"
   version: "0.1.0"
 
   steps:
@@ -51,12 +51,12 @@ pipeline:
 
     analysis:
       module: "src.steps.analysis"
-      default_backend: "leiden"
-      description: "Leiden clustering + PCA + UMAP + QC filtering"
+      default_backend: "scvi"
+      description: "scVI variational inference + Leiden clustering (GPU-accelerated)"
       params:
         min_transcripts: 10
         min_genes: 10
-        clustering_backend: "leiden"
+        clustering_backend: "scvi"
         leiden_resolution: 1.0
       enabled: true
 

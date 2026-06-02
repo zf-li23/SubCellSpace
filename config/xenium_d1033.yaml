@@ -1,0 +1,88 @@
+# ═════════════════════════════════════════════════════════════════════
+# Xenium P1012/D1033 test dataset pipeline configuration
+#
+# Extends prod with dataset-specific image_path for Cellpose.
+# morphology_focus.ome.tif is the standard Xenium morphology image
+# used for cell segmentation.
+# ═════════════════════════════════════════════════════════════════════
+
+pipeline:
+  name: "xenium_prod"
+  description: "Production pipeline for Xenium D1033 with morphology image support"
+  version: "0.1.0"
+
+  steps:
+    - denoise
+    - patchify
+    - segmentation
+    - analysis
+    - annotation
+    - spatial_analysis
+    - subcellular_analysis
+
+  steps_config:
+    denoise:
+      module: "src.steps.denoise"
+      default_backend: "sparc"
+      description: "Spatially-aware diffusion-based denoising (spARC)"
+      enabled: true
+
+    patchify:
+      module: "src.steps.patchify"
+      default_backend: "none"
+      description: "Spatial grid patching (disabled)"
+      params:
+        patch_width: 500.0
+        patch_overlap: 50.0
+      enabled: true
+
+    segmentation:
+      module: "src.steps.segmentation"
+      default_backend: "cellpose"
+      description: "Cellpose segmentation using Xenium morphology image"
+      params:
+        image_path: "/data3/yangxr002/Xenium/P1012/D1033/morphology_focus.ome.tif"
+        model_type: "nuclei"
+        diameter: null
+        flow_threshold: 0.4
+        cellprob_threshold: 0.0
+      enabled: true
+
+    analysis:
+      module: "src.steps.analysis"
+      default_backend: "scvi"
+      description: "scVI variational inference + Leiden clustering (GPU)"
+      params:
+        min_transcripts: 10
+        min_genes: 10
+        clustering_backend: "scvi"
+        leiden_resolution: 1.0
+      enabled: true
+
+    annotation:
+      module: "src.steps.annotation"
+      default_backend: "celltypist"
+      description: "CellTypist annotation"
+      params:
+        model_name: "Immune_All_Low.pkl"
+      enabled: true
+
+    spatial_analysis:
+      module: "src.steps.spatial_analysis"
+      default_backend: "squidpy"
+      description: "Squidpy spatial analysis"
+      params:
+        domain_backend: "spatial_leiden"
+      enabled: true
+
+    subcellular_analysis:
+      module: "src.steps.subcellular_analysis"
+      default_backend: "scrin"
+      description: "SCRIN RNA co-localization network"
+      params:
+        subcellular_domain_backend: "hdbscan"
+        scrin_radius: 4.16
+        scrin_mode: "fast"
+        scrin_background: "cooccurrence"
+        scrin_detection: "radius"
+      enabled: true

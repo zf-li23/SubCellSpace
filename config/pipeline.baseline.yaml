@@ -11,7 +11,7 @@
 
 pipeline:
   name: "baseline"
-  description: "Baseline pipeline: no denoising, platform-provided segmentation, rank-marker annotation"
+  description: "Baseline pipeline: no denoising, platform-provided segmentation, rank-marker annotation, no spatial analysis"
   version: "0.1.0"
 
   steps:
@@ -64,10 +64,10 @@ pipeline:
 
     spatial_analysis:
       module: "src.steps.spatial_analysis"
-      default_backend: "squidpy"
-      description: "Spatial analysis (same as prod)"
+      default_backend: "none"
+      description: "No spatial analysis (baseline)"
       params:
-        domain_backend: "spatial_leiden"
+        domain_backend: "none"
       enabled: true
 
     subcellular_analysis:

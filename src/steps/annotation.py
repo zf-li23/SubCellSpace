@@ -213,6 +213,18 @@ def _run_annotation(
             backend_used=backend,
         )
     else:
-        result = run_cell_type_annotation(ctx.adata, backend=backend)
+        try:
+            result = run_cell_type_annotation(ctx.adata, backend=backend)
+        except Exception as exc:
+            if backend == "celltypist":
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    "CellTypist failed (%s). Falling back to 'rank_marker'.", exc,
+                )
+                result = run_cell_type_annotation(ctx.adata, backend="rank_marker")
+                result.summary["annotation_fallback"] = f"celltypist → rank_marker ({exc})"
+            else:
+                raise
     ctx.adata = result.output
     return result

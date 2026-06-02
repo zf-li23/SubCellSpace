@@ -92,12 +92,18 @@ def _cluster_scvi(
         if isinstance(denoised_expression, pd.DataFrame):
             common_cells = adata_tmp.obs_names.intersection(denoised_expression.index)
             if len(common_cells) < 2:
-                raise ValueError(
-                    f"Fewer than 2 common cells between adata ({adata_tmp.n_obs}) "
-                    f"and denoised expression ({len(denoised_expression)})."
+                # Cell IDs may have changed after segmentation (e.g. fov_cell_id).
+                # Fall back to running scVI without denoised expression.
+                import logging
+                logging.getLogger(__name__).warning(
+                    "scVI: denoised expression index mismatch (adata: %d, denoised: %d, "
+                    "common: %d). Falling back to raw expression.",
+                    adata_tmp.n_obs, len(denoised_expression), len(common_cells),
                 )
-            adata_tmp = adata_tmp[common_cells].copy()
-            adata_tmp.X = denoised_expression.loc[common_cells].to_numpy()
+                denoised_expression = None
+            else:
+                adata_tmp = adata_tmp[common_cells].copy()
+                adata_tmp.X = denoised_expression.loc[common_cells].to_numpy()
         else:
             # numpy array: assume rows match adata.obs_names order
             if len(denoised_expression) != adata_tmp.n_obs:
@@ -113,7 +119,15 @@ def _cluster_scvi(
     # Setup and train scVI
     scvi.model.SCVI.setup_anndata(adata_tmp)
     model = scvi.model.SCVI(adata_tmp)
-    model.train(max_epochs=100)
+    try:
+        model.train(max_epochs=100)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "scVI training failed (%s). Falling back to leiden clustering.", exc,
+        )
+        sc.tl.leiden(adata, resolution=resolution, key_added="cluster")
+        return "leiden_fallback"
 
     # Get latent representation
     latent = model.get_latent_representation()
