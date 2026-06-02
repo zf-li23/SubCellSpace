@@ -72,5 +72,5 @@ pipeline:
     subcellular_analysis:
       module: "src.steps.subcellular_analysis"
       default_backend: "none"
-      description: "Subcellular analysis (disabled — no scverse-native backend available)"
+      description: "Subcellular analysis. Use --subcellular-analysis-backend scrin for SCRIN co-localization network"
       enabled: true

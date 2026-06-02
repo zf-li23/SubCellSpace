@@ -372,6 +372,8 @@ def _subcell_scrin(
 
         output_dir = tmpdir_p / "scrin_output"
         output_dir.mkdir()
+        intermediate_dir = tmpdir_p / "scrin_intermediate"
+        intermediate_dir.mkdir()
 
         cmd = [
             "scrin",
@@ -381,6 +383,7 @@ def _subcell_scrin(
             "--mode", scrin_mode,
             "--background", scrin_background,
             "--detection_method", scrin_detection,
+            "--intermediate_dir", str(intermediate_dir),
         ]
         if scrin_mpi_np > 1:
             cmd = ["mpirun", "-np", str(scrin_mpi_np)] + cmd
