@@ -533,51 +533,143 @@ def _build_data(adata, report: dict) -> dict:
         cell_area_vals = tx_vals  # fallback to transcript counts
         cell_area_label = "Transcripts per Cell"
 
+    # ── Build new SubCellSpace-specific tables ──
+
+    # Denoising Impact table
+    denoise_info = steps.get("denoise", {})
+    if denoise_info.get("denoise_backend") == "intracellular" and denoise_info.get("before_transcripts", 0) > 0:
+        before_tx = denoise_info["before_transcripts"]
+        after_tx = denoise_info["after_transcripts"]
+        dropped = denoise_info["dropped_transcripts"]
+        ratio = denoise_info["drop_ratio"] * 100
+        denoising_rows = [
+            ["Denoising backend", denoise_info.get("denoise_backend", "?")],
+            ["Transcripts before filtering", f"{before_tx:,}"],
+            ["Transcripts after filtering", f"{after_tx:,}"],
+            ["Filtered out", f"{dropped:,} ({ratio:.1f}%)"],
+        ]
+    else:
+        denoising_rows = [["Denoising", "Not applied or skipped"]]
+    # Add RNA localization info if available
+    rna_loc = adata.uns.get("rna_localization_metrics", {})
+    if rna_loc:
+        denoising_rows.append(["RNA localization", f"Mean radial distance: {rna_loc.get('mean_distance_overall', 0):.1f} µm"])
+
+    # Pipeline Yield table — transcript/cell counts at each step
+    raw_tx = summary.get('n_transcripts', 0)
+    after_denoise_tx = denoise_info.get("after_transcripts", raw_tx)
+    seg_info = steps.get("segmentation", {})
+    assigned_tx = seg_info.get("n_transcripts_assigned", 0)
+    analysis_info = steps.get("analysis", {})
+    n_before_qc = analysis_info.get("n_obs_before_qc", 0)
+    n_after_qc = n_obs
+    yield_rows = []
+    yield_rows.append(["Raw transcripts", f"{raw_tx:,}", "—", "—"])
+    if denoise_info.get("denoise_backend") == "intracellular":
+        yield_rows.append(["After Denoising", f"{after_denoise_tx:,}", "—", "—"])
+    yield_rows.append(["After Segmentation (assigned to cells)", f"{assigned_tx:,}", str(n_before_qc or n_after_qc), str(adata.n_vars)])
+    yield_rows.append(["After QC (analysis step)", "—", f"{n_after_qc:,}", f"{n_vars:,}"])
+    yield_rows.insert(0, ["Stage", "Transcripts", "Cells", "Genes"])  # header row
+    yield_rows.append(["---", "---", "---", "---"])
+    pct_tx = after_denoise_tx / raw_tx * 100 if raw_tx > 0 else 0
+    pct_cells = n_after_qc / max(n_before_qc or n_after_qc, 1) * 100
+    yield_rows.append(["Overall retention", f"{pct_tx:.1f}% of transcripts", f"{pct_cells:.1f}% of cells", "—"])
+
+    # Step Details table
+    step_order = report.get("step_order", [])
+    step_rows = []
+    step_rows.append(["Step", "Backend", "Time (s)", "Key Statistic"])
+    step_rows.append(["---", "---", "---", "---"])
+    for sn in step_order:
+        s = steps.get(sn, {})
+        backend = s.get("backend_used", "—")
+        elapsed = s.get("__elapsed_seconds__", None)
+        elapsed_str = f"{elapsed:.1f}" if elapsed is not None else "—"
+        # Pick the most relevant statistic
+        stat = "—"
+        if sn == "denoise":
+            dropped = s.get("dropped_transcripts", 0)
+            if dropped:
+                stat = f"{dropped:,} filtered out ({s.get('drop_ratio', 0)*100:.1f}%)"
+        elif sn == "segmentation":
+            stat = f"{s.get('n_transcripts_assigned', 0):,} transcripts to {s.get('n_cells_assigned', 0):,} cells"
+        elif sn == "analysis":
+            stat = f"{s.get('n_obs_after_qc', 0):,} cells × {s.get('n_vars_after_hvg', 0):,} HVGs"
+        elif sn == "annotation":
+            stat = f"{s.get('n_cell_types', 0)} cell types"
+        elif sn == "spatial_analysis":
+            stat = f"{s.get('n_spatial_domains', 0)} spatial domains"
+        elif sn == "subcellular_analysis":
+            stat = s.get("subcellular_analysis", "skipped")
+        step_rows.append([sn, backend, elapsed_str, stat])
+
+    # ── Cell Type Distribution plot (bar chart) ──
+    if "cell_type" in obs.columns:
+        ct_counts = obs["cell_type"].value_counts()
+        ct_names = ct_counts.index.tolist()
+        ct_vals = ct_counts.values.tolist()
+        cell_type_plot = {
+            "data": [{
+                "x": ct_names,
+                "y": ct_vals,
+                "type": "bar",
+                "marker": {"color": "#8b5cf6"},
+                "hovertemplate": "%{y} cells<extra>%{x}</extra>",
+                "showlegend": False,
+            }],
+            "layout": {
+                "xaxis": {"title": {"text": "Cell Type"}, "tickangle": -45},
+                "yaxis": {"title": {"text": "Cells"}},
+                "margin": {"l": 50, "r": 20, "t": 20, "b": 120},
+                "bargap": 0.4,
+            },
+        }
+    else:
+        cell_type_plot = {"data": [], "layout": {}}
+
+    # ── Spatial Domain Distribution plot (bar chart) ──
+    spat_info = steps.get("spatial_analysis", {})
+    sd_dist_raw = spat_info.get("spatial_domain_distribution", {})
+    if sd_dist_raw and isinstance(sd_dist_raw, dict):
+        # Parse domain labels (keys) and counts (values)
+        labels = [str(k) for k in sd_dist_raw.keys()]
+        counts = [int(v) for v in sd_dist_raw.values()]
+        spatial_domain_plot = {
+            "data": [{
+                "x": labels,
+                "y": counts,
+                "type": "bar",
+                "marker": {"color": "#06b6d4"},
+                "hovertemplate": "%{y} cells<extra>Domain %{x}</extra>",
+                "showlegend": False,
+            }],
+            "layout": {
+                "xaxis": {"title": {"text": "Spatial Domain"}},
+                "yaxis": {"title": {"text": "Cells"}},
+                "margin": {"l": 50, "r": 20, "t": 20, "b": 50},
+                "bargap": 0.3,
+            },
+        }
+    else:
+        spatial_domain_plot = {"data": [], "layout": {}}
+
     data: dict[str, Any] = {
+        # ── Core working components (preserved) ──
         "alarms": {"alarms": []},
         "alarm_options": {"hide_alert_analysis": True, "use_triangle_icon_for_errors": False},
         "calibration_uuid": hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest(),
         "cell_size_distribution": _hist(cell_area_vals, color="#22c55e", xlabel=cell_area_label, ylabel="Cells"),
         "clustering_selector": clustering_selector,
-        "codeword_plot": {"data": [], "layout": {}},
         "dark_mode": True,
-        "debug_info_table": {"rows": [
-            ["Pipeline", f"{report.get('pipeline_name', '?')} v{report.get('pipeline_version', '?')}"],
-            ["Platform", platform.upper()],
-            ["Cells after QC", f"{n_obs:,}"],
-            ["Genes after HVG", f"{n_vars:,}"],
-            ["Total transcripts", f"{summary.get('n_transcripts', 0):,}"],
-            ["Number of FOVs", str(summary.get("n_fovs", 0))],
-        ] + ([["QC: min transcripts", str(qc_metrics.get("min_transcripts", ""))],
-              ["QC: min genes", str(qc_metrics.get("min_genes", ""))]] if qc_metrics else [])},
-        "debug_info_table_helptext": {"data": ["Pipeline configuration and quality control parameters."], "title": "Debug Info"},
-        "decoded_gene_tissue_density_highquality_in_obj_per_100um^2": density,
-        "decoding_yield_table": {"rows": [
-            ["Total transcripts", f"{summary.get('n_transcripts', 0):,}"],
-            ["Total cells detected", f"{n_obs:,}"],
-            ["Median transcripts per cell", median_tx],
-            ["Cells per FOV", f"{fov_tx_counts and round(sum(fov_tx_counts)/len(fov_tx_counts)) or 'N/A'}"],
-        ]},
-        "decoding_yield_table_helptext": {"data": ["Statistics about transcript detection and decoding quality."], "title": "Decoding Yield"},
-        "density_plot": {"bins": [0], "horizontal_bin_count": 1, "unit": "µm",
-                          "origin_data": [], "dimensions": {"height": 100, "width": 100}, "image_sizes": {"height": 100, "width": 100},
-                          "small_image": "", "large_image": ""},
-        "fluorescence_image_thumbnail_plot": {"encoded_image": ""},
-        "fov_layout_plot": {"encoded_image": ""},
         "fov_missing_transcript_rate_plot": (
             _hist(np.array(fov_tx_counts), color="#6366f1", xlabel="Transcript per FOV", ylabel="FOVs")
             if fov_tx_counts else {"data": [], "layout": {}}
         ),
-        "fov_missing_transcript_rate_plot_helptext": {"data": ["Distribution of transcripts across FOVs."], "title": "Transcript Counts by FOV"},
         "genes_per_cell_plot": _hist(genes_vals, xlabel="Genes per Cell", ylabel="Cells"),
-        "genewise_qscore_plot": {"data": [], "layout": {}},
-        "global_qscore_histogram": {"data": [], "layout": {}},
-        "global_qscore_histogram": {"data": [], "layout": {}},
         "has_analysis": 1 if "cluster" in obs.columns else 0,
         "has_density_plot": 0,
         "has_image_qc": 0,
         "has_morphology_plot": 0,
-        "herometric_helptext": {"data": [f"Key metrics for {platform.upper()} dataset with {n_obs:,} cells, {n_vars:,} genes."], "title": "Key Metrics"},
         "is_xenium_ranger": 0,
         "median_transcripts_per_non_empty_cell": median_transcripts,
         "navbar_info": {"cols": [
@@ -585,23 +677,8 @@ def _build_data(adata, report: dict) -> dict:
             ["Platform", platform.upper()],
             ["Generated", datetime.now().strftime("%b %d, %Y, %H:%M")],
         ]},
-        "neg_controls_table": {"rows": [
-            ["Pipeline version", pipeline_ver],
-            ["Analysis steps", str(len(steps))],
-        ] + ([(["Neg probe count per cell", f"{negprobe_mean:.4f}"])] if negprobe_mean is not None else [])},
-        "neg_controls_table_helptext": {"data": ["Quality control metrics for negative control probes."], "title": "Negative Control Probes"},
         "num_cells_detected": num_cells,
-        "overview_scan": {"encoded_image": "", "polygons": [], "text_overlay": ""},
         "page_title": f"SubCellSpace {platform.upper()} Report — {n_obs} cells, {n_vars} genes",
-        "panel_spec_table": {"rows": [
-            ["Platform", platform.upper()],
-            ["Pipeline", report.get("pipeline_name", "SubCellSpace")],
-            ["Version", pipeline_ver],
-            ["Input source", source_path.split("/")[-1] if "/" in source_path else source_path],
-        ]},
-        "qscore_mean_spatial_plot": {"encoded_image": ""},
-        "region_info_table": {"rows": region_rows},
-        "roll_off_figure": {"encoded_image": ""},
         "run_info_table": {"rows": run_rows},
         "sample": {
             "id": hashlib.md5(str(report.get("source_path", "unknown")).encode()).hexdigest(),
@@ -611,14 +688,24 @@ def _build_data(adata, report: dict) -> dict:
         },
         "scrin_table": {"rows": scrin_rows},
         "segmentation_table": {"rows": seg_rows},
-        "software_table": {"rows": software_rows},
+        "software_table": {"rows": [
+            ["Platform", platform.upper()],
+            ["Pipeline", report.get("pipeline_name", "SubCellSpace")],
+            ["Analysis version", f"subcellspace-{pipeline_ver}"],
+            ["Input source", source_path.split("/")[-1] if "/" in source_path else source_path],
+        ]},
         "total_transcripts_high_quality": total_tx,
         "transcripts_per_100um2": density,
-        "transcript_plot_helptext": {"data": ["Interactive UMAP and spatial visualization of cell clusters."], "title": "Transcript Plots"},
         "transcript_spatial_plot": spatial_data,
         "transcript_umap_plot": umap_data,
         "transcripts_per_cell_plot": _hist(tx_vals, xlabel="Transcripts per Cell", ylabel="Cells"),
-        "transcripts_per_cell_plot_helptext": {"data": [], "title": ""},
+
+        # ── SubCellSpace-native data keys ──
+        "denoising_impact_table": {"rows": denoising_rows},
+        "pipeline_yield_table": {"rows": yield_rows},
+        "step_details_table": {"rows": step_rows},
+        "cell_type_plot": cell_type_plot,
+        "spatial_domain_plot": spatial_domain_plot,
     }
 
     return data
