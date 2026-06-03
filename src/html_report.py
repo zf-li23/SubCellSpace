@@ -377,27 +377,8 @@ def _build_data(adata, report: dict) -> dict:
                     "name": _label,
                 })
 
-    # ── SCRIN co-localization table ──
-    scrin_rows = []
+    # ── SCRIN co-localization — stored in adata.uns for network viz ──
     scrin_net = adata.uns.get("scrin_colocalization_network", {})
-    if scrin_net.get("status") == "completed":
-        n_pairs = scrin_net.get("n_significant_pairs", 0)
-        params = scrin_net.get("parameters", {})
-        scrin_rows.append(["SCRIN Co-localization", f"{n_pairs:,} significant pairs"])
-        scrin_rows.append(["Detection radius", f"{params.get('r_check', '?')} µm"])
-        scrin_rows.append(["Background model", params.get('background', '?')])
-        scrin_rows.append(["Mode", params.get('mode', '?')])
-        scrin_rows.append(["---", "---"])
-        scrin_rows.append(["Gene A  ↔  Gene B", "Q-value  |  Enrichment"])
-        scrin_rows.append(["---", "---"])
-        _rj = scrin_net.get("results_json", "")
-        _results = json.loads(_rj) if _rj else []
-        for i, r in enumerate(_results[:50], 1):
-            gA = r.get("gene_A", "?")
-            gB = r.get("gene_B", "?")
-            qv = f"{r.get('qvalue_BH', 1.0):.4e}"
-            ev = f"{r.get('enrichment_ratio', 0):.2f}"
-            scrin_rows.append([f"#{i}  {gA} \u2194 {gB}", f"q={qv}  enrichment={ev}"])
 
     # ── SCRIN network visualization ──
     scrin_network_plot: dict = {"data": [], "layout": dict(_DARK_LAYOUT)}
@@ -758,7 +739,6 @@ def _build_data(adata, report: dict) -> dict:
             "pipeline": "SubCellSpace Analysis Summary",
             "page_title": f"SubCellSpace {platform.upper()} — {n_obs} cells",
         },
-        "scrin_table": {"rows": scrin_rows},
         "scrin_network_plot": scrin_network_plot,
         "segmentation_table": {"rows": seg_rows},
         "software_table": {"rows": [
