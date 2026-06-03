@@ -350,12 +350,38 @@ def run_pipeline(
     if ctx.adata is None:
         ctx.adata = build_cell_level_adata(ctx.segmented_df)
 
+    # ── Extract polygon cell areas from ORIGINAL SpatialData shapes ──
+    # Must do this BEFORE sdata is rebuilt (shapes are lost after rebuild)
+    cell_area_map = {}
+    if ctx.sdata is not None and hasattr(ctx.sdata, "shapes") and ctx.sdata.shapes:
+        for key in ["cell_boundaries", "provided_boundaries"]:
+            if key in ctx.sdata.shapes:
+                gdf = ctx.sdata.shapes[key]
+                if hasattr(gdf, "geometry"):
+                    for cell_id in gdf.index:
+                        geom = gdf.loc[cell_id, "geometry"]
+                        if geom is not None and not geom.is_empty:
+                            cell_area_map[str(cell_id)] = geom.area
+                    logger.info("Extracted %d cell areas from %s", len(cell_area_map), key)
+                    break
+
     # Use existing SpatialData if available (Phase 0+), otherwise build
     if ctx.sdata is not None:
         sdata = ctx.sdata
     else:
         sdata = build_spatialdata_from_adata(ctx.adata)
         ctx.sdata = sdata
+
+    # ── Merge cell areas into adata.obs ──
+    if cell_area_map and ctx.adata is not None:
+        obs = ctx.adata.obs
+        obs["cell_area"] = -1.0
+        for cid, area in cell_area_map.items():
+            if cid in obs.index:
+                obs.loc[cid, "cell_area"] = area
+        valid = (obs["cell_area"] > 0).sum()
+        if valid:
+            logger.info("Merged cell_area for %d / %d cells", valid, len(obs))
 
     layer_evaluation = build_layer_evaluation(
         raw_df=ctx.transcripts,
@@ -415,6 +441,40 @@ def run_pipeline(
         clean_df.attrs = {}
         clean_df.to_parquet(transcripts_path)
 
+    # ── Compute additional statistics ──
+    obs = ctx.adata.obs
+    agg_stats = {}
+
+    # Transcripts in cells
+    if "n_transcripts" in obs.columns:
+        total_tx = int(obs["n_transcripts"].sum())
+        agg_stats["n_transcripts_in_cells"] = total_tx
+
+    # Per-FOV statistics
+    if "fov" in obs.columns:
+        fov_gb = obs.groupby("fov")
+        fov_tx = fov_gb["n_transcripts"].sum() if "n_transcripts" in obs.columns else fov_gb.size()
+        agg_stats["n_fovs"] = int(obs["fov"].nunique())
+        agg_stats["fov_transcript_counts"] = fov_tx.astype(int).tolist()
+        agg_stats["fov_cell_counts"] = fov_gb.size().astype(int).tolist()
+
+    # Cell area (if available)
+    for area_col in ["Area.um2", "Area"]:
+        if area_col in obs.columns and obs[area_col].dtype.kind in ("i", "f"):
+            valid = obs[area_col][obs[area_col] > 0]
+            if len(valid) > 0:
+                agg_stats["cell_area_um2_sum"] = float(valid.sum())
+                agg_stats["cell_area_um2_median"] = float(valid.median())
+                break
+
+    # Negative controls (if available)
+    for neg_col in ["nCount_negprobes", "nCount_falsecode"]:
+        if neg_col in obs.columns:
+            valid = obs[neg_col][obs[neg_col] >= 0]
+            if len(valid) > 0:
+                agg_stats[f"{neg_col}_mean"] = float(valid.mean())
+                agg_stats[f"{neg_col}_median"] = float(valid.median())
+
     # Build report
     report = {
         "source_path": source_path,
@@ -433,6 +493,7 @@ def run_pipeline(
             "n_fovs": summary_ds.n_fovs,
             **summary_ds.extra,
         },
+        "aggregated_stats": agg_stats,
         "step_summary": {
             name: {
                 **result.summary,

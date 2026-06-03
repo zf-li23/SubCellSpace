@@ -1,564 +1,671 @@
-"""Interactive single-file HTML report (Canvas-based).
+"""Xenium-style single-file HTML report for SubCellSpace pipeline output.
 
-Mirrors the Xenium analysis_summary.html approach: cell-level data is
-embedded as compact JSON arrays, and interactive UMAP/spatial scatter
-plots are rendered via a lightweight Canvas engine with zoom/pan/hover.
-Static donut/violin charts remain as base64 PNGs.
+Replicates the official Xenium Analysis Summary HTML template:
+tabs, Plotly scatter plots, metrics, tables — all driven by inline JSON data.
 
-Usage::
-
-    subcellspace report outputs/my_run
+Usage:
+    python -c "
+    from src.html_report import generate_html_report
+    generate_html_report('outputs/cosmx_ref')
+    "
 """
 
 from __future__ import annotations
 
-import base64
-import io
+import hashlib
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-import matplotlib
+import numpy as np
 import pandas as pd
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import seaborn as sns  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-# ═══════════════════════════════════════════════════════════════════════════
-# CSS (matches frontend ReportPage)
-# ═══════════════════════════════════════════════════════════════════════════
-
-_CSS = r"""
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1a1a2e;line-height:1.5}
-.header{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:1.5rem}
-.header h1{font-size:1.4rem;font-weight:600}
-.header p{opacity:.75;margin-top:.2rem;font-size:.8rem}
-.tabs{display:flex;gap:0;border-bottom:2px solid #e0e0e0;margin-bottom:1.5rem;overflow-x:auto}
-.tab-btn{flex:0 0 auto;padding:.6rem 1.2rem;border:none;background:transparent;font-size:.82rem;font-weight:500;color:#666;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;white-space:nowrap}
-.tab-btn:hover{color:#1a1a2e;background:rgba(15,52,96,.03)}
-.tab-btn.active{color:#0f3460;border-bottom-color:#0f3460;font-weight:600}
-.tab-panel{display:none}
-.tab-panel.active{display:block}
-.container{max-width:1140px;margin:0 auto;padding:1rem}
-.card{background:#fff;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:1.25rem;margin-bottom:1rem}
-.card h2{font-size:1.05rem;margin-bottom:.75rem;color:#1a1a2e;border-bottom:2px solid #e8ecf0;padding-bottom:.4rem}
-.card h3{font-size:.95rem;margin:.75rem 0 .4rem;color:#0f3460}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:.75rem}
-.stat{background:#f0f4ff;border-radius:8px;padding:.85rem;text-align:center;border-left:3px solid #0f3460}
-.stat-value{font-size:1.6rem;font-weight:700}
-.stat-label{font-size:.7rem;color:#666;margin-top:.15rem;text-transform:uppercase;letter-spacing:.4px}
-table{width:100%;border-collapse:collapse;font-size:.82rem}
-th,td{text-align:left;padding:.4rem .6rem;border-bottom:1px solid #eee}
-th{background:#f8f9fa;font-weight:600;color:#555;font-size:.75rem;text-transform:uppercase}
-.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.7rem;font-weight:600}
-.badge-intracellular,.badge-denois{background:#e3f2fd;color:#1565c0}
-.badge-none{background:#eceff1;color:#78909c}
-.badge-provided_cells,.badge-seg{background:#fce4ec;color:#c62828}
-.badge-leiden,.badge-scvi,.badge-analysis{background:#e8f5e9;color:#2e7d32}
-.badge-rank_marker,.badge-annot{background:#f3e5f5;color:#7b1fa2}
-.badge-squidpy,.badge-spatial{background:#fff3e0;color:#e65100}
-.badge-rna_localization,.badge-subcell{background:#e0f7fa;color:#00695c}
-details{margin:.4rem 0}
-summary{cursor:pointer;font-weight:600;padding:.35rem 0;color:#0f3460;font-size:.85rem}
-summary:hover{color:#16213e}
-.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin:.75rem 0}
-.chart-grid img,.chart img{max-width:100%;height:auto;border-radius:6px}
-.pie-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.75rem}
-footer{text-align:center;padding:1rem;color:#999;font-size:.7rem}
-code{background:#e8ecf0;padding:1px 4px;border-radius:3px;font-size:.82em}
-.meta-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.4rem .75rem}
-.meta-item{display:flex;justify-content:space-between;padding:.25rem 0;border-bottom:1px solid #f0f0f0;font-size:.8rem}
-.meta-label{color:#888}
-.meta-value{font-weight:600}
-.canvas-container{position:relative;width:100%;height:450px;background:#fafafa;border-radius:6px;overflow:hidden;cursor:grab}
-.canvas-container:active{cursor:grabbing}
-.canvas-container canvas{display:block}
-.tooltip{position:absolute;pointer-events:none;background:rgba(0,0,0,.78);color:#fff;padding:4px 8px;border-radius:4px;font-size:.72rem;white-space:nowrap;display:none;z-index:10}
-.zoom-info{position:absolute;bottom:6px;right:8px;font-size:.65rem;color:#999;background:rgba(255,255,255,.85);padding:2px 5px;border-radius:3px;pointer-events:none}
-.legend-bar{display:flex;flex-wrap:wrap;gap:4px 10px;margin-bottom:6px;font-size:.7rem}
-.legend-item{display:flex;align-items:center;gap:3px}
-.legend-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
-"""
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Label / colour maps
-# ═══════════════════════════════════════════════════════════════════════════
-
-_STEP_BADGE: dict[str, str] = {
-    "denoise": "badge-denois", "patchify": "badge-none",
-    "segmentation": "badge-seg", "analysis": "badge-analysis",
-    "annotation": "badge-annot", "spatial_analysis": "badge-spatial",
-    "subcellular_analysis": "badge-subcell",
-}
-_STEP_LABEL: dict[str, str] = {
-    "denoise": "Denoise", "patchify": "Patchify",
-    "segmentation": "Segmentation", "analysis": "Clustering",
-    "annotation": "Annotation", "spatial_analysis": "Spatial Analysis",
-    "subcellular_analysis": "Subcellular Analysis",
-}
-_LAYER_LABEL: dict[str, str] = {
-    "ingestion": "Ingestion", "denoise": "Denoise",
-    "segmentation": "Segmentation", "expression": "Expression",
-    "clustering": "Clustering", "annotation": "Annotation",
-    "spatial_domain": "Spatial Domain",
-    "subcellular_spatial_domain": "Subcellular Domain", "spatial": "Spatial Graph",
-}
+# ── Helpers ────────────────────────────────────────────────────────────
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Public API
-# ═══════════════════════════════════════════════════════════════════════════
+def _find_polygon_file(source_path: str) -> Path | None:
+    """Find the CosMx polygon file companion to a transcript CSV."""
+    src = Path(source_path)
+    stem = src.stem
+    if stem.endswith(".csv"):
+        stem = stem[:-4]
+    parent = src.parent
+    # Build candidate paths carefully — Path / str constructs path, then add .csv.gz
+    candidates = [
+        parent / (stem.replace("_tx_file", "-polygons") + ".csv.gz"),
+        parent / (stem.replace("_tx_file", "_polygons") + ".csv.gz"),
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return None
 
-def generate_html_report(
-    output_dir: str | Path,
-    html_path: str | Path | None = None,
-) -> str:
-    """Generate interactive Canvas-based HTML report."""
+
+def _compute_polygon_areas(poly_path: Path, obs: pd.DataFrame) -> np.ndarray:
+    """Compute cell areas from CosMx polygon vertex file using Shoelace formula."""
+    df = pd.read_csv(poly_path, dtype={"cell": str})
+    
+    # obs index format: "fov_cell" or similar. Polygon has (fov, cellID) pair.
+    # e.g. obs "10_c_3_10_0" → fov=10, cellID=0 based on CosMx naming
+    # Polygon has fov=1, cellID=1, cell="c_3_1_1"
+    # Build mapping from (fov, cellID) → obs index
+    cell_map = {}
+    for idx_val in obs.index:
+        idx_str = str(idx_val)
+        parts = idx_str.split("_")
+        if len(parts) >= 2:
+            try:
+                fov = int(parts[0])
+                cid = int(parts[-1])
+                cell_map[(fov, cid)] = idx_str
+            except ValueError:
+                pass
+    
+    # Group polygon vertices by (fov, cellID) and compute area
+    grouped = df.groupby(["fov", "cellID"], sort=False)
+    areas = {}
+    for (fov, cell_id), group in grouped:
+        key = (int(fov), int(cell_id))
+        if key in cell_map:
+            pts = group[["x_global_px", "y_global_px"]].values
+            if len(pts) >= 3:
+                x = pts[:, 0]
+                y = pts[:, 1]
+                area = 0.5 * abs(
+                    sum(x[i] * y[i + 1] - x[i + 1] * y[i] for i in range(len(pts) - 1))
+                    + x[-1] * y[0] - x[0] * y[-1]
+                )
+                areas[cell_map[key]] = area
+    
+    if not areas:
+        return np.array([])
+    
+    result = np.array([areas[idx] for idx in obs.index if idx in areas])
+    logger.info("Computed %d polygon areas (matched %d / %d obs cells)", 
+                len(result), len(areas), len(obs))
+    return result
+
+
+def _load_template() -> tuple[str, str, str, str]:
+    """Load the reference Xenium HTML template, returning components.
+
+    Returns: (style_block, head_before_style, body_open_tag, js_bundle)
+    """
+    ref = Path(__file__).resolve().parent.parent / "outputs" / "ref_analysis_summary.html"
+    if not ref.exists():
+        raise FileNotFoundError(
+            f"Reference Xenium HTML not found at {ref}. "
+            "Copy one from the cluster first:\n"
+            "  scp -o ProxyJump=bio-download \\\n"
+            "    a-cluster:/data3/yangxr002/Xenium/P1162/D1302/analysis_summary.html \\\n"
+            "    outputs/ref_analysis_summary.html"
+        )
+    html = ref.read_text(encoding="utf-8")
+
+    # Extract style block
+    s_start = html.index("<style>")
+    s_end = html.index("</style>") + len("</style>")
+    style_block = html[s_start:s_end]
+
+    # Head before style - strip leading DOCTYPE and <html><head> to avoid duplication
+    head_before = html[:s_start]
+    # Remove leading DOCTYPE and <html> tags if present
+    head_before = re.sub(r'^<!DOCTYPE[^>]*>\s*', '', head_before)
+    head_before = re.sub(r'^<html[^>]*>\s*', '', head_before)
+    head_before = re.sub(r'^<head>\s*', '', head_before)
+
+    # Extract data JSON boundaries
+    ds = html.index("const data = ") + len("const data = ")
+    depth = 0
+    de = ds
+    for i in range(ds, len(html)):
+        c = html[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                de = i + 1
+                break
+
+    # JS bundle follows data: ";\n    </script>\n    <script>/*! ... */\n    (()=>{...})()\n    </script>"
+    after_data = html[de:]
+    # Find the bundle between first </script> and last </script>
+    first_close = after_data.find("</script>") + len("</script>")
+    # Get everything after first close (includes newlines, then <script>...</script>)
+    js_section = after_data[first_close:].strip()
+    # The js_section should be: <script>/*! ... */ \n (()=>{...})() \n </script>
+    # Or it could be just a script tag
+    bundle_script = ""
+    if js_section.startswith("<script>"):
+        sc_end = js_section.rfind("</script>")
+        bundle_script = js_section[:sc_end + len("</script>")]
+
+    # Body skeleton: the part between <body> and </body> in the original
+    # We won't reuse the body directly since our tab content differs
+    # We'll extract just the <body> tag opening
+    body_tag_end = html.index(">", html.index("<body")) + 1
+    body_open = html[html.index("<body"):body_tag_end]
+
+    return style_block, head_before, body_open, bundle_script
+
+
+def _build_data(adata, meta: dict, report: dict) -> dict:
+    """Build the data JSON in Xenium schema from pipeline output."""
+    obs = adata.obs
+    n_obs, n_vars = adata.n_obs, adata.n_vars
+    summary = report.get("summary", {})
+    steps = report.get("step_summary", {})
+    platform = report.get("platform", "pipeline")
+    pipeline_ver = report.get("pipeline_version", "0.1.0")
+    source_path = report.get("source_path", "")
+
+    # ── Metrics ──
+    def _metric(name, value):
+        return {"name": name, "metric": value}
+
+    median_tx = str(int(obs["total_counts"].median())) if "total_counts" in obs else "0"
+    median_transcripts = _metric("Median transcripts per cell", median_tx)
+    num_cells = _metric("Number of cells detected", f"{n_obs:,}")
+    total_tx = _metric("Total transcripts", f"{summary.get('n_transcripts', 0):,}")
+
+    # Transcript density (per 100 µm²) — compute from spatial area
+    tx_density = "N/A"
+    region_area_um2 = None
+    if "spatial" in adata.obsm:
+        sp = adata.obsm["spatial"]
+        xr = float(sp[:, 0].max() - sp[:, 0].min())
+        yr = float(sp[:, 1].max() - sp[:, 1].min())
+        if xr > 0 and yr > 0:
+            region_area_um2 = xr * yr
+            total = summary.get('n_transcripts', 0)
+            # CosMx resolution: ~0.12 µm/pixel (100nm per pixel for most runs)
+            # But spatial coords in the pipeline are typically in µm already
+            # 100 µm² = 100 square micrometers
+            density_val = total / (region_area_um2 / 100)
+            tx_density = f"{density_val:.2f}"
+    density = _metric("Transcripts per 100 µm²", tx_density)
+
+    # ── Tables (Xenium format: {rows: [[key, val], ...]}) ──
+    region_rows = [
+        ["Region name", source_path.split("/")[-2] if "/" in source_path else "Unknown"],
+        ["Platform", platform.upper()],
+        ["Analysis date", datetime.now().strftime("%b %d, %Y")],
+    ]
+    companion = meta.get("companion_files", {})
+    if companion:
+        loaded = [k for k, v in companion.items() if v]
+        region_rows.append(["Companion files", ", ".join(loaded)])
+
+    # Region area estimate from spatial coords (already computed above)
+    region_area = "N/A"
+    if region_area_um2 is not None:
+        region_area = f"{region_area_um2:.0f}"
+
+    # Total cell area
+    cell_area_total = "N/A"
+    if "Area.um2" in obs.columns:
+        valid = obs["Area.um2"][obs["Area.um2"] > 0]
+        if len(valid) > 0:
+            cell_area_total = f"{valid.sum():.0f}"
+    elif "Area" in obs.columns:
+        valid = obs["Area"][obs["Area"] > 0]
+        if len(valid) > 0:
+            cell_area_total = f"{valid.sum():.0f}"
+
+    # Per-FOV stats
+    fov_tx_counts = []
+    if "fov" in obs.columns and "total_counts" in obs.columns:
+        fov_tx_counts = obs.groupby("fov")["total_counts"].sum().astype(int).tolist()
+
+    # Negative control probes
+    negprobe_mean = None
+    if "nCount_negprobes" in obs.columns:
+        v = obs["nCount_negprobes"][obs["nCount_negprobes"] >= 0]
+        if len(v) > 0:
+            negprobe_mean = float(v.mean())
+
+    run_rows = [
+        ["Run name", f"SubCellSpace {platform.upper()}"],
+        ["Generated", datetime.now().strftime("%b %d, %Y, %H:%M GMT")],
+        ["Total cells", f"{n_obs:,}"],
+        ["Total genes", f"{n_vars:,}"],
+    ]
+    if region_area != "N/A":
+        run_rows.append(["Region area (µm²)", region_area])
+    if cell_area_total != "N/A":
+        run_rows.append(["Total cell area (µm²)", cell_area_total])
+    software_rows = [
+        ["Analysis version", f"subcellspace-{pipeline_ver}"],
+        ["Pipeline", report.get("pipeline_name", "SubCellSpace")],
+    ]
+    seg_rows = [["Cells after QC", f"{n_obs:,}"]]
+    qc_metrics = meta.get("qc_metrics", {})
+    before_qc = qc_metrics.get("n_obs_before_qc", 0)
+    if before_qc:
+        seg_rows.append(["Cells before QC", f"{before_qc:,}"])
+        pct_empty = (1 - n_obs / before_qc) * 100
+        seg_rows.append(["Fraction of empty cells", f"{pct_empty:.1f}%"])
+    if "n_transcripts" in obs.columns:
+        total_tx_in_cells = int(obs["n_transcripts"].sum())
+        total_raw = summary.get("n_transcripts", total_tx_in_cells)
+        pct_in_cells = total_tx_in_cells / total_raw * 100 if total_raw > 0 else 0
+        seg_rows.append(["Percent of transcripts within cells", f"{pct_in_cells:.1f}%"])
+    if "cluster" in obs.columns:
+        seg_rows.append(["Number of clusters", str(obs["cluster"].nunique())])
+    if "cell_type" in obs.columns:
+        seg_rows.append(["Number of cell types", str(obs["cell_type"].nunique())])
+    if "n_genes_by_counts" in obs.columns:
+        median_g = int(obs["n_genes_by_counts"].median())
+        seg_rows.append(["Median genes per cell", str(median_g)])
+    seg_rows.append(["Analysis version", f"subcellspace-{pipeline_ver}"])
+
+    # ── Axis helpers ──
+    def _nice_range_capped(values, padding=0.05, cap_pct=99.5):
+        """Axis range using percentile capping to avoid outlier-driven scaling."""
+        if len(values) < 2:
+            return float(values[0]) if len(values) == 1 else (-1, 1)
+        lo = float(np.percentile(values, 100 - cap_pct))
+        hi = float(np.percentile(values, cap_pct))
+        spread = hi - lo
+        if spread == 0:
+            spread = max(abs(hi), 1)
+        return lo - spread * padding, hi + spread * padding
+
+    def _optimal_bins(values):
+        n = len(values)
+        if n < 2:
+            return max(10, n)
+        iqr = float(np.percentile(values, 75) - np.percentile(values, 25))
+        if iqr == 0:
+            return min(50, n)
+        width = 2.0 * iqr / (n ** (1.0 / 3.0))
+        return max(5, min(80, int((values.max() - values.min()) / width)))
+
+    # ── Scatter plot config & layout (Plotly.js format) ──
+    _scatter_cfg = {
+        "staticPlot": False, "displayModeBar": True,
+        "modeBarButtons": [["toImage", "resetScale2d"]],
+        "showAxisDragHandles": True,
+        "toImageButtonOptions": {"scale": 1, "filename": "subcellspace_plot", "format": "png", "width": 730, "height": 650},
+        "scrollZoom": False,
+    }
+
+    def _scatter_ly(title, xl, yl, xdata=None, ydata=None):
+        """Build Plotly layout with auto-scaled axes (percentile-capped)."""
+        xlo, xhi, ylo, yhi = None, None, None, None
+        if xdata is not None and len(xdata) > 0:
+            xlo, xhi = _nice_range_capped(xdata) if len(xdata) > 10 else (float(min(xdata)), float(max(xdata)))
+        if ydata is not None and len(ydata) > 0:
+            ylo, yhi = _nice_range_capped(ydata) if len(ydata) > 10 else (float(min(ydata)), float(max(ydata)))
+        xaxis = {"type": "linear", "title": {"text": xl}, "showline": False, "zeroline": True, "fixedrange": False,
+                 "anchor": "y", "tickformat": ".1f", "rangemode": "normal"}
+        yaxis = {"type": "linear", "title": {"text": yl}, "showline": False, "zeroline": True, "fixedrange": False,
+                 "anchor": "x", "tickformat": ".1f", "rangemode": "normal",
+                 "scaleanchor": None, "autorange": True}
+        if xlo is not None:
+            xaxis["range"] = [xlo, xhi]
+        if ylo is not None:
+            yaxis["range"] = [ylo, yhi]
+        return {
+            "xaxis": xaxis,
+            "yaxis": yaxis,
+            "margin": {"l": 50, "r": 20, "t": 40, "b": 50},
+            "hovermode": "closest", "title": {"text": title},
+            "hoverlabel": {"namelength": -1},
+        }
+
+    umap_x_arr = adata.obsm["X_umap"][:, 0] if "X_umap" in adata.obsm else np.array([])
+    umap_y_arr = adata.obsm["X_umap"][:, 1] if "X_umap" in adata.obsm else np.array([])
+    umap_data = {"config": _scatter_cfg, "layout": _scatter_ly("UMAP", "UMAP1", "UMAP2", umap_x_arr, umap_y_arr), "data": []}
+    spatial_data = {"config": _scatter_cfg, "layout": _scatter_ly("Spatial Coordinates", "X (µm)", "Y (µm)"), "data": []}
+    if "spatial" in adata.obsm:
+        spat_arr = adata.obsm["spatial"]
+        spatial_data["layout"] = _scatter_ly("Spatial Coordinates", "X (µm)", "Y (µm)", spat_arr[:, 0], spat_arr[:, 1])
+
+    if "X_umap" in adata.obsm:
+        xy_umap = adata.obsm["X_umap"]
+        clust = obs["cluster"].astype(str) if "cluster" in obs.columns else None
+        ct = obs["cell_type"].astype(str) if "cell_type" in obs.columns else clust
+        ncts = obs["total_counts"] if "total_counts" in obs else obs.get("n_counts", pd.Series([1] * n_obs))
+
+        # UMAP plot: color by transcript count (numeric gradient)
+        colors = ncts.values.tolist() if len(ncts) == n_obs else [1] * n_obs
+        texts = [f"{c}\n{t} transcripts" for c, t in zip(ct, ncts)] if ct is not None else [str(c) for c in colors]
+        cmin, cmax = float(min(colors)), float(max(colors))
+        # Use 2-98 percentile range for better visual contrast (cap outliers)
+        p2, p98 = float(np.percentile(colors, 2)), float(np.percentile(colors, 98))
+        color_min = max(cmin, p2) if p2 > cmin else cmin
+        color_max = min(cmax, p98) if p98 < cmax else cmax
+        # Ensure color_max > color_min to avoid flat colors
+        if color_max <= color_min:
+            color_max = cmax
+        opacity = min(0.9, max(0.1, 5000 / n_obs))
+        marker_cont = {"opacity": opacity, "size": 3.8, "cmin": color_min, "cmax": color_max,
+                       "color": colors, "colorbar": {"title": "Transcripts"}, "colorscale": "Viridis"}
+        umap_trace = {"x": xy_umap[:, 0].tolist(), "y": xy_umap[:, 1].tolist(),
+                      "type": "scattergl", "mode": "markers", "marker": marker_cont, "text": texts}
+        umap_data["data"] = [umap_trace]
+
+        # Spatial plot: color by transcript count (same as UMAP, in real space)
+        if "spatial" in adata.obsm:
+            xy_spat = adata.obsm["spatial"]
+            spat_trace = dict(umap_trace, x=xy_spat[:, 0].tolist(), y=xy_spat[:, 1].tolist())
+            spatial_data["data"] = [spat_trace]
+
+    # ── Clustering selector ──
+    # s9() expects left_plots/right_plots to have x, y, layout, config + clusterings
+    # left_plots = spatial coords (clusters mapped to real space)
+    # right_plots = UMAP coords (clusters in embedding space)
+    umap_x = adata.obsm["X_umap"][:, 0].tolist() if "X_umap" in adata.obsm else []
+    umap_y = adata.obsm["X_umap"][:, 1].tolist() if "X_umap" in adata.obsm else []
+    spat_x = adata.obsm["spatial"][:, 0].tolist() if "spatial" in adata.obsm else umap_x
+    spat_y = adata.obsm["spatial"][:, 1].tolist() if "spatial" in adata.obsm else umap_y
+    clustering_selector: dict = {
+        "left_plots": {
+            "clusterings": [],
+            "x": spat_x,
+            "y": spat_y,
+            "layout": _scatter_ly("Spatial", "X (µm)", "Y (µm)", spat_x, spat_y),
+            "config": _scatter_cfg,
+        },
+        "right_plots": {
+            "clusterings": [],
+            "x": umap_x,
+            "y": umap_y,
+            "layout": _scatter_ly("UMAP", "UMAP1", "UMAP2", umap_x, umap_y),
+            "config": _scatter_cfg,
+        },
+        "plot_help": {"title": "", "data": []},
+        "table_help": {"title": "", "data": []},
+        "tables": {
+            "clusterings": [{
+                "key": "gene_expression_graphclust",
+                "name": "Graph-based",
+                "data": {
+                    "columns": [
+                        {"Header": "Feature", "columns": [
+                            {"Header": "ID", "accessor": "feature.id"},
+                            {"Header": "Name", "accessor": "feature.fn"},
+                        ]},
+                    ],
+                    "data": [],
+                },
+            }],
+            "default_page_size": 20,
+        },
+        "allow_fixed_columns": False,
+    }
+    if "cluster" in obs.columns:
+        clusters = obs["cluster"].astype(str)
+        cnames = sorted(clusters.unique())
+        clustering_data = []
+        for c in cnames:
+            idx = list(np.where(clusters.values == c)[0].astype(int).tolist())
+            cell_type = ""
+            if "cell_type" in obs:
+                ct_vals = obs["cell_type"].astype(str)
+                ct_in_cluster = ct_vals.iloc[idx].value_counts()
+                cell_type = ct_in_cluster.index[0] if len(ct_in_cluster) > 0 else ""
+            pct = len(idx) / n_obs * 100
+            clustering_data.append({
+                "name": f"Cluster {c}",
+                "indices": idx,
+                "type": "scatter",
+                "mode": "markers",
+                "marker": {"opacity": 0.7, "size": 3.0},
+                "text": f"Cluster {c}: {pct:.1f}%" + (f" ({cell_type})" if cell_type else ""),
+            })
+        clustering_selector["left_plots"]["clusterings"] = [{
+            "key": "gene_expression_graphclust",
+            "name": "Graph-based",
+            "data": clustering_data,
+        }]
+        # right_plots must have at least one clustering entry, otherwise the
+        # renderer crashes when accessing clusterings[t].plot
+        clustering_selector["right_plots"]["clusterings"] = [{
+            "key": "gene_expression_graphclust",
+            "name": "Graph-based",
+            "data": clustering_data,
+        }]
+
+    # ── Histograms with outlier-capped axes ──
+    def _hist(values, color="#3b82f6", xlabel="", ylabel="Cells", cap_pct=98):
+        """Plot histogram with x-axis capped at *cap_pct* percentile.
+
+        Values beyond the cap are grouped into the final "> threshold" bin,
+        preventing extreme outliers from compressing the main distribution.
+        """
+        if len(values) == 0:
+            return {"data": [], "layout": {}}
+        # Cap at the given percentile
+        cap = float(np.percentile(values, cap_pct))
+        capped = np.clip(values, None, cap)
+        nbins = _optimal_bins(capped)
+        h, edges = np.histogram(capped, bins=nbins)
+        # Count outliers beyond the cap
+        n_outliers = int((values > cap).sum())
+        customdata = []
+        for i in range(len(edges) - 1):
+            lo, hi = edges[i], edges[i + 1]
+            if hi - lo >= 1:
+                label = f"{int(lo)} - {int(hi)}"
+            else:
+                label = f"{lo:.1f} - {hi:.1f}"
+            customdata.append(label)
+        # Add outlier count to last bin label
+        if n_outliers > 0:
+            customdata[-1] += f" (+{n_outliers} outliers)"
+            h[-1] += n_outliers  # add outliers to last bin
+        # Compute bin centers for Plotly x values (convert to native float for JSON)
+        bin_centers = [float((edges[i] + edges[i + 1]) / 2) for i in range(len(edges) - 1)]
+        # Auto-scale axes with padding
+        vmin = float(capped.min())
+        vmax = float(capped.max())
+        spread = vmax - vmin
+        if spread == 0:
+            spread = max(abs(vmin), 1)
+        xlo = vmin - spread * 0.03
+        xhi = vmax + spread * 0.05
+        ylo = 0
+        yhi = float(h.max()) * 1.2  # 20% headroom
+        return {
+            "data": [{"x": bin_centers, "customdata": customdata, "y": h.tolist(), "type": "bar",
+                       "hovertemplate": "%{y}",
+                       "showlegend": False,
+                       "marker": {"color": color}}],
+            "layout": {"xaxis": {"title": {"text": xlabel}, "showline": False,
+                                 "range": [xlo, xhi]},
+                        "yaxis": {"title": {"text": ylabel}, "showline": False,
+                                  "range": [ylo, yhi]},
+                        "hovermode": "x",
+                        "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": 0.05},
+        }
+
+    # Cell Size Distribution — use cell area if valid, else transcript counts
+    tx_vals = obs["total_counts"].values if "total_counts" in obs else np.array([])
+    genes_vals = obs["n_genes_by_counts"].values if "n_genes_by_counts" in obs else np.array([])
+    cell_area_vals = np.array([])
+    cell_area_label = "Cell Area (µm²)"
+    if "cell_area" in obs.columns:
+        valid = obs["cell_area"][obs["cell_area"] > 0]
+        if len(valid) > 0:
+            cell_area_vals = valid.values.astype(float)
+    if "Area.um2" in obs.columns and len(cell_area_vals) == 0:
+        valid = obs["Area.um2"][obs["Area.um2"] > 0]
+        if len(valid) > 0:
+            cell_area_vals = valid.values.astype(float)
+    # Fallback: compute cell areas from polygon file if available
+    if len(cell_area_vals) == 0 and "source_path" in meta:
+        try:
+            poly_path = _find_polygon_file(meta["source_path"])
+            if poly_path and poly_path.exists():
+                areas = _compute_polygon_areas(poly_path, obs)
+                if len(areas) > 0:
+                    logger.info("Computed %d cell areas from %s", len(areas), poly_path.name)
+                    cell_area_vals = areas
+                    cell_area_label = "Cell Area (µm²)"
+        except Exception as exc:
+            logger.warning("Failed to compute cell areas from polygons: %s", exc)
+    if len(cell_area_vals) == 0:
+        cell_area_vals = tx_vals  # fallback to transcript counts
+        cell_area_label = "Transcripts per Cell"
+
+    data: dict[str, Any] = {
+        "alarms": {"alarms": []},
+        "alarm_options": {"hide_alert_analysis": True, "use_triangle_icon_for_errors": False},
+        "calibration_uuid": hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest(),
+        "cell_size_distribution": _hist(cell_area_vals, color="#22c55e", xlabel=cell_area_label, ylabel="Cells"),
+        "clustering_selector": clustering_selector,
+        "codeword_plot": {"data": [], "layout": {}},
+        "dark_mode": True,
+        "debug_info_table": {"rows": [
+            ["Pipeline", f"{report.get('pipeline_name', '?')} v{report.get('pipeline_version', '?')}"],
+            ["Platform", platform.upper()],
+            ["Cells after QC", f"{n_obs:,}"],
+            ["Genes after HVG", f"{n_vars:,}"],
+            ["Total transcripts", f"{summary.get('n_transcripts', 0):,}"],
+            ["Number of FOVs", str(summary.get("n_fovs", 0))],
+        ] + ([["QC: min transcripts", str(qc_metrics.get("min_transcripts", ""))],
+              ["QC: min genes", str(qc_metrics.get("min_genes", ""))]] if qc_metrics else [])},
+        "debug_info_table_helptext": {"data": ["Pipeline configuration and quality control parameters."], "title": "Debug Info"},
+        "decoded_gene_tissue_density_highquality_in_obj_per_100um^2": density,
+        "decoding_yield_table": {"rows": [
+            ["Total transcripts", f"{summary.get('n_transcripts', 0):,}"],
+            ["Total cells detected", f"{n_obs:,}"],
+            ["Median transcripts per cell", median_tx],
+            ["Cells per FOV", f"{fov_tx_counts and round(sum(fov_tx_counts)/len(fov_tx_counts)) or 'N/A'}"],
+        ]},
+        "decoding_yield_table_helptext": {"data": ["Statistics about transcript detection and decoding quality."], "title": "Decoding Yield"},
+        "density_plot": {"bins": [0], "horizontal_bin_count": 1, "unit": "µm",
+                          "origin_data": [], "dimensions": {"height": 100, "width": 100}, "image_sizes": {"height": 100, "width": 100},
+                          "small_image": "", "large_image": ""},
+        "fluorescence_image_thumbnail_plot": {"encoded_image": ""},
+        "fov_layout_plot": {"encoded_image": ""},
+        "fov_missing_transcript_rate_plot": (
+            _hist(np.array(fov_tx_counts), color="#6366f1", xlabel="Transcript per FOV", ylabel="FOVs")
+            if fov_tx_counts else {"data": [], "layout": {}}
+        ),
+        "fov_missing_transcript_rate_plot_helptext": {"data": ["Distribution of transcripts across FOVs."], "title": "Transcript Counts by FOV"},
+        "genes_per_cell_plot": _hist(genes_vals, xlabel="Genes per Cell", ylabel="Cells"),
+        "genewise_qscore_plot": {"data": [], "layout": {}},
+        "global_qscore_histogram": {"data": [], "layout": {}},
+        "has_analysis": 1 if "cluster" in obs.columns else 0,
+        "has_density_plot": 0,
+        "has_image_qc": 0,
+        "has_morphology_plot": 0,
+        "herometric_helptext": {"data": [f"Key metrics for {platform.upper()} dataset with {n_obs:,} cells, {n_vars:,} genes."], "title": "Key Metrics"},
+        "is_xenium_ranger": 0,
+        "median_transcripts_per_non_empty_cell": median_transcripts,
+        "navbar_info": {"cols": [
+            ["Run name", f"SubCellSpace {platform.upper()}"],
+            ["Platform", platform.upper()],
+            ["Generated", datetime.now().strftime("%b %d, %Y, %H:%M")],
+        ]},
+        "neg_controls_table": {"rows": [
+            ["Pipeline version", pipeline_ver],
+            ["Analysis steps", str(len(steps))],
+        ] + ([(["Neg probe count per cell", f"{negprobe_mean:.4f}"])] if negprobe_mean is not None else [])},
+        "neg_controls_table_helptext": {"data": ["Quality control metrics for negative control probes."], "title": "Negative Control Probes"},
+        "num_cells_detected": num_cells,
+        "overview_scan": {"encoded_image": "", "polygons": [], "text_overlay": ""},
+        "page_title": f"SubCellSpace {platform.upper()} Report — {n_obs} cells, {n_vars} genes",
+        "panel_spec_table": {"rows": [
+            ["Platform", platform.upper()],
+            ["Pipeline", report.get("pipeline_name", "SubCellSpace")],
+            ["Version", pipeline_ver],
+            ["Input source", source_path.split("/")[-1] if "/" in source_path else source_path],
+        ]},
+        "qscore_mean_spatial_plot": {"encoded_image": ""},
+        "region_info_table": {"rows": region_rows},
+        "roll_off_figure": {"encoded_image": ""},
+        "run_info_table": {"rows": run_rows},
+        "sample": {
+            "id": hashlib.md5(str(meta.get("source_path", "unknown")).encode()).hexdigest(),
+            "description": f"subcellspace_{platform}_{n_obs}cells",
+            "pipeline": "SubCellSpace Analysis Summary",
+            "page_title": f"SubCellSpace {platform.upper()} — {n_obs} cells",
+        },
+        "segmentation_table": {"rows": seg_rows},
+        "software_table": {"rows": software_rows},
+        "total_transcripts_high_quality": total_tx,
+        "transcripts_per_100um2": density,
+        "transcript_plot_helptext": {"data": ["Interactive UMAP and spatial visualization of cell clusters."], "title": "Transcript Plots"},
+        "transcript_spatial_plot": spatial_data,
+        "transcript_umap_plot": umap_data,
+        "transcripts_per_cell_plot": _hist(tx_vals, xlabel="Transcripts per Cell", ylabel="Cells"),
+        "transcripts_per_cell_plot_helptext": {"data": [], "title": ""},
+    }
+
+    return data
+
+
+def _render_tabs_html() -> str:
+    """Read tab template HTML from _tabs_template.html sibling file."""
+    template_path = Path(__file__).resolve().parent / "_tabs_template.html"
+    if not template_path.exists():
+        raise FileNotFoundError(f"Tab template not found: {template_path}")
+    return template_path.read_text(encoding="utf-8")
+
+
+def generate_html_report(output_dir: str | Path) -> Path:
+    """Generate a Xenium-style HTML report from pipeline output."""
     output_dir = Path(output_dir)
+    if not output_dir.exists():
+        raise FileNotFoundError(f"Output directory not found: {output_dir}")
+
+    # ── Load pipeline output ──
+    reports = sorted(output_dir.glob("*_report.json"))
+    if not reports:
+        raise FileNotFoundError(f"No *_report.json in {output_dir}")
+    report = json.loads(reports[0].read_text())
+
+    h5ads = sorted(output_dir.glob("*.h5ad"))
+    if not h5ads:
+        raise FileNotFoundError(f"No .h5ad in {output_dir}")
+    import anndata as ad
+
+    adata = ad.read_h5ad(h5ads[0])
+
     meta_path = output_dir / "metadata.json"
-    cells_path = output_dir / "cells.parquet"
-    if not meta_path.exists():
-        raise FileNotFoundError(f"Missing: {meta_path}")
-    if not cells_path.exists():
-        raise FileNotFoundError(f"Missing: {cells_path}")
+    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
 
-    metadata = json.loads(meta_path.read_text(encoding="utf-8"))
-    cells_df = pd.read_parquet(cells_path)
+    # ── Load template components ──
+    style_block, head_before, body_open, bundle_script = _load_template()
 
-    if html_path is None:
-        html_path = output_dir / "report.html"
-    html_path = Path(html_path)
+    # ── Build data ──
+    data = _build_data(adata, meta, report)
+    data_json = json.dumps(data, indent=1)
+    data_json = data_json.replace("</script>", "<\\/script>")
 
-    html = _build_html(metadata, cells_df)
-    html_path.write_text(html, encoding="utf-8")
-    logger.info("HTML report: %s", html_path)
-    return str(html_path)
+    # ── Assemble final HTML ──
+    tabs_html = _render_tabs_html()
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# HTML assembly
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _build_html(meta: dict, cells: pd.DataFrame) -> str:
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    pipeline = meta.get("run_name", "pipeline")
-    version = meta.get("pipeline_version", "")
-    platform = meta.get("platform", "")
-    source = meta.get("source_path", "")
-
-    summary = meta.get("summary", {})
-    n_tx = summary.get("n_transcripts", 0)
-
-    data_json = _cells_to_json(cells, meta)
-    tabs_html, panels_html = _build_tabs_and_panels(meta, cells, data_json)
-
-    return f"""<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SubCellSpace Report — {pipeline}</title>
-<style>{_CSS}</style>
+{head_before}
+{style_block}
 </head>
-<body>
-<div class="header">
-<h1>SubCellSpace Pipeline Report</h1>
-<p>{pipeline} v{version} · {platform} · {source}</p>
-</div>
-<div class="container">
-{_section_summary_cards(n_tx, summary, meta)}
-<div class="tabs">{tabs_html}</div>
-{panels_html}
-</div>
-<footer>SubCellSpace v{version} · Generated {now}</footer>
-<script>
-{data_json}
-</script>
-<script>
-{_CANVAS_JS}
-</script>
+{body_open}
+  <div class="navbar-wrapper insitu_web_summary_cs" data-render-header="false"></div>
+  <div class="alert-wrapper insitu_web_summary_cs"></div>
+  <div class="container insitu_web_summary_cs">
+    {tabs_html}
+  </div>
+  <script>
+const data = {data_json};
+  </script>
+  {bundle_script}
 </body>
 </html>"""
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Cell data → compact JSON embedding
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _cells_to_json(cells: pd.DataFrame, meta: dict) -> str:
-    """Convert cell-level DataFrame to compact JavaScript arrays."""
-    n = len(cells)
-
-    # Category encoding
-    cluster_vals = cells.get("cluster", pd.Series([""]*n))
-    ct_vals = cells.get("cell_type", pd.Series([""]*n))
-    dom_vals = cells.get("spatial_domain", pd.Series([""]*n))
-
-    cluster_names = sorted(cluster_vals.dropna().unique().tolist(), key=str)
-    type_names = sorted(ct_vals.dropna().unique().tolist(), key=str)
-    dom_names = sorted(dom_vals.dropna().unique().tolist(), key=str)
-
-    cluster_map = {v: i for i, v in enumerate(cluster_names)}
-    type_map = {v: i for i, v in enumerate(type_names)}
-    dom_map = {v: i for i, v in enumerate(dom_names)}
-
-    cluster_idx = [cluster_map.get(str(v), 0) for v in cluster_vals]
-    type_idx = [type_map.get(str(v), 0) for v in ct_vals]
-    dom_idx = [dom_map.get(str(v), 0) for v in dom_vals]
-
-    cell_ids = [str(v) for v in cells['cell_id']]
-    parts = [
-        f"window.SCS_D={{n:{n},",
-        f"umap_x:{json.dumps([round(float(v),4) for v in cells['umap_x']])},",
-        f"umap_y:{json.dumps([round(float(v),4) for v in cells['umap_y']])},",
-        f"spatial_x:{json.dumps([round(float(v),1) for v in cells['spatial_x']])},",
-        f"spatial_y:{json.dumps([round(float(v),1) for v in cells['spatial_y']])},",
-        f"cluster_idx:{json.dumps(cluster_idx)},",
-        f"type_idx:{json.dumps(type_idx)},",
-        f"domain_idx:{json.dumps(dom_idx)},",
-        f"n_genes:{json.dumps([int(v) for v in cells['n_genes']])},",
-        f"n_counts:{json.dumps([int(v) for v in cells['n_counts']])},",
-        f"cell_ids:{json.dumps(cell_ids)},",
-        f"cluster_names:{json.dumps(cluster_names)},",
-        f"type_names:{json.dumps(type_names)},",
-        f"domain_names:{json.dumps(dom_names)}",
-        "};",
-    ]
-    return "\n".join(parts)
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Sections / panels
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _section_summary_cards(n_tx: int, summary: dict, meta: dict) -> str:
-    vals = [
-        ("Transcripts", f"{n_tx:,}"),
-        ("Cells (raw)", f"{summary.get('n_cells',0):,}"),
-        ("Cells (QC)", f"{meta.get('n_obs',summary.get('n_cells',0)):,}"),
-        ("Genes", f"{meta.get('n_vars',summary.get('n_genes',0)):,}"),
-        ("FOVs", f"{summary.get('n_fovs',0)}"),
-    ]
-    cards = "".join(
-        f'<div class="stat"><div class="stat-value">{v}</div><div class="stat-label">{l}</div></div>'
-        for l, v in vals
-    )
-    return f'<div class="card"><div class="stats">{cards}</div></div>'
-
-
-def _build_tabs_and_panels(meta: dict, cells: pd.DataFrame, data_json: str) -> tuple[str, str]:
-    tabs = []
-    panels = []
-    tab_defs = [
-        ("qc", "QC & Steps", _panel_qc_steps(meta)),
-        ("layers", "Layer Evaluation", _panel_layers(meta)),
-        ("distrib", "Distributions", _panel_distrib(meta)),
-        ("cellqc", "Cell QC", _panel_cellqc(cells)),
-        ("umap", "UMAP", _panel_umap(meta)),
-        ("spatial", "Spatial", _panel_spatial(meta)),
-    ]
-    for i, (tid, label, body) in enumerate(tab_defs):
-        active = ' class="active"' if i == 0 else ""
-        tabs.append(f'<button class="tab-btn{active}" onclick="switchTab(\'{tid}\')">{label}</button>')
-        panels.append(f'<div class="tab-panel{active}" id="tab-{tid}">{body}</div>')
-    return "".join(tabs), "".join(panels)
-
-
-def _fmt(n: int) -> str:
-    if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
-    if n >= 1_000: return f"{n/1_000:.1f}K"
-    return str(n)
-
-
-def _panel_qc_steps(meta: dict) -> str:
-    qc = meta.get("qc_metrics", {})
-    steps = meta.get("step_summary", {})
-    order = meta.get("step_order", [])
-    qc_rows = "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in sorted(qc.items()))
-    step_rows = ""
-    for s in order:
-        info = steps.get(s, {})
-        if info.get("skipped"): continue
-        backend = info.get("backend_used", "—")
-        elapsed = info.get("__elapsed_seconds__", 0)
-        t = f"{elapsed:.1f}s" if isinstance(elapsed, (int, float)) else str(elapsed)
-        badge = _STEP_BADGE.get(s, "badge-other")
-        label = _STEP_LABEL.get(s, s)
-        metrics = []
-        for k, v in sorted(info.items()):
-            if k.startswith("__") or k.endswith("_backend") or k.endswith("_backend_used") or k.endswith("_backend_requested") or k == "skipped" or k.endswith("_distribution"): continue
-            if isinstance(v, (int, float)): metrics.append(f"<span style='color:#888'>{k.replace('_',' ')}</span>={_fmt(int(v))}")
-            elif isinstance(v, str) and len(v) < 40: metrics.append(f"<span style='color:#888'>{k.replace('_',' ')}</span>={v}")
-        step_rows += f"<tr><td>{label}</td><td><span class='badge {badge}'>{backend}</span></td><td>{t}</td><td>{' &nbsp;|&nbsp; '.join(metrics[:3])}</td></tr>"
-    return f"""<div class="card"><h2>QC Metrics</h2><table><tr><th>Metric</th><th>Value</th></tr>{qc_rows}</table></div>
-<div class="card"><h2>Pipeline Steps ({len(order)})</h2><table><tr><th>Step</th><th>Backend</th><th>Time</th><th>Key Metrics</th></tr>{step_rows}</table></div>"""
-
-
-def _panel_layers(meta: dict) -> str:
-    le = meta.get("layer_evaluation", {})
-    layer_order = ["ingestion","denoise","segmentation","expression","clustering","annotation","spatial_domain","subcellular_spatial_domain","spatial"]
-    parts = []
-    for key in layer_order:
-        layer = le.get(key)
-        if not layer or not isinstance(layer, dict): continue
-        label = _LAYER_LABEL.get(key, key)
-        items = ""
-        for k, v in sorted(layer.items()):
-            if k.endswith("_distribution") or k.startswith("cellcomp_"): continue
-            val = _fmt(int(v)) if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
-            items += f"<div class='meta-item'><span class='meta-label'>{k}</span><span class='meta-value'>{val}</span></div>"
-        if items: parts.append(f"<details open><summary>{label}</summary><div class='meta-grid'>{items}</div></details>")
-    return "<div class='card'><h2>Layer Evaluation</h2>" + "".join(parts) + "</div>" if parts else ""
-
-
-def _panel_distrib(meta: dict) -> str:
-    charts = ""
-    for data, title in [
-        (meta.get("clusters", {}), "Cell Clusters"),
-        (meta.get("cell_types", {}), "Cell Types"),
-        (meta.get("spatial_domains", {}), "Spatial Domains"),
-    ]:
-        if not data: continue
-        b64 = _plot_donut(data, title)
-        if b64: charts += f"<div><img src='data:image/png;base64,{b64}' alt='{title}'></div>"
-    return f"<div class='card'><h2>Distributions</h2><div class='pie-charts'>{charts}</div></div>" if charts else ""
-
-
-def _panel_cellqc(cells: pd.DataFrame) -> str:
-    charts = ""
-    for col, title in [("n_genes", "Genes per Cell"), ("n_counts", "Transcripts per Cell")]:
-        if col not in cells.columns: continue
-        b64 = _plot_violin(cells[col], title)
-        if b64: charts += f"<div><img src='data:image/png;base64,{b64}' alt='{title}'></div>"
-    return f"<div class='card'><h2>Cell QC Distributions</h2><div class='chart-grid'>{charts}</div></div>" if charts else ""
-
-
-def _panel_umap(meta: dict) -> str:
-    clusters = meta.get("clusters", {})
-    legend = ""
-    if clusters:
-        colors = sns.color_palette("mako", max(len(clusters), 3)).as_hex()
-        items = []
-        for i, (k, v) in enumerate(clusters.items()):
-            c = colors[i % len(colors)]
-            items.append(f'<span class="legend-item"><span class="legend-swatch" style="background:{c}"></span>{k} ({v})</span>')
-        legend = '<div class="legend-bar">' + "".join(items) + '</div>'
-    return f"""<div class="card">
-<h2>UMAP — Colored by Cluster</h2>
-{legend}
-<div class="canvas-container" id="umap-container">
-<canvas id="umap-canvas"></canvas>
-<div class="tooltip" id="umap-tooltip"></div>
-<div class="zoom-info" id="umap-zoom">1.0x</div>
-</div>
-<p style="font-size:.72rem;color:#888;margin-top:4px">🖱 Scroll to zoom · Drag to pan · Hover for details</p>
-</div>"""
-
-
-def _panel_spatial(meta: dict) -> str:
-    domains = meta.get("spatial_domains", {})
-    legend = ""
-    if domains:
-        # Top 15 domains only for legend
-        top = sorted(domains.items(), key=lambda x: x[1], reverse=True)[:15]
-        colors = sns.color_palette("mako", len(top)).as_hex()
-        items = []
-        for i, (k, v) in enumerate(top):
-            items.append(f'<span class="legend-item"><span class="legend-swatch" style="background:{colors[i]}"></span>{k} ({v})</span>')
-        if len(domains) > 15:
-            items.append(f'<span class="legend-item">+{len(domains)-15} more</span>')
-        legend = '<div class="legend-bar">' + "".join(items) + '</div>'
-    return f"""<div class="card">
-<h2>Spatial — Colored by Domain</h2>
-{legend}
-<div class="canvas-container" id="spatial-container">
-<canvas id="spatial-canvas"></canvas>
-<div class="tooltip" id="spatial-tooltip"></div>
-<div class="zoom-info" id="spatial-zoom">1.0x</div>
-</div>
-<p style="font-size:.72rem;color:#888;margin-top:4px">🖱 Scroll to zoom · Drag to pan · Hover for details</p>
-</div>"""
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Static plot helpers (donut, violin)
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _plot_donut(data: dict, title: str) -> str:
-    labels, values = list(data.keys()), list(data.values())
-    if not labels or sum(values) == 0: return ""
-    if len(labels) > 12:
-        s = sorted(data.items(), key=lambda x: x[1], reverse=True)
-        top = s[:11]; rest = sum(v for _, v in s[11:])
-        labels = [k for k, _ in top] + ["Other"]; values = [v for _, v in top] + [rest]
-    colors = sns.color_palette("mako", len(labels))
-    fig, ax = plt.subplots(figsize=(3.5, 3.5))
-    wedges, _ = ax.pie(values, labels=None, colors=colors, startangle=90, wedgeprops=dict(width=.38, edgecolor="white", linewidth=.5))
-    ax.legend(wedges, [f"{l} ({v})" for l, v in zip(labels, values)], title=title, loc="center left",
-              bbox_to_anchor=(1, 0, .5, 1), fontsize=6.5, title_fontsize=7.5)
-    ax.set_title(title, fontsize=8.5, fontweight="bold", pad=8)
-    return _fig_to_b64(fig)
-
-
-def _plot_violin(series: pd.Series, title: str) -> str:
-    fig, ax = plt.subplots(figsize=(5, 3.5))
-    sns.violinplot(y=series, color="#0f3460", inner="quartile", ax=ax)
-    ax.set_title(title, fontsize=9.5, fontweight="bold"); ax.set_ylabel("Count")
-    plt.tight_layout()
-    return _fig_to_b64(fig)
-
-
-def _fig_to_b64(fig: plt.Figure) -> str:
-    buf = io.BytesIO(); fig.savefig(buf, format="png", dpi=100, bbox_inches="tight"); buf.seek(0); plt.close(fig)
-    return base64.b64encode(buf.read()).decode("utf-8")
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Canvas scatter renderer (JavaScript, ~3KB minified logic)
-# ═══════════════════════════════════════════════════════════════════════════
-
-_CANVAS_JS = r"""
-function switchTab(id) {
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-    document.querySelector('[onclick="switchTab(\''+id+'\')"]').classList.add('active');
-    var panel=document.getElementById('tab-'+id);
-    panel.classList.add('active');
-    if(id==='umap') initCanvas('umap','cluster_idx');
-    if(id==='spatial') initCanvas('spatial','domain_idx');
-}
-
-function getColors(n) {
-    var colors=[];
-    for(var i=0;i<n;i++) {
-        var h=(i*137.508+200)%360;
-        colors.push('hsl('+h+',65%,'+(45+i%2*10)+'%)');
-    }
-    return colors;
-}
-
-var _canvasStates={};
-
-function initCanvas(prefix, colorKey) {
-    if(_canvasStates[prefix]) return;
-    var d=window.SCS_D; if(!d) return;
-    var container=document.getElementById(prefix+'-container');
-    var canvas=document.getElementById(prefix+'-canvas');
-    var tooltip=document.getElementById(prefix+'-tooltip');
-    var zoomInfo=document.getElementById(prefix+'-zoom');
-    var ctx=canvas.getContext('2d');
-    var rect=container.getBoundingClientRect();
-    canvas.width=rect.width; canvas.height=rect.height;
-    var W=rect.width, H=rect.height;
-
-    // Data
-    var xKey=prefix==='umap'?'umap_x':'spatial_x';
-    var yKey=prefix==='umap'?'umap_y':'spatial_y';
-    var xs=d[xKey], ys=d[yKey];
-    var colorIdx=d[colorKey];
-    var nCat=prefix==='umap'?d.cluster_names.length:d.domain_names.length;
-    var nCatClamped=Math.min(nCat,40);
-    var catColors=getColors(nCatClamped);
-    var cellIds=d.cell_ids||[];
-    var clusters=d.cluster_names||[];
-    var types=d.type_names||[];
-    var domains=d.domain_names||[];
-
-    // Bounds
-    var xMin=Infinity,xMax=-Infinity,yMin=Infinity,yMax=-Infinity;
-    for(var i=0;i<d.n;i++) {
-        if(xs[i]<xMin)xMin=xs[i]; if(xs[i]>xMax)xMax=xs[i];
-        if(ys[i]<yMin)yMin=ys[i]; if(ys[i]>yMax)yMax=ys[i];
-    }
-    var padX=(xMax-xMin)*0.05, padY=(yMax-yMin)*0.05;
-    xMin-=padX; xMax+=padX; yMin-=padY; yMax+=padY;
-
-    var state={xMin:xMin,xMax:xMax,yMin:yMin,yMax:yMax,zoom:1,panX:0,panY:0,canvas:canvas,ctx:ctx,
-               xs:xs,ys:ys,colorIdx:colorIdx,nCat:nCatClamped,colors:catColors,
-               cellIds:cellIds,clusters:clusters,types:types,domains:domains,
-               tooltip:tooltip,zoomInfo:zoomInfo,W:W,H:H,prefix:prefix};
-    _canvasStates[prefix]=state;
-    render(state);
-
-    // Zoom
-    container.addEventListener('wheel',function(e){e.preventDefault();
-        var r=container.getBoundingClientRect();
-        var mx=e.clientX-r.left, my=e.clientY-r.top;
-        var factor=e.deltaY<0?1.15:1/1.15;
-        var newZoom=state.zoom*factor;
-        if(newZoom<0.1||newZoom>50) return;
-        // Zoom toward cursor
-        var wx=mx/state.W, wy=my/state.H;
-        var cx=state.panX+wx*state.W/state.zoom;
-        var cy=state.panY+wy*state.H/state.zoom;
-        state.zoom=newZoom;
-        state.panX=cx-wx*state.W/state.zoom;
-        state.panY=cy-wy*state.H/state.zoom;
-        render(state);
-    },{passive:false});
-
-    // Pan
-    var dragging=false, dragX=0, dragY=0;
-    container.addEventListener('mousedown',function(e){dragging=true;dragX=e.clientX;dragY=e.clientY;});
-    window.addEventListener('mousemove',function(e){
-        if(!dragging) return;
-        var dx=(e.clientX-dragX)/state.zoom;
-        var dy=(e.clientY-dragY)/state.zoom;
-        state.panX-=dx; state.panY-=dy;
-        dragX=e.clientX; dragY=e.clientY;
-        render(state);
-    });
-    window.addEventListener('mouseup',function(){dragging=false;});
-
-    // Hover tooltip
-    canvas.addEventListener('mousemove',function(e){
-        var r=canvas.getBoundingClientRect();
-        var mx=e.clientX-r.left, my=e.clientY-r.top;
-        // Find closest point (approximate - check grid cells)
-        var bestDist=20/state.zoom, bestIdx=-1;
-        for(var i=0;i<d.n;i++) {
-            var sx=(xs[i]-state.xMin)/(state.xMax-state.xMin)*state.W*state.zoom+state.panX*state.zoom;
-            var sy=state.H-((ys[i]-state.yMin)/(state.yMax-state.yMin)*state.H*state.zoom+state.panY*state.zoom);
-            var dx2=mx-sx, dy2=my-sy; var dist=Math.sqrt(dx2*dx2+dy2*dy2);
-            if(dist<bestDist){bestDist=dist;bestIdx=i;}
-        }
-        if(bestIdx>=0) {
-            var cid=cellIds[bestIdx]||bestIdx;
-            var cl=clusters[colorIdx[bestIdx]]||'?';
-            var tp=types[d.type_idx?d.type_idx[bestIdx]:0]||'?';
-            var dm=domains[colorIdx[bestIdx]]||'?';
-            tooltip.style.display='block';
-            tooltip.style.left=(mx+12)+'px'; tooltip.style.top=(my-8)+'px';
-            if(prefix==='umap') tooltip.innerHTML=cid+'<br>Cluster: '+cl+' | Type: '+tp;
-            else tooltip.innerHTML=cid+'<br>Domain: '+dm+' | Type: '+tp;
-        } else { tooltip.style.display='none'; }
-    });
-    canvas.addEventListener('mouseleave',function(){tooltip.style.display='none';});
-}
-
-function render(state) {
-    var ctx=state.ctx, W=state.W, H=state.H;
-    ctx.clearRect(0,0,W,H);
-    var xMin=state.xMin, xMax=state.xMax, yMin=state.yMin, yMax=state.yMax;
-    var zoom=state.zoom, panX=state.panX, panY=state.panY;
-    var xs=state.xs, ys=state.ys, colorIdx=state.colorIdx;
-    var n=window.SCS_D.n;
-
-    // Draw all points
-    var pointSize=Math.max(0.5,Math.min(2,zoom*0.8));
-    for(var i=0;i<n;i++) {
-        var sx=(xs[i]-xMin)/(xMax-xMin)*W*zoom+panX*zoom;
-        var sy=H-((ys[i]-yMin)/(yMax-yMin)*H*zoom+panY*zoom);
-        if(sx<-2||sx>W+2||sy<-2||sy>H+2) continue;
-        var ci=colorIdx[i]%state.nCat;
-        ctx.fillStyle=state.colors[ci];
-        ctx.fillRect(sx-pointSize/2,sy-pointSize/2,pointSize,pointSize);
-    }
-    state.zoomInfo.textContent=zoom.toFixed(1)+'x';
-}
-"""
+    html_path = output_dir / "report.html"
+    html_path.write_text(html, encoding="utf-8")
+    logger.info("Xenium-style HTML report: %s (%d KB)", html_path, html_path.stat().st_size // 1024)
+    return html_path

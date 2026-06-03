@@ -1,0 +1,226 @@
+<div class="tabs-wrapper" data-default-active-key="summary" data-id="main-tabs">
+
+    <div class="tab-wrapper" data-event-key="summary" data-title=Summary>
+
+      <!-- Key Metrics -->
+      <div class="row summary_border">
+        <div class="col">
+          <div class="row">
+            <h2>Key Metrics</h2>
+          </div>
+          <div class="row">
+            <div class="col-sm-3">
+              <div data-key="median_transcripts_per_non_empty_cell" data-component="Metric"></div>
+            </div>
+            <div class="col-sm-3">
+              <div data-key="num_cells_detected" data-component="Metric"></div>
+            </div>
+            <div class="col-sm-3">
+              <div data-key="transcripts_per_100um2" data-component="Metric"></div>
+            </div>
+            <div class="col-sm-3">
+              <div data-key="total_transcripts_high_quality" data-component="Metric"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sample Region -->
+      <div class="row">
+        <div class="col">
+          <div class="row">
+            <div class="col summary_border">
+              <div class="row">
+                <h2>Sample Region Summary</h2>
+              </div>
+              <div class="row">
+                <div data-key="region_info_table" data-component="Table"></div>
+              </div>
+            </div>
+            <div class="col summary_border">
+              <div class="row">
+                <div data-key="overview_scan" data-component="ImageWithOverlay"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Morphology Details -->
+      <div class="row summary_border">
+        <div class="col">
+          <div class="row">
+            <div class="col">
+              <div data-key="density_plot" data-component="DensityPlot"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <div class="row summary_border">
+            <div class="col">
+              <div class="row">
+                <h2>Run Information</h2>
+              </div>
+              <div class="row">
+                <div data-key="run_info_table" data-component="Table"></div>
+              </div>
+            </div>
+          </div>
+          <div class="row"></div>
+          <div class="row summary_border">
+            <div class="col">
+              <div class="row">
+                <h2>Software</h2>
+              </div>
+              <div class="row">
+                <div data-key="software_table" data-component="Table"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="row summary_border">
+            <div class="col">
+              <div class="row">
+                <h2>Panel Specification</h2>
+              </div>
+              <div class="row">
+                <div data-key="panel_spec_table" data-component="Table"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div data-component="Hidden">
+    <div class="row">
+        <h2>Supplementary data quality metrics</h2>
+    </div>
+
+    <div class="row summary_border">
+        <div class="col-sm-6">
+            <div class="row">
+                <div data-key="debug_info_table" data-component="Table"></div>
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div data-key="apt_table" data-component="Table"></div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-sm-6 summary_border">
+            <div class="row">
+                <div data-key="fov_missing_transcript_rate_plot" data-component="Plot"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col summary_border">
+            <div class="row">
+                <h2>FoV layout</h2>
+            </div>
+            <div class="row">
+                <div data-key="fov_layout_plot" data-component="RawImage"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    </div>
+
+    <!--                                                           -->
+
+    
+
+    <!--                                                           -->
+
+    <div class="tab-wrapper" data-event-key="segmentation" data-title="Cell Segmentation">
+      <div class="row">
+        <div class="col summary_border">
+          <div class="row">
+            <h2>Cell Segmentation</h2>
+          </div>
+          <div class="row">
+            <div data-key="segmentation_table" data-component="Table"></div>
+          </div>
+        </div>
+
+        <div class="col summary_border">
+          <div class="row">
+            <h2>Cell Size Distribution</h2>
+          </div>
+          <div class="row">
+            <div data-key="cell_size_distribution" data-component="Plot"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col summary_border">
+          <div class="row">
+            <h2>Genes per Cell</h2>
+          </div>
+          <div class="row">
+            <div data-key="genes_per_cell_plot" data-component="Plot"></div>
+          </div>
+        </div>
+        <div class="col summary_border">
+          <div class="row">
+            <h2>Transcripts per Cell</h2>
+          </div>
+          <div class="row">
+            <div data-key="transcripts_per_cell_plot" data-component="Plot"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!--                                                           -->
+
+    <div class="tab-wrapper" data-event-key="analysis" data-title=Analysis>
+    <div class="row summary_border">
+        <div class="col">
+            <div class="row">
+                <h2>Transcript Plots</h2>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <div class="row transcript-plot-wrapper">
+                        <div data-key="transcript_spatial_plot" data-component="Plot"></div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="row transcript-plot-wrapper">
+                        <div data-key="transcript_umap_plot" data-component="Plot"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+      <h2>Clustering</h2>
+    </div>
+    <div class="row">
+      <div data-key="clustering_selector" data-component="ClusteringSelector"></div>
+    </div>
+</div>
+
+
+    <div class="tab-wrapper" data-event-key="image_qc" data-title="Image QC">
+
+    <div class="col summary_border">
+        <div class="row">
+            <div data-key="fluorescence_image_thumbnail_plot" data-component="RawImage"></div>
+        </div>
+    </div>
+
+</div>
+
+
+  </div>
