@@ -434,26 +434,8 @@ def _build_data(adata, report: dict) -> dict:
             "data": clustering_data,
         }]
 
-    # ── Populate clustering table with marker genes (rank_genes_groups) ──
-    table_data = []
-    scrin_rows = []
-    if "rank_genes_groups" in adata.uns:
-        rg = adata.uns["rank_genes_groups"]
-        names = rg.get("names")
-        if names is not None and hasattr(names, "dtype"):
-            n_top = min(20, len(names))
-            for cluster_key in names.dtype.names or []:
-                top_genes = names[cluster_key][:n_top].tolist() if hasattr(names[cluster_key], "tolist") else list(names[cluster_key][:n_top])
-                for g in top_genes:
-                    table_data.append({
-                        "feature": {"id": str(g), "fn": f"Cluster {cluster_key} marker"},
-                    })
-    if table_data:
-        clustering_selector["tables"]["clusterings"][0]["data"]["data"] = table_data
-        clustering_selector["table_help"] = {"title": "Top Features by Cluster",
-            "data": [["Marker genes and log2 fold-change per cluster", []]]}
-
     # ── SCRIN co-localization table ──
+    scrin_rows = []
     scrin_net = adata.uns.get("scrin_colocalization_network", {})
     if scrin_net.get("status") == "completed":
         n_pairs = scrin_net.get("n_significant_pairs", 0)
@@ -464,14 +446,10 @@ def _build_data(adata, report: dict) -> dict:
         results_json = scrin_net.get("results_json", "")
         results = json.loads(results_json) if results_json else []
         for r in results[:30]:
-            label = f"{r.get('gene_A', '?')} ↔ {r.get('gene_B', '?')}"
+            label = f"{r.get('gene_A', '?')} \u2194 {r.get('gene_B', '?')}"
             qval = r.get("qvalue_BH", 1.0)
             enrich = r.get("enrichment_ratio", 0)
             scrin_rows.append([label, f"q={qval:.4e}, enrichment={enrich:.2f}"])
-    if table_data:
-        clustering_selector["tables"]["clusterings"][0]["data"]["data"] = table_data
-        clustering_selector["table_help"] = {"title": "Top Features",
-            "data": [["Marker genes and co-localization results", []]]}
 
     # ── Histograms with outlier-capped axes ──
     def _hist(values, color="#3b82f6", xlabel="", ylabel="Cells", cap_pct=98):
