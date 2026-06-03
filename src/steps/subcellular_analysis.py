@@ -12,10 +12,11 @@ inside the runner, controlled by the ``domain_backend`` parameter.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import sys
-import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -367,8 +368,13 @@ def _subcell_scrin(
     # Map to SCRIN's expected column names (cell, x/y_local_px, geneID)
     scrin_df.columns = ["cell", "x_local_px", "y_local_px", "geneID"]
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_p = Path(tmpdir)
+    # Use CWD-based temp dir so compute nodes (via mpiexec.slurm) can access files
+    scrin_tmp = Path.cwd() / ".scrin_tmp"
+    scrin_tmp.mkdir(parents=True, exist_ok=True)
+    run_id = f"scrin_{datetime.now():%Y%m%d_%H%M%S}_{os.getpid()}"
+    tmpdir_p = scrin_tmp / run_id
+    tmpdir_p.mkdir(parents=True)
+    try:
         input_csv = tmpdir_p / "transcripts.csv"
         scrin_df.to_csv(input_csv, index=False)
 
@@ -378,7 +384,6 @@ def _subcell_scrin(
         intermediate_dir.mkdir()
 
         # Find mpiexec — prefer conda-installed, fall back to system
-        import shutil
         mpiexec = shutil.which("mpiexec") or "/usr/bin/mpiexec"
         cmd = [
             mpiexec, "-n", "2",
@@ -392,8 +397,6 @@ def _subcell_scrin(
             "--detection_method", scrin_detection,
             "--intermediate_dir", str(intermediate_dir),
         ]
-        if scrin_mpi_np > 1:
-            cmd = ["mpirun", "-np", str(scrin_mpi_np)] + cmd
 
         try:
             subprocess.run(cmd, check=True, timeout=scrin_timeout, capture_output=True, text=True)
@@ -416,21 +419,24 @@ def _subcell_scrin(
             except Exception:
                 logger.warning("SCRIN: failed to parse output CSV.")
 
-    scrin_meta = {
-        "method": "SCRIN",
-        "status": "completed",
-        "n_significant_pairs": n_pairs,
-        "parameters": {
-            "r_check": scrin_radius,
-            "mode": scrin_mode,
-            "background": scrin_background,
-            "detection": scrin_detection,
-            "mpi_np": scrin_mpi_np,
-        },
-    }
-    adata.uns["scrin_colocalization_network"] = scrin_meta
-    logger.info("SCRIN: %d significant co-localization pairs found.", n_pairs)
-    return {"scrin": "completed", "n_pairs": n_pairs}
+        scrin_meta = {
+            "method": "SCRIN",
+            "status": "completed",
+            "n_significant_pairs": n_pairs,
+            "parameters": {
+                "r_check": scrin_radius,
+                "mode": scrin_mode,
+                "background": scrin_background,
+                "detection": scrin_detection,
+                "mpi_np": scrin_mpi_np,
+            },
+        }
+        adata.uns["scrin_colocalization_network"] = scrin_meta
+        logger.info("SCRIN: %d significant co-localization pairs found.", n_pairs)
+        return {"scrin": "completed", "n_pairs": n_pairs}
+    finally:
+        # Cleanup temp files
+        shutil.rmtree(tmpdir_p, ignore_errors=True)
 
 
 def _subcell_scrin_stub(
