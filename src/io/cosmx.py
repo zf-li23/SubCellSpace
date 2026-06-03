@@ -67,8 +67,14 @@ def _read_csv_or_gz(path: Path, **kwargs: Any) -> pd.DataFrame:
     if path.suffix == ".gz":
         import gzip
         with gzip.open(path, "rt") as f:
-            return pd.read_csv(f, **kwargs)
-    return pd.read_csv(path, **kwargs)
+            df = pd.read_csv(f, **kwargs)
+    else:
+        df = pd.read_csv(path, **kwargs)
+    # Drop any Unnamed columns (caused by leading comma in some CosMx CSVs)
+    unnamed = [c for c in df.columns if c.startswith("Unnamed:")]
+    if unnamed:
+        df = df.drop(columns=unnamed)
+    return df
 
 
 # ── Helper: build cell-level AnnData (multi-source) ──────────────────
@@ -177,6 +183,16 @@ def build_cell_level_adata(
         elif "cell_ID" in meta.columns:
             meta = meta.set_index("cell_ID")
         meta.index = meta.index.astype(str)
+
+        # ── Handle duplicate cell IDs in metadata ──
+        # Some CosMx datasets (e.g. P0014/D0021) have duplicate rows per cell.
+        # Deduplicate by keeping the first occurrence of each cell_id.
+        n_before = len(meta)
+        meta = meta[~meta.index.duplicated(keep="first")]
+        n_dup = n_before - len(meta)
+        if n_dup:
+            logger.warning("Metadata has %d duplicate cell IDs (keeping first occurrence)", n_dup)
+
         for col in meta.columns:
             if col in adata.obs.columns:
                 continue  # don't overwrite existing columns
