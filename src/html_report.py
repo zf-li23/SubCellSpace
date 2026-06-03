@@ -436,6 +436,25 @@ def _build_data(adata, report: dict) -> dict:
 
     # ── Populate clustering table with marker genes (rank_genes_groups) ──
     table_data = []
+
+    # SCRIN results first (most interesting), then marker genes
+    scrin_net = adata.uns.get("scrin_colocalization_network", {})
+    if scrin_net.get("status") == "completed":
+        n_pairs = scrin_net.get("n_significant_pairs", 0)
+        params = scrin_net.get("parameters", {})
+        table_data.append({
+            "feature": {"id": "══ SCRIN ══", "fn": f"{n_pairs:,} pairs (radius={params.get('r_check', '?')}, {params.get('background', '?')})"}
+        })
+        results_json = scrin_net.get("results_json", "")
+        results = json.loads(results_json) if results_json else []
+        for r in results[:30]:
+            label = f"{r.get('gene_A', '?')} - {r.get('gene_B', '?')}"
+            qval = r.get("qvalue_BH", 1.0)
+            enrich = r.get("enrichment_ratio", 0)
+            table_data.append({
+                "feature": {"id": label, "fn": f"q={qval:.4f}, enrich={enrich:.2f}"}
+            })
+
     if "rank_genes_groups" in adata.uns:
         rg = adata.uns["rank_genes_groups"]
         names = rg.get("names")
@@ -447,24 +466,6 @@ def _build_data(adata, report: dict) -> dict:
                     table_data.append({
                         "feature": {"id": str(g), "fn": f"Cluster {cluster_key} marker"},
                     })
-    # Append SCRIN co-localization results if available
-    scrin_net = adata.uns.get("scrin_colocalization_network", {})
-    if scrin_net.get("status") == "completed":
-        n_pairs = scrin_net.get("n_significant_pairs", 0)
-        params = scrin_net.get("parameters", {})
-        table_data.append({
-            "feature": {"id": "══ SCRIN ══", "fn": f"{n_pairs:,} pairs (radius={params.get('r_check', '?')}, {params.get('background', '?')})"}
-        })
-        # Add top results from adata.uns if available (stored as JSON string)
-        results_json = scrin_net.get("results_json", "")
-        results = json.loads(results_json) if results_json else []
-        for r in results[:30]:
-            label = f"{r.get('gene_A', '?')} - {r.get('gene_B', '?')}"
-            qval = r.get("qvalue_BH", 1.0)
-            enrich = r.get("enrichment_ratio", 0)
-            table_data.append({
-                "feature": {"id": label, "fn": f"q={qval:.4f}, enrich={enrich:.2f}"}
-            })
     if table_data:
         clustering_selector["tables"]["clusterings"][0]["data"]["data"] = table_data
         clustering_selector["table_help"] = {"title": "Top Features",
