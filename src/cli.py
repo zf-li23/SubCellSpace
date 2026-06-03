@@ -269,45 +269,6 @@ def _cmd_run(args: argparse.Namespace) -> None:
     print(f"AnnData: {result.adata_path}")
     print(f"Report:  {result.report_path}")
 
-    # ── Export frontend files (default: yes) ──
-    if not getattr(args, "no_export", False):
-        print("\nExporting frontend files …")
-        _do_export(sdata, output_dir)
-
-
-def _do_export(sdata, output_dir: Path) -> None:
-    """Lightweight export: write pipeline_results.json + backend_options.json."""
-    import json
-    exp_dir = Path(output_dir) / "export"
-    exp_dir.mkdir(parents=True, exist_ok=True)
-
-    from .registry import get_all_capabilities, get_available_backends
-
-    summary = sdata.attrs.get("ingestion_summary", {})
-    results = {
-        "platform": sdata.attrs.get("platform", "unknown"),
-        "summary": summary,
-        "points_keys": list(sdata.points.keys()),
-        "shapes_keys": list(sdata.shapes.keys()),
-    }
-    (exp_dir / "pipeline_results.json").write_text(
-        json.dumps(results, ensure_ascii=False, indent=2, default=str))
-
-    caps = get_all_capabilities()
-    backend_options = {}
-    for step_name in [STEP_DENOISE, STEP_SEGMENTATION, STEP_ANALYSIS,
-                       STEP_ANNOTATION, STEP_SPATIAL_ANALYSIS, STEP_SUBCELLULAR_ANALYSIS]:
-        backends = {}
-        for b in get_available_backends(step_name):
-            backends[b] = {"available": True, "capabilities": caps.get(step_name, {}).get(b, [])}
-        if backends:
-            backend_options[step_name] = backends
-    (exp_dir / "backend_options.json").write_text(
-        json.dumps(backend_options, ensure_ascii=False, indent=2))
-
-    print(f"  → {exp_dir}/pipeline_results.json")
-    print(f"  → {exp_dir}/backend_options.json")
-
 
 def _cmd_export(args: argparse.Namespace) -> None:
     """Handle the ``subcellspace export`` command."""
@@ -376,7 +337,6 @@ def _cmd_export(args: argparse.Namespace) -> None:
     options_path.write_text(json.dumps(backend_options, ensure_ascii=False, indent=2))
     print(f"  → {options_path}")
 
-    # ── cells.parquet ────────────────────────────────────────────────
     if adata is not None:
         cells_df = adata.obs.copy()
         if "spatial" in adata.obsm:

@@ -155,7 +155,7 @@ def _load_template() -> tuple[str, str, str, str]:
     return style_block, head_before, body_open, bundle_script
 
 
-def _build_data(adata, meta: dict, report: dict) -> dict:
+def _build_data(adata, report: dict) -> dict:
     """Build the data JSON in Xenium schema from pipeline output."""
     obs = adata.obs
     n_obs, n_vars = adata.n_obs, adata.n_vars
@@ -197,7 +197,7 @@ def _build_data(adata, meta: dict, report: dict) -> dict:
         ["Platform", platform.upper()],
         ["Analysis date", datetime.now().strftime("%b %d, %Y")],
     ]
-    companion = meta.get("companion_files", {})
+    companion = report.get("companion_files", {})
     if companion:
         loaded = [k for k, v in companion.items() if v]
         region_rows.append(["Companion files", ", ".join(loaded)])
@@ -245,7 +245,7 @@ def _build_data(adata, meta: dict, report: dict) -> dict:
         ["Pipeline", report.get("pipeline_name", "SubCellSpace")],
     ]
     seg_rows = [["Cells after QC", f"{n_obs:,}"]]
-    qc_metrics = meta.get("qc_metrics", {})
+    qc_metrics = report.get("qc_metrics", {})
     before_qc = qc_metrics.get("n_obs_before_qc", 0)
     if before_qc:
         seg_rows.append(["Cells before QC", f"{before_qc:,}"])
@@ -501,9 +501,9 @@ def _build_data(adata, meta: dict, report: dict) -> dict:
         if len(valid) > 0:
             cell_area_vals = valid.values.astype(float)
     # Fallback: compute cell areas from polygon file if available
-    if len(cell_area_vals) == 0 and "source_path" in meta:
+    if len(cell_area_vals) == 0 and report.get("source_path"):
         try:
-            poly_path = _find_polygon_file(meta["source_path"])
+            poly_path = _find_polygon_file(report["source_path"])
             if poly_path and poly_path.exists():
                 areas = _compute_polygon_areas(poly_path, obs)
                 if len(areas) > 0:
@@ -586,7 +586,7 @@ def _build_data(adata, meta: dict, report: dict) -> dict:
         "roll_off_figure": {"encoded_image": ""},
         "run_info_table": {"rows": run_rows},
         "sample": {
-            "id": hashlib.md5(str(meta.get("source_path", "unknown")).encode()).hexdigest(),
+            "id": hashlib.md5(str(report.get("source_path", "unknown")).encode()).hexdigest(),
             "description": f"subcellspace_{platform}_{n_obs}cells",
             "pipeline": "SubCellSpace Analysis Summary",
             "page_title": f"SubCellSpace {platform.upper()} — {n_obs} cells",
@@ -632,14 +632,11 @@ def generate_html_report(output_dir: str | Path) -> Path:
 
     adata = ad.read_h5ad(h5ads[0])
 
-    meta_path = output_dir / "metadata.json"
-    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-
     # ── Load template components ──
     style_block, head_before, body_open, bundle_script = _load_template()
 
     # ── Build data ──
-    data = _build_data(adata, meta, report)
+    data = _build_data(adata, report)
     data_json = json.dumps(data, indent=1)
     data_json = data_json.replace("</script>", "<\\/script>")
 

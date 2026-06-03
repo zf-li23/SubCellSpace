@@ -483,6 +483,7 @@ def run_pipeline(
         "pipeline_version": cfg.version,
         "n_obs": int(ctx.adata.n_obs),
         "n_vars": int(ctx.adata.n_vars),
+        "companion_files": sdata.attrs.get("companion_files", {}) if sdata else {},
         "clusters": (
             ctx.adata.obs["cluster"].value_counts().sort_index().to_dict() if "cluster" in ctx.adata.obs else {}
         ),
@@ -526,7 +527,6 @@ def run_pipeline(
             from .container import generate_container
             generate_container(ctx.adata, report, output_dir)
             report["outputs"]["metadata"] = str(output_dir / "metadata.json")
-            report["outputs"]["cells"] = str(output_dir / "cells.parquet")
 
             from .html_report import generate_html_report
             html_path = generate_html_report(output_dir)
