@@ -144,28 +144,28 @@
         <div class="row"><h2>Clustering</h2></div>
         <div class="row">
           <div class="col">
-            <div data-key="cluster_spatial_plot" data-component="Plot"></div>
+            <div class="row transcript-plot-wrapper">
+              <div data-key="cluster_spatial_plot" data-component="Plot"></div>
+            </div>
           </div>
           <div class="col">
-            <div data-key="cluster_umap_plot" data-component="Plot"></div>
+            <div class="row transcript-plot-wrapper">
+              <div data-key="cluster_umap_plot" data-component="Plot"></div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Cell Type Distribution -->
-    <div class="row summary_border">
-      <div class="col">
+    <!-- Cell Type Distribution + SCRIN side by side -->
+    <div class="row">
+      <div class="col summary_border">
         <div class="row"><h2>Cell Type Distribution</h2></div>
         <div class="row">
           <div data-key="cell_type_plot" data-component="Plot"></div>
         </div>
       </div>
-    </div>
-
-    <!-- SCRIN Co-localization (table + network graph) -->
-    <div class="row summary_border">
-      <div class="col">
+      <div class="col summary_border">
         <div class="row"><h2>Co-localization Network (SCRIN)</h2></div>
         <div class="row">
           <div data-key="scrin_network_plot" data-component="Plot"></div>
