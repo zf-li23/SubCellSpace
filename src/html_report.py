@@ -313,11 +313,14 @@ def _build_data(adata, report: dict) -> dict:
         if ylo is not None:
             yaxis["range"] = [ylo, yhi]
         return {
-            "xaxis": xaxis,
-            "yaxis": yaxis,
+            "xaxis": {**xaxis, "gridcolor": "#374151", "zerolinecolor": "#4b5563", "color": "#d1d5db"},
+            "yaxis": {**yaxis, "gridcolor": "#374151", "zerolinecolor": "#4b5563", "color": "#d1d5db"},
             "margin": {"l": 50, "r": 20, "t": 40, "b": 50},
             "hovermode": "closest", "title": {"text": title},
             "hoverlabel": {"namelength": -1},
+            "paper_bgcolor": "rgba(0,0,0,0)",
+            "plot_bgcolor": "rgba(0,0,0,0)",
+            "font": {"color": "#e5e7eb"},
         }
 
     umap_x_arr = adata.obsm["X_umap"][:, 0] if "X_umap" in adata.obsm else np.array([])
@@ -497,11 +500,12 @@ def _build_data(adata, report: dict) -> dict:
                        "showlegend": False,
                        "marker": {"color": color}}],
             "layout": {"xaxis": {"title": {"text": xlabel}, "showline": False,
-                                 "range": [xlo, xhi]},
+                                 "range": [xlo, xhi], **_dark_axis},
                         "yaxis": {"title": {"text": ylabel}, "showline": False,
-                                  "range": [ylo, yhi]},
+                                  "range": [ylo, yhi], **_dark_axis},
                         "hovermode": "x",
-                        "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": 0.05},
+                        "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": 0.05,
+                        **_dark_layout},
         }
 
     # Cell Size Distribution — use cell area if valid, else transcript counts
@@ -564,16 +568,30 @@ def _build_data(adata, report: dict) -> dict:
     n_before_qc = analysis_info.get("n_obs_before_qc", 0)
     n_after_qc = n_obs
     yield_rows = []
-    yield_rows.append(["Raw transcripts", f"{raw_tx:,}", "—", "—"])
+    yield_rows.append(["Raw transcripts (all)", f"{raw_tx:,}", "—", "—"])
     if denoise_info.get("denoise_backend") == "intracellular":
-        yield_rows.append(["After Denoising", f"{after_denoise_tx:,}", "—", "—"])
-    yield_rows.append(["After Segmentation (assigned to cells)", f"{assigned_tx:,}", str(n_before_qc or n_after_qc), str(adata.n_vars)])
+        yield_rows.append(["After Denoising (Nuclear + Cytoplasm)", f"{after_denoise_tx:,}", "—", "—"])
+    # Segmentation count may reflect pre-denoise total due to pipeline
+    # reporting timing; the actual input is the denoised DataFrame.
+    yield_rows.append(["After Segmentation", f"{assigned_tx:,}", str(n_before_qc or n_after_qc), str(adata.n_vars)])
     yield_rows.append(["After QC (analysis step)", "—", f"{n_after_qc:,}", f"{n_vars:,}"])
     yield_rows.insert(0, ["Stage", "Transcripts", "Cells", "Genes"])  # header row
     yield_rows.append(["---", "---", "---", "---"])
     pct_tx = after_denoise_tx / raw_tx * 100 if raw_tx > 0 else 0
     pct_cells = n_after_qc / max(n_before_qc or n_after_qc, 1) * 100
     yield_rows.append(["Overall retention", f"{pct_tx:.1f}% of transcripts", f"{pct_cells:.1f}% of cells", "—"])
+
+    # ── Dark theme layout helper for all Plotly charts ──
+    _dark_layout = {
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "rgba(0,0,0,0)",
+        "font": {"color": "#e5e7eb"},
+    }
+    _dark_axis = {
+        "gridcolor": "#374151",
+        "zerolinecolor": "#4b5563",
+        "color": "#d1d5db",
+    }
 
     # Step Details table
     step_order = report.get("step_order", [])
@@ -588,13 +606,27 @@ def _build_data(adata, report: dict) -> dict:
         # Pick the most relevant statistic
         stat = "—"
         if sn == "denoise":
+            before_tx_d = s.get("before_transcripts", 0)
+            after_tx_d = s.get("after_transcripts", 0)
             dropped = s.get("dropped_transcripts", 0)
             if dropped:
-                stat = f"{dropped:,} filtered out ({s.get('drop_ratio', 0)*100:.1f}%)"
+                stat = f"Before: {before_tx_d:,}  →  After: {after_tx_d:,} ({dropped:,} filtered, {s.get('drop_ratio', 0)*100:.1f}%)"
+            else:
+                stat = f"{after_tx_d:,} transcripts kept"
         elif sn == "segmentation":
-            stat = f"{s.get('n_transcripts_assigned', 0):,} transcripts to {s.get('n_cells_assigned', 0):,} cells"
+            n_assigned = s.get("n_transcripts_assigned", 0)
+            n_cells = s.get("n_cells_assigned", 0)
+            # Note: n_transcripts_assigned reports pre-filter total due to
+            # pipeline reporting order; actual input is CellComp-filtered.
+            stat = f"{n_assigned:,} transcripts → {n_cells:,} cells"
         elif sn == "analysis":
-            stat = f"{s.get('n_obs_after_qc', 0):,} cells × {s.get('n_vars_after_hvg', 0):,} HVGs"
+            n_before_analysis = s.get("n_obs_before_qc", 0)
+            n_after_analysis = s.get("n_obs_after_qc", 0)
+            n_hvg = s.get("n_vars_after_hvg", 0)
+            if n_before_analysis and n_after_analysis and n_before_analysis != n_after_analysis:
+                stat = f"QC: {n_after_analysis:,}/{n_before_analysis:,} cells passed ({n_hvg} HVGs)"
+            else:
+                stat = f"{n_after_analysis:,} cells × {n_hvg} HVGs"
         elif sn == "annotation":
             stat = f"{s.get('n_cell_types', 0)} cell types"
         elif sn == "spatial_analysis":
@@ -603,7 +635,7 @@ def _build_data(adata, report: dict) -> dict:
             stat = s.get("subcellular_analysis", "skipped")
         step_rows.append([sn, backend, elapsed_str, stat])
 
-    # ── Cell Type Distribution plot (bar chart) ──
+    # ── Cell Type Distribution plot (bar chart, dark theme) ──
     if "cell_type" in obs.columns:
         ct_counts = obs["cell_type"].value_counts()
         ct_names = ct_counts.index.tolist()
@@ -618,20 +650,20 @@ def _build_data(adata, report: dict) -> dict:
                 "showlegend": False,
             }],
             "layout": {
-                "xaxis": {"title": {"text": "Cell Type"}, "tickangle": -45},
-                "yaxis": {"title": {"text": "Cells"}},
+                "xaxis": {"title": {"text": "Cell Type"}, "tickangle": -45, **_dark_axis},
+                "yaxis": {"title": {"text": "Cells"}, **_dark_axis},
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 120},
                 "bargap": 0.4,
+                **_dark_layout,
             },
         }
     else:
         cell_type_plot = {"data": [], "layout": {}}
 
-    # ── Spatial Domain Distribution plot (bar chart) ──
+    # ── Spatial Domain Distribution plot (bar chart, dark theme) ──
     spat_info = steps.get("spatial_analysis", {})
     sd_dist_raw = spat_info.get("spatial_domain_distribution", {})
     if sd_dist_raw and isinstance(sd_dist_raw, dict):
-        # Parse domain labels (keys) and counts (values)
         labels = [str(k) for k in sd_dist_raw.keys()]
         counts = [int(v) for v in sd_dist_raw.values()]
         spatial_domain_plot = {
@@ -644,10 +676,11 @@ def _build_data(adata, report: dict) -> dict:
                 "showlegend": False,
             }],
             "layout": {
-                "xaxis": {"title": {"text": "Spatial Domain"}},
-                "yaxis": {"title": {"text": "Cells"}},
+                "xaxis": {"title": {"text": "Spatial Domain"}, **_dark_axis},
+                "yaxis": {"title": {"text": "Cells"}, **_dark_axis},
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 50},
                 "bargap": 0.3,
+                **_dark_layout,
             },
         }
     else:
