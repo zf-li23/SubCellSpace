@@ -369,21 +369,7 @@ def _build_data(adata, report: dict) -> dict:
         "plot_help": {"title": "", "data": []},
         "table_help": {"title": "", "data": []},
         "tables": {
-            "clusterings": [
-                {
-                    "key": "gene_expression_graphclust",
-                    "name": "Graph-based",
-                    "data": {
-                        "columns": [
-                            {"Header": "Feature", "columns": [
-                                {"Header": "ID", "accessor": "feature.id"},
-                                {"Header": "Name", "accessor": "feature.fn"},
-                            ]},
-                        ],
-                        "data": [],
-                    },
-                },
-            ],
+            "clusterings": [],
             "default_page_size": 20,
         },
         "allow_fixed_columns": False,
@@ -423,7 +409,7 @@ def _build_data(adata, report: dict) -> dict:
             "data": clustering_data,
         }]
 
-    # ── SCRIN co-localization summary table ──
+    # ── SCRIN co-localization table ──
     scrin_rows = []
     scrin_net = adata.uns.get("scrin_colocalization_network", {})
     if scrin_net.get("status") == "completed":
@@ -433,44 +419,17 @@ def _build_data(adata, report: dict) -> dict:
         scrin_rows.append(["Detection radius", f"{params.get('r_check', '?')} µm"])
         scrin_rows.append(["Background model", params.get('background', '?')])
         scrin_rows.append(["Mode", params.get('mode', '?')])
-
-    # ── SCRIN multi-column table (Plotly table trace) ──
-    scrin_table_plot: dict = {"data": [], "layout": dict(_DARK_LAYOUT)}
-    if scrin_net.get("status") == "completed" and scrin_net.get("results_json", ""):
-        try:
-            _rj = scrin_net["results_json"]
-            _results = json.loads(_rj) if _rj else []
-            if _results:
-                ranks = [str(i) for i in range(1, len(_results) + 1)]
-                geneA_vals = [r.get("gene_A", "?") for r in _results]
-                geneB_vals = [r.get("gene_B", "?") for r in _results]
-                q_vals = [f"{r.get('qvalue_BH', 1.0):.4e}" for r in _results]
-                p_vals = [f"{r.get('pvalue', 1.0):.4e}" for r in _results]
-                e_vals = [f"{r.get('enrichment_ratio', 0):.2f}" for r in _results]
-                scrin_table_plot = {
-                    "data": [{
-                        "type": "table",
-                        "header": {
-                            "values": ["#", "Gene A", "Gene B", "Q-value", "P-value", "Enrichment"],
-                            "fill": {"color": "#1e1b4b"},
-                            "font": {"color": "#f2f5fa", "size": 12},
-                            "align": "left",
-                        },
-                        "cells": {
-                            "values": [ranks, geneA_vals, geneB_vals, q_vals, p_vals, e_vals],
-                            "fill": {"color": ["#111111", "#1a1a1a"]},
-                            "font": {"color": "#d1d5db", "size": 11},
-                            "align": ["center", "left", "left", "right", "right", "right"],
-                            "height": 26,
-                        },
-                    }],
-                    "layout": {
-                        "margin": {"l": 5, "r": 5, "t": 5, "b": 5},
-                        **_DARK_LAYOUT,
-                    },
-                }
-        except Exception as exc:
-            logger.warning("Failed to build SCRIN table plot: %s", exc)
+        scrin_rows.append(["---", "---"])
+        scrin_rows.append(["Gene A  ↔  Gene B", "Q-value  |  Enrichment"])
+        scrin_rows.append(["---", "---"])
+        _rj = scrin_net.get("results_json", "")
+        _results = json.loads(_rj) if _rj else []
+        for i, r in enumerate(_results[:50], 1):
+            gA = r.get("gene_A", "?")
+            gB = r.get("gene_B", "?")
+            qv = f"{r.get('qvalue_BH', 1.0):.4e}"
+            ev = f"{r.get('enrichment_ratio', 0):.2f}"
+            scrin_rows.append([f"#{i}  {gA} \u2194 {gB}", f"q={qv}  enrichment={ev}"])
 
     # ── SCRIN network visualization ──
     scrin_network_plot: dict = {"data": [], "layout": dict(_DARK_LAYOUT)}
@@ -832,7 +791,6 @@ def _build_data(adata, report: dict) -> dict:
         },
         "scrin_table": {"rows": scrin_rows},
         "scrin_network_plot": scrin_network_plot,
-        "scrin_table_plot": scrin_table_plot,
         "segmentation_table": {"rows": seg_rows},
         "software_table": {"rows": [
             ["Platform", platform.upper()],
