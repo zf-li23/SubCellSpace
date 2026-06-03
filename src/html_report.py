@@ -635,8 +635,9 @@ def _build_data(adata, report: dict) -> dict:
                 "showlegend": False,
             }],
             "layout": {
-                "xaxis": {"title": {"text": "Cell Type"}, "tickangle": -45},
-                "yaxis": {"title": {"text": "Cells"}},
+                "xaxis": {"title": {"text": "Cell Type"}, "tickangle": -45, "showline": False},
+                "yaxis": {"title": {"text": "Cells"}, "showline": False},
+                "hovermode": "x",
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 120},
                 "bargap": 0.4,
             },
@@ -660,8 +661,9 @@ def _build_data(adata, report: dict) -> dict:
                 "showlegend": False,
             }],
             "layout": {
-                "xaxis": {"title": {"text": "Spatial Domain"}},
-                "yaxis": {"title": {"text": "Cells"}},
+                "xaxis": {"title": {"text": "Spatial Domain"}, "showline": False},
+                "yaxis": {"title": {"text": "Cells"}, "showline": False},
+                "hovermode": "x",
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 50},
                 "bargap": 0.3,
             },
