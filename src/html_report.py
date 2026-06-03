@@ -441,15 +441,20 @@ def _build_data(adata, report: dict) -> dict:
         n_pairs = scrin_net.get("n_significant_pairs", 0)
         params = scrin_net.get("parameters", {})
         scrin_rows.append(["SCRIN Co-localization", f"{n_pairs:,} significant pairs"])
-        scrin_rows.append(["Parameters", f"radius={params.get('r_check', '?')}, background={params.get('background', '?')}, mode={params.get('mode', '?')}"])
+        scrin_rows.append(["Detection radius", f"{params.get('r_check', '?')} µm"])
+        scrin_rows.append(["Background model", params.get('background', '?')])
+        scrin_rows.append(["Mode", params.get('mode', '?')])
+        scrin_rows.append(["---", "---"])
+        scrin_rows.append(["Top pairs (sorted by q-value)", "q-value  |  Enrichment"])
         scrin_rows.append(["---", "---"])
         results_json = scrin_net.get("results_json", "")
         results = json.loads(results_json) if results_json else []
-        for r in results[:30]:
-            label = f"{r.get('gene_A', '?')} \u2194 {r.get('gene_B', '?')}"
+        for i, r in enumerate(results[:30], 1):
+            gA = r.get('gene_A', '?')
+            gB = r.get('gene_B', '?')
             qval = r.get("qvalue_BH", 1.0)
             enrich = r.get("enrichment_ratio", 0)
-            scrin_rows.append([label, f"q={qval:.4e}, enrichment={enrich:.2f}"])
+            scrin_rows.append([f"#{i}  {gA} \u2194 {gB}", f"q={qval:.4e}  enrichment={enrich:.2f}"])
 
     # ── Histograms with outlier-capped axes ──
     def _hist(values, color="#3b82f6", xlabel="", ylabel="Cells", cap_pct=98):
