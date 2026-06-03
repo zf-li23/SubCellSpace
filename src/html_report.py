@@ -369,23 +369,57 @@ def _build_data(adata, report: dict) -> dict:
         "plot_help": {"title": "", "data": []},
         "table_help": {"title": "", "data": []},
         "tables": {
-            "clusterings": [{
-                "key": "gene_expression_graphclust",
-                "name": "Graph-based",
-                "data": {
-                    "columns": [
-                        {"Header": "Feature", "columns": [
-                            {"Header": "ID", "accessor": "feature.id"},
-                            {"Header": "Name", "accessor": "feature.fn"},
-                        ]},
-                    ],
-                    "data": [],
+            "clusterings": [
+                {
+                    "key": "gene_expression_graphclust",
+                    "name": "Graph-based",
+                    "data": {
+                        "columns": [
+                            {"Header": "Feature", "columns": [
+                                {"Header": "ID", "accessor": "feature.id"},
+                                {"Header": "Name", "accessor": "feature.fn"},
+                            ]},
+                        ],
+                        "data": [],
+                    },
                 },
-            }],
+            ],
             "default_page_size": 20,
         },
         "allow_fixed_columns": False,
     }
+
+    # ── Inject SCRIN data into clustering_selector tables ──
+    _scrin_table_data: list[dict] = []
+    _scrin_net_tmp = adata.uns.get("scrin_colocalization_network", {})
+    if _scrin_net_tmp.get("status") == "completed":
+        _rj = _scrin_net_tmp.get("results_json", "")
+        _results = json.loads(_rj) if _rj else []
+        for i, r in enumerate(_results[:100], 1):
+            _scrin_table_data.append({
+                "rank": str(i),
+                "geneA": r.get("gene_A", "?"),
+                "geneB": r.get("gene_B", "?"),
+                "qvalue": f"{r.get('qvalue_BH', 1.0):.4e}",
+                "pvalue": f"{r.get('pvalue', 1.0):.4e}",
+                "enrichment": f"{r.get('enrichment_ratio', 0):.2f}",
+            })
+        if _scrin_table_data:
+            clustering_selector["tables"]["clusterings"].append({
+                "key": "scrin_colocalization",
+                "name": "SCRIN",
+                "data": {
+                    "columns": [
+                        {"Header": "#", "accessor": "rank"},
+                        {"Header": "Gene A", "accessor": "geneA"},
+                        {"Header": "Gene B", "accessor": "geneB"},
+                        {"Header": "Q-value", "accessor": "qvalue"},
+                        {"Header": "P-value", "accessor": "pvalue"},
+                        {"Header": "Enrichment", "accessor": "enrichment"},
+                    ],
+                    "data": _scrin_table_data,
+                },
+            })
     if "cluster" in obs.columns:
         clusters = obs["cluster"].astype(str)
         cnames = sorted(clusters.unique())
@@ -419,7 +453,7 @@ def _build_data(adata, report: dict) -> dict:
             "data": clustering_data,
         }]
 
-    # ── SCRIN co-localization table ──
+    # ── SCRIN co-localization summary table ──
     scrin_rows = []
     scrin_net = adata.uns.get("scrin_colocalization_network", {})
     if scrin_net.get("status") == "completed":
@@ -429,17 +463,6 @@ def _build_data(adata, report: dict) -> dict:
         scrin_rows.append(["Detection radius", f"{params.get('r_check', '?')} µm"])
         scrin_rows.append(["Background model", params.get('background', '?')])
         scrin_rows.append(["Mode", params.get('mode', '?')])
-        scrin_rows.append(["---", "---"])
-        scrin_rows.append(["Top pairs (sorted by q-value)", "q-value  |  Enrichment"])
-        scrin_rows.append(["---", "---"])
-        results_json = scrin_net.get("results_json", "")
-        results = json.loads(results_json) if results_json else []
-        for i, r in enumerate(results[:30], 1):
-            gA = r.get('gene_A', '?')
-            gB = r.get('gene_B', '?')
-            qval = r.get("qvalue_BH", 1.0)
-            enrich = r.get("enrichment_ratio", 0)
-            scrin_rows.append([f"#{i}  {gA} \u2194 {gB}", f"q={qval:.4e}  enrichment={enrich:.2f}"])
 
     # ── SCRIN network visualization ──
     scrin_network_plot: dict = {"data": [], "layout": dict(_DARK_LAYOUT)}
