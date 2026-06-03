@@ -502,8 +502,7 @@ def _build_data(adata, report: dict) -> dict:
                                   "range": [ylo, yhi]},
                         "hovermode": "x",
                         "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": 0.05,
-                        "paper_bgcolor": "rgba(0,0,0,0)",
-                        "plot_bgcolor": "rgba(0,0,0,0)"},
+                        },
         }
 
     # Cell Size Distribution — use cell area if valid, else transcript counts
@@ -640,8 +639,6 @@ def _build_data(adata, report: dict) -> dict:
                 "yaxis": {"title": {"text": "Cells"}},
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 120},
                 "bargap": 0.4,
-                "paper_bgcolor": "rgba(0,0,0,0)",
-                "plot_bgcolor": "rgba(0,0,0,0)",
             },
         }
     else:
@@ -667,8 +664,6 @@ def _build_data(adata, report: dict) -> dict:
                 "yaxis": {"title": {"text": "Cells"}},
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 50},
                 "bargap": 0.3,
-                "paper_bgcolor": "rgba(0,0,0,0)",
-                "plot_bgcolor": "rgba(0,0,0,0)",
             },
         }
     else:
