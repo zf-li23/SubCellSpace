@@ -318,8 +318,6 @@ def _build_data(adata, report: dict) -> dict:
             "margin": {"l": 50, "r": 20, "t": 40, "b": 50},
             "hovermode": "closest", "title": {"text": title},
             "hoverlabel": {"namelength": -1},
-            "paper_bgcolor": "rgba(0,0,0,0)",
-            "plot_bgcolor": "rgba(0,0,0,0)",
         }
 
     umap_x_arr = adata.obsm["X_umap"][:, 0] if "X_umap" in adata.obsm else np.array([])
