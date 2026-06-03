@@ -445,8 +445,7 @@ def _build_data(adata, report: dict) -> dict:
                 top_genes = names[cluster_key][:n_top].tolist() if hasattr(names[cluster_key], "tolist") else list(names[cluster_key][:n_top])
                 for g in top_genes:
                     table_data.append({
-                        "feature.id": str(g),
-                        "feature.fn": f"Cluster {cluster_key} marker",
+                        "feature": {"id": str(g), "fn": f"Cluster {cluster_key} marker"},
                     })
     # Append SCRIN co-localization results if available
     scrin_net = adata.uns.get("scrin_colocalization_network", {})
@@ -454,8 +453,7 @@ def _build_data(adata, report: dict) -> dict:
         n_pairs = scrin_net.get("n_significant_pairs", 0)
         params = scrin_net.get("parameters", {})
         table_data.append({
-            "feature.id": "══ SCRIN Co-localization ══",
-            "feature.fn": f"{n_pairs:,} pairs (radius={params.get('r_check', '?')}, {params.get('background', '?')})"
+            "feature": {"id": "══ SCRIN ══", "fn": f"{n_pairs:,} pairs (radius={params.get('r_check', '?')}, {params.get('background', '?')})"}
         })
         # Add top results from adata.uns if available (stored as JSON string)
         results_json = scrin_net.get("results_json", "")
@@ -465,8 +463,7 @@ def _build_data(adata, report: dict) -> dict:
             qval = r.get("qvalue_BH", 1.0)
             enrich = r.get("enrichment_ratio", 0)
             table_data.append({
-                "feature.id": label,
-                "feature.fn": f"q={qval:.4f}, enrich={enrich:.2f}"
+                "feature": {"id": label, "fn": f"q={qval:.4f}, enrich={enrich:.2f}"}
             })
     if table_data:
         clustering_selector["tables"]["clusterings"][0]["data"]["data"] = table_data
