@@ -138,12 +138,19 @@
       </div>
     </div>
 
-    <!-- Clustering: Spatial + UMAP with cluster coloring -->
-    <div class="row">
-      <h2>Clustering</h2>
-    </div>
-    <div class="row">
-      <div data-key="clustering_selector" data-component="ClusteringSelector"></div>
+    <!-- Clustering: Spatial + UMAP colored by cluster assignment -->
+    <div class="row summary_border">
+      <div class="col">
+        <div class="row"><h2>Clustering</h2></div>
+        <div class="row">
+          <div class="col">
+            <div data-key="cluster_spatial_plot" data-component="Plot"></div>
+          </div>
+          <div class="col">
+            <div data-key="cluster_umap_plot" data-component="Plot"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Cell Type Distribution -->

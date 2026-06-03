@@ -343,71 +343,39 @@ def _build_data(adata, report: dict) -> dict:
             spat_trace = dict(umap_trace, x=xy_spat[:, 0].tolist(), y=xy_spat[:, 1].tolist())
             spatial_data["data"] = [spat_trace]
 
-    # ── Clustering selector ──
-    # s9() expects left_plots/right_plots to have x, y, layout, config + clusterings
-    # left_plots = spatial coords (clusters mapped to real space)
-    # right_plots = UMAP coords (clusters in embedding space)
-    umap_x = adata.obsm["X_umap"][:, 0].tolist() if "X_umap" in adata.obsm else []
-    umap_y = adata.obsm["X_umap"][:, 1].tolist() if "X_umap" in adata.obsm else []
-    spat_x = adata.obsm["spatial"][:, 0].tolist() if "spatial" in adata.obsm else umap_x
-    spat_y = adata.obsm["spatial"][:, 1].tolist() if "spatial" in adata.obsm else umap_y
-    clustering_selector: dict = {
-        "left_plots": {
-            "clusterings": [],
-            "x": spat_x,
-            "y": spat_y,
-            "layout": _scatter_ly("Spatial", "X (µm)", "Y (µm)", spat_x, spat_y),
-            "config": _scatter_cfg,
-        },
-        "right_plots": {
-            "clusterings": [],
-            "x": umap_x,
-            "y": umap_y,
-            "layout": _scatter_ly("UMAP", "UMAP1", "UMAP2", umap_x, umap_y),
-            "config": _scatter_cfg,
-        },
-        "plot_help": {"title": "", "data": []},
-        "table_help": {"title": "", "data": []},
-        "tables": {
-            "clusterings": [],
-            "default_page_size": 20,
-        },
-        "allow_fixed_columns": False,
-    }
-
-
-    if "cluster" in obs.columns:
-        clusters = obs["cluster"].astype(str)
-        cnames = sorted(clusters.unique())
-        clustering_data = []
-        for c in cnames:
-            idx = list(np.where(clusters.values == c)[0].astype(int).tolist())
-            cell_type = ""
-            if "cell_type" in obs:
-                ct_vals = obs["cell_type"].astype(str)
-                ct_in_cluster = ct_vals.iloc[idx].value_counts()
-                cell_type = ct_in_cluster.index[0] if len(ct_in_cluster) > 0 else ""
-            pct = len(idx) / n_obs * 100
-            clustering_data.append({
-                "name": f"Cluster {c}",
-                "indices": idx,
-                "type": "scatter",
-                "mode": "markers",
-                "marker": {"opacity": 0.7, "size": 3.0},
-                "text": f"Cluster {c}: {pct:.1f}%" + (f" ({cell_type})" if cell_type else ""),
+    # ── Cluster-colored spatial + UMAP plots (standalone Plot components) ──
+    _CLUSTER_COLORS = [
+        "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#ec4899",
+        "#06b6d4", "#8b5cf6", "#84cc16", "#f97316", "#14b8a6",
+        "#a855f7", "#e11d48", "#0ea5e9", "#d946ef", "#10b981",
+    ]
+    cluster_spatial_plot = {"config": _scatter_cfg, "layout": _scatter_ly("Spatial (clusters)", "X (µm)", "Y (µm)"), "data": []}
+    cluster_umap_plot = {"config": _scatter_cfg, "layout": _scatter_ly("UMAP (clusters)", "UMAP1", "UMAP2"), "data": []}
+    _spat_arr = adata.obsm["spatial"] if "spatial" in adata.obsm else None
+    _umap_arr = adata.obsm["X_umap"] if "X_umap" in adata.obsm else None
+    if "cluster" in obs.columns and _umap_arr is not None:
+        _clusters = obs["cluster"].astype(str)
+        _cnames = sorted(_clusters.unique())
+        for i, c in enumerate(_cnames):
+            _mask = _clusters.values == c
+            _color = _CLUSTER_COLORS[i % len(_CLUSTER_COLORS)]
+            _pct = _mask.sum() / n_obs * 100
+            _label = f"Cluster {c} ({_pct:.1f}%)"
+            cluster_umap_plot["data"].append({
+                "x": _umap_arr[_mask, 0].tolist(),
+                "y": _umap_arr[_mask, 1].tolist(),
+                "type": "scattergl", "mode": "markers",
+                "marker": {"opacity": 0.6, "size": 3.0, "color": _color},
+                "name": _label,
             })
-        clustering_selector["left_plots"]["clusterings"] = [{
-            "key": "gene_expression_graphclust",
-            "name": "Graph-based",
-            "data": clustering_data,
-        }]
-        # right_plots must have at least one clustering entry, otherwise the
-        # renderer crashes when accessing clusterings[t].plot
-        clustering_selector["right_plots"]["clusterings"] = [{
-            "key": "gene_expression_graphclust",
-            "name": "Graph-based",
-            "data": clustering_data,
-        }]
+            if _spat_arr is not None:
+                cluster_spatial_plot["data"].append({
+                    "x": _spat_arr[_mask, 0].tolist(),
+                    "y": _spat_arr[_mask, 1].tolist(),
+                    "type": "scattergl", "mode": "markers",
+                    "marker": {"opacity": 0.6, "size": 3.0, "color": _color},
+                    "name": _label,
+                })
 
     # ── SCRIN co-localization table ──
     scrin_rows = []
@@ -762,7 +730,8 @@ def _build_data(adata, report: dict) -> dict:
         "alarm_options": {"hide_alert_analysis": True, "use_triangle_icon_for_errors": False},
         "calibration_uuid": hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest(),
         "cell_size_distribution": _hist(cell_area_vals, color=COLOR_SECONDARY, xlabel=cell_area_label, ylabel="Cells"),
-        "clustering_selector": clustering_selector,
+        "cluster_spatial_plot": cluster_spatial_plot,
+        "cluster_umap_plot": cluster_umap_plot,
         "dark_mode": True,
         "fov_missing_transcript_rate_plot": (
             _hist(np.array(fov_tx_counts), color=COLOR_PRIMARY, xlabel="Transcripts per FOV", ylabel="FOVs")
