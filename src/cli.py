@@ -71,6 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--domain-backend", choices=["spatial_leiden", "spatial_kmeans", "none"], default=None,
                             help="Spatial domain identification backend (part of spatial_analysis step)")
     run_parser.add_argument("--spatial-analysis-backend", choices=get_available_backends("spatial_analysis"), default=None)
+    run_parser.add_argument("--subcellular-analysis-backend", choices=get_available_backends("subcellular_analysis"), default=None,
+                            help="Subcellular analysis backend (scrin or none)")
     run_parser.add_argument("--subcellular-domain-backend", choices=["hdbscan", "dbscan", "leiden_spatial", "phenograph", "none"], default=None,
                             help="Subcellular domain clustering backend (part of subcellular_analysis step)")
     run_parser.add_argument("--strict-contracts", action="store_true", help="Treat data contract violations as hard errors")
@@ -252,7 +254,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
     overrides: dict[str, Any] = {}
     for key in ("min_transcripts", "min_genes", "denoise_backend", "patchify_backend",
                 "segmentation_backend", "clustering_backend", "leiden_resolution",
-                "annotation_backend", "domain_backend", "subcellular_domain_backend",
+                "annotation_backend", "domain_backend", "subcellular_analysis_backend",
+                "subcellular_domain_backend",
                 "spatial_analysis_backend", "strict_contracts"):
         val = getattr(args, key, None)
         if val is not None:

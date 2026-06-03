@@ -434,6 +434,33 @@ def _build_data(adata, report: dict) -> dict:
             "data": clustering_data,
         }]
 
+    # ── Populate clustering table with marker genes (rank_genes_groups) ──
+    table_data = []
+    if "rank_genes_groups" in adata.uns:
+        rg = adata.uns["rank_genes_groups"]
+        names = rg.get("names")
+        if names is not None and hasattr(names, "dtype"):
+            n_top = min(20, len(names))
+            for cluster_key in names.dtype.names or []:
+                top_genes = names[cluster_key][:n_top].tolist() if hasattr(names[cluster_key], "tolist") else list(names[cluster_key][:n_top])
+                for g in top_genes:
+                    table_data.append({
+                        "feature.id": str(g),
+                        "feature.fn": f"Cluster {cluster_key} marker",
+                    })
+    # Append SCRIN co-localization results if available
+    scrin_net = adata.uns.get("scrin_colocalization_network", {})
+    if scrin_net.get("status") == "completed":
+        n_pairs = scrin_net.get("n_significant_pairs", 0)
+        table_data.append({"feature.id": "--- SCRIN ---", "feature.fn": f"{n_pairs} significant pairs"})
+        # SCRIN results CSV is not stored in adata; only metadata is kept
+        params = scrin_net.get("parameters", {})
+        table_data.append({"feature.id": f"radius={params.get('r_check', '?')}", "feature.fn": f"mode={params.get('mode', '?')}"})
+    if table_data:
+        clustering_selector["tables"]["clusterings"][0]["data"]["data"] = table_data
+        clustering_selector["table_help"] = {"title": "Top Features",
+            "data": [["Marker genes and co-localization results", []]]}
+
     # ── Histograms with outlier-capped axes ──
     def _hist(values, color="#3b82f6", xlabel="", ylabel="Cells", cap_pct=98):
         """Plot histogram with x-axis capped at *cap_pct* percentile.

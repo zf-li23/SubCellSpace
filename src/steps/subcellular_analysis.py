@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -351,10 +352,10 @@ def _subcell_scrin(
     """Run SCRIN co-localization network analysis.
 
     Exports the segmented transcript DataFrame as a temporary CSV,
-    calls the ``scrin`` CLI, and stores the resulting co-localization
-    network in ``adata.uns["scrin_colocalization_network"]``.
+    calls the ``scrin`` CLI (via ``python -m scrin.main``), and stores
+    the resulting co-localization network in ``adata.uns["scrin_colocalization_network"]``.
     """
-    if not _SCRIN_AVAILABLE and not shutil.which("scrin"):
+    if not _SCRIN_AVAILABLE:
         return _subcell_scrin_stub(segmented_df, adata, scrin_radius=scrin_radius)
 
     cell_col = resolve_col_strict(segmented_df.columns, COL_CELL_ID)
@@ -363,7 +364,8 @@ def _subcell_scrin(
     gene_col = resolve_col_strict(segmented_df.columns, COL_GENE)
 
     scrin_df = segmented_df[[cell_col, x_col, y_col, gene_col]].copy()
-    scrin_df.columns = ["cell_id", "x", "y", "gene"]
+    # Map to SCRIN's expected column names (cell, x/y_local_px, geneID)
+    scrin_df.columns = ["cell", "x_local_px", "y_local_px", "geneID"]
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_p = Path(tmpdir)
@@ -375,10 +377,15 @@ def _subcell_scrin(
         intermediate_dir = tmpdir_p / "scrin_intermediate"
         intermediate_dir.mkdir()
 
+        # Find mpiexec — prefer conda-installed, fall back to system
+        import shutil
+        mpiexec = shutil.which("mpiexec") or "/usr/bin/mpiexec"
         cmd = [
-            "scrin",
+            mpiexec, "-n", "2",
+            sys.executable, "-m", "scrin.main",
             "--data_path", str(input_csv),
-            "--save_path", str(output_dir),
+            "--save_path", str(output_dir / "scrin_results.csv"),
+            "--column_name", "x_local_px,y_local_px,geneID,cell",
             "--r_check", str(scrin_radius),
             "--mode", scrin_mode,
             "--background", scrin_background,
@@ -397,7 +404,7 @@ def _subcell_scrin(
             logger.warning("SCRIN failed: %s", exc.stderr)
             return {"scrin": "failed", "n_pairs": 0}
         except FileNotFoundError:
-            logger.warning("SCRIN executable not found on PATH.")
+            logger.warning("SCRIN executable not found (python -m scrin.main).")
             return _subcell_scrin_stub(segmented_df, adata, scrin_radius=scrin_radius)
 
         n_pairs = 0
