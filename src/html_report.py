@@ -313,14 +313,11 @@ def _build_data(adata, report: dict) -> dict:
         if ylo is not None:
             yaxis["range"] = [ylo, yhi]
         return {
-            "xaxis": {**xaxis, "gridcolor": "#374151", "zerolinecolor": "#4b5563", "color": "#d1d5db"},
-            "yaxis": {**yaxis, "gridcolor": "#374151", "zerolinecolor": "#4b5563", "color": "#d1d5db"},
+            "xaxis": xaxis,
+            "yaxis": yaxis,
             "margin": {"l": 50, "r": 20, "t": 40, "b": 50},
             "hovermode": "closest", "title": {"text": title},
             "hoverlabel": {"namelength": -1},
-            "paper_bgcolor": "rgba(0,0,0,0)",
-            "plot_bgcolor": "rgba(0,0,0,0)",
-            "font": {"color": "#e5e7eb"},
         }
 
     umap_x_arr = adata.obsm["X_umap"][:, 0] if "X_umap" in adata.obsm else np.array([])
@@ -500,12 +497,11 @@ def _build_data(adata, report: dict) -> dict:
                        "showlegend": False,
                        "marker": {"color": color}}],
             "layout": {"xaxis": {"title": {"text": xlabel}, "showline": False,
-                                 "range": [xlo, xhi], **_dark_axis},
+                                 "range": [xlo, xhi]},
                         "yaxis": {"title": {"text": ylabel}, "showline": False,
-                                  "range": [ylo, yhi], **_dark_axis},
+                                  "range": [ylo, yhi]},
                         "hovermode": "x",
-                        "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": 0.05,
-                        **_dark_layout},
+                        "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": 0.05},
         }
 
     # Cell Size Distribution — use cell area if valid, else transcript counts
@@ -581,18 +577,6 @@ def _build_data(adata, report: dict) -> dict:
     pct_cells = n_after_qc / max(n_before_qc or n_after_qc, 1) * 100
     yield_rows.append(["Overall retention", f"{pct_tx:.1f}% of transcripts", f"{pct_cells:.1f}% of cells", "—"])
 
-    # ── Dark theme layout helper for all Plotly charts ──
-    _dark_layout = {
-        "paper_bgcolor": "rgba(0,0,0,0)",
-        "plot_bgcolor": "rgba(0,0,0,0)",
-        "font": {"color": "#e5e7eb"},
-    }
-    _dark_axis = {
-        "gridcolor": "#374151",
-        "zerolinecolor": "#4b5563",
-        "color": "#d1d5db",
-    }
-
     # Step Details table
     step_order = report.get("step_order", [])
     step_rows = []
@@ -650,11 +634,10 @@ def _build_data(adata, report: dict) -> dict:
                 "showlegend": False,
             }],
             "layout": {
-                "xaxis": {"title": {"text": "Cell Type"}, "tickangle": -45, **_dark_axis},
-                "yaxis": {"title": {"text": "Cells"}, **_dark_axis},
+                "xaxis": {"title": {"text": "Cell Type"}, "tickangle": -45},
+                "yaxis": {"title": {"text": "Cells"}},
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 120},
                 "bargap": 0.4,
-                **_dark_layout,
             },
         }
     else:
@@ -676,11 +659,10 @@ def _build_data(adata, report: dict) -> dict:
                 "showlegend": False,
             }],
             "layout": {
-                "xaxis": {"title": {"text": "Spatial Domain"}, **_dark_axis},
-                "yaxis": {"title": {"text": "Cells"}, **_dark_axis},
+                "xaxis": {"title": {"text": "Spatial Domain"}},
+                "yaxis": {"title": {"text": "Cells"}},
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 50},
                 "bargap": 0.3,
-                **_dark_layout,
             },
         }
     else:
