@@ -457,8 +457,9 @@ def _build_data(adata, report: dict) -> dict:
             "feature.id": "══ SCRIN Co-localization ══",
             "feature.fn": f"{n_pairs:,} pairs (radius={params.get('r_check', '?')}, {params.get('background', '?')})"
         })
-        # Add top results from adata.uns if available
-        results = scrin_net.get("results", [])
+        # Add top results from adata.uns if available (stored as JSON string)
+        results_json = scrin_net.get("results_json", "")
+        results = json.loads(results_json) if results_json else []
         for r in results[:30]:
             label = f"{r.get('gene_A', '?')} - {r.get('gene_B', '?')}"
             qval = r.get("qvalue_BH", 1.0)

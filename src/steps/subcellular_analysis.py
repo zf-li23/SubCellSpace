@@ -417,11 +417,11 @@ def _subcell_scrin(
             try:
                 result_df = pd.read_csv(result_csv)
                 n_pairs = len(result_df)
-                # Store top results in adata.uns for the report
+                # Store top results as JSON string (h5ad can't handle mixed-type lists)
                 top_cols = ["gene_A", "gene_B", "pvalue", "qvalue_BH", "enrichment_ratio"]
                 available = [c for c in top_cols if c in result_df.columns]
                 top_df = result_df.nsmallest(50, "qvalue_BH") if "qvalue_BH" in result_df.columns else result_df.head(50)
-                scrin_meta["results"] = json.loads(top_df[available].to_json(orient="records"))
+                scrin_meta["results_json"] = top_df[available].to_json(orient="records")
             except Exception:
                 logger.warning("SCRIN: failed to parse output CSV.")
 
