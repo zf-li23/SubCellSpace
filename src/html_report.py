@@ -456,6 +456,106 @@ def _build_data(adata, report: dict) -> dict:
             enrich = r.get("enrichment_ratio", 0)
             scrin_rows.append([f"#{i}  {gA} \u2194 {gB}", f"q={qval:.4e}  enrichment={enrich:.2f}"])
 
+    # ── SCRIN network visualization ──
+    scrin_network_plot: dict = {"data": [], "layout": {}}
+    if scrin_net.get("status") == "completed" and scrin_net.get("results_json", ""):
+        try:
+            import networkx as nx
+            results = json.loads(scrin_net["results_json"])
+            if len(results) >= 2:
+                G = nx.Graph()
+                for r in results:
+                    gA, gB = r.get("gene_A"), r.get("gene_B")
+                    qval = r.get("qvalue_BH", 1.0)
+                    enrich = r.get("enrichment_ratio", 0)
+                    if gA and gB and qval > 0:
+                        weight = min(-np.log10(qval), 100)
+                        G.add_edge(gA, gB, weight=weight, enrichment=enrich)
+
+                if G.number_of_nodes() >= 2:
+                    pos = nx.spring_layout(G, k=2.5, iterations=100, seed=42)
+                    degrees = dict(G.degree())
+                    max_deg = max(degrees.values()) or 1
+                    max_w = max(d["weight"] for _, _, d in G.edges(data=True)) or 1
+
+                    # Edge trace: each edge drawn as a line segment
+                    edge_x, edge_y, edge_colors = [], [], []
+                    for u, v, d in G.edges(data=True):
+                        x0, y0 = pos[u]
+                        x1, y1 = pos[v]
+                        edge_x.extend([x0, x1, None])
+                        edge_y.extend([y0, y1, None])
+                        # Color intensity based on -log10(q-value)
+                        intensity = d["weight"] / max_w
+                        r = int(60 + 140 * intensity)
+                        g = int(100 + 55 * intensity)
+                        b = int(200 + 55 * intensity)
+                        edge_colors.extend([f"rgba({r},{g},{b},0.8)", f"rgba({r},{g},{b},0.8)", None])
+
+                    edge_trace = {
+                        "x": edge_x, "y": edge_y,
+                        "type": "scattergl", "mode": "lines",
+                        "line": {"color": edge_colors, "width": 0, "shape": "linear"},
+                        "hoverinfo": "none", "showlegend": False,
+                    }
+
+                    # Edge hover: separate invisible scatter for tooltips
+                    edge_hover_x, edge_hover_y, edge_hover_text = [], [], []
+                    for u, v, d in G.edges(data=True):
+                        x0, y0 = pos[u]
+                        x1, y1 = pos[v]
+                        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+                        edge_hover_x.append(mx)
+                        edge_hover_y.append(my)
+                        edge_hover_text.append(
+                            f"{u} ↔ {v}<br>-log₁₀(q) = {d['weight']:.2f}<br>Enrichment = {d['enrichment']:.2f}"
+                        )
+
+                    edge_hover_trace = {
+                        "x": edge_hover_x, "y": edge_hover_y,
+                        "type": "scattergl", "mode": "markers",
+                        "marker": {"size": 12, "color": "rgba(0,0,0,0)", "line": {"width": 0}},
+                        "text": edge_hover_text, "hovertext": edge_hover_text,
+                        "hoverinfo": "text", "showlegend": False,
+                    }
+
+                    # Node trace
+                    node_x = [pos[n][0] for n in G.nodes()]
+                    node_y = [pos[n][1] for n in G.nodes()]
+                    node_sizes = [10 + 20 * degrees[n] / max_deg for n in G.nodes()]
+                    node_colors = [degrees[n] / max_deg for n in G.nodes()]
+                    node_text = [f"<b>{n}</b><br>Connections: {degrees[n]}" for n in G.nodes()]
+
+                    node_trace = {
+                        "x": node_x, "y": node_y,
+                        "type": "scattergl", "mode": "markers+text",
+                        "marker": {
+                            "size": node_sizes, "color": node_colors,
+                            "colorscale": [[0, "#6366f1"], [1, "#f59e0b"]],
+                            "colorbar": {"title": "Degree", "x": 1.02},
+                            "line": {"color": "#1e1b4b", "width": 1},
+                        },
+                        "text": [n for n in G.nodes()],
+                        "textposition": "middle right",
+                        "textfont": {"color": "#e5e7eb", "size": 11},
+                        "hovertext": node_text, "hoverinfo": "text",
+                        "showlegend": False,
+                    }
+
+                    scrin_network_plot = {
+                        "data": [edge_trace, node_trace, edge_hover_trace],
+                        "layout": {
+                            "xaxis": {"visible": False, "showgrid": False, "zeroline": False, "showline": False},
+                            "yaxis": {"visible": False, "showgrid": False, "zeroline": False, "showline": False},
+                            "hovermode": "closest",
+                            "margin": {"l": 10, "r": 60, "t": 10, "b": 10},
+                            "dragmode": "pan",
+                            "showlegend": False,
+                        },
+                    }
+        except Exception as exc:
+            logger.warning("Failed to build SCRIN network: %s", exc)
+
     # ── Histograms with outlier-capped axes ──
     def _hist(values, color="#3b82f6", xlabel="", ylabel="Cells", cap_pct=98):
         """Plot histogram with x-axis capped at *cap_pct* percentile.
@@ -710,6 +810,7 @@ def _build_data(adata, report: dict) -> dict:
             "page_title": f"SubCellSpace {platform.upper()} — {n_obs} cells",
         },
         "scrin_table": {"rows": scrin_rows},
+        "scrin_network_plot": scrin_network_plot,
         "segmentation_table": {"rows": seg_rows},
         "software_table": {"rows": [
             ["Platform", platform.upper()],
