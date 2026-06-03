@@ -91,67 +91,40 @@ def _compute_polygon_areas(poly_path: Path, obs: pd.DataFrame) -> np.ndarray:
     return result
 
 
+# ── SubCellSpace brand colors (consistent across all visualizations) ──
+COLOR_PRIMARY = "#6366f1"       # Indigo — primary charts, histograms
+COLOR_SECONDARY = "#22c55e"     # Green — cell size distribution
+COLOR_ACCENT = "#8b5cf6"        # Purple — cell type distribution
+COLOR_DOMAIN = "#06b6d4"        # Cyan — spatial domain distribution
+COLOR_HISTOGRAM = COLOR_PRIMARY # Default histogram color
+COLOR_BAR_GAP = 0.05            # Gap between histogram bars
+
+
 def _load_template() -> tuple[str, str, str, str]:
-    """Load the reference Xenium HTML template, returning components.
+    """Load the bundled SubCellSpace report template from local source files.
 
     Returns: (style_block, head_before_style, body_open_tag, js_bundle)
     """
-    ref = Path(__file__).resolve().parent.parent / "outputs" / "ref_analysis_summary.html"
-    if not ref.exists():
+    src_dir = Path(__file__).resolve().parent
+    style_path = src_dir / "_report_style.css"
+    bundle_path = src_dir / "_report_bundle.js"
+
+    if not style_path.exists() or not bundle_path.exists():
+        missing = []
+        if not style_path.exists():
+            missing.append(str(style_path.name))
+        if not bundle_path.exists():
+            missing.append(str(bundle_path.name))
         raise FileNotFoundError(
-            f"Reference Xenium HTML not found at {ref}. "
-            "Copy one from the cluster first:\n"
-            "  scp -o ProxyJump=bio-download \\\n"
-            "    a-cluster:/data3/yangxr002/Xenium/P1162/D1302/analysis_summary.html \\\n"
-            "    outputs/ref_analysis_summary.html"
+            f"Report template asset(s) missing from {src_dir}/: {', '.join(missing)}. "
+            "Run the following to regenerate:\n"
+            "  python3 scripts/update_report_template.py"
         )
-    html = ref.read_text(encoding="utf-8")
 
-    # Extract style block
-    s_start = html.index("<style>")
-    s_end = html.index("</style>") + len("</style>")
-    style_block = html[s_start:s_end]
-
-    # Head before style - strip leading DOCTYPE and <html><head> to avoid duplication
-    head_before = html[:s_start]
-    # Remove leading DOCTYPE and <html> tags if present
-    head_before = re.sub(r'^<!DOCTYPE[^>]*>\s*', '', head_before)
-    head_before = re.sub(r'^<html[^>]*>\s*', '', head_before)
-    head_before = re.sub(r'^<head>\s*', '', head_before)
-
-    # Extract data JSON boundaries
-    ds = html.index("const data = ") + len("const data = ")
-    depth = 0
-    de = ds
-    for i in range(ds, len(html)):
-        c = html[i]
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                de = i + 1
-                break
-
-    # JS bundle follows data: ";\n    </script>\n    <script>/*! ... */\n    (()=>{...})()\n    </script>"
-    after_data = html[de:]
-    # Find the bundle between first </script> and last </script>
-    first_close = after_data.find("</script>") + len("</script>")
-    # Get everything after first close (includes newlines, then <script>...</script>)
-    js_section = after_data[first_close:].strip()
-    # The js_section should be: <script>/*! ... */ \n (()=>{...})() \n </script>
-    # Or it could be just a script tag
-    bundle_script = ""
-    if js_section.startswith("<script>"):
-        sc_end = js_section.rfind("</script>")
-        bundle_script = js_section[:sc_end + len("</script>")]
-
-    # Body skeleton: the part between <body> and </body> in the original
-    # We won't reuse the body directly since our tab content differs
-    # We'll extract just the <body> tag opening
-    body_tag_end = html.index(">", html.index("<body")) + 1
-    body_open = html[html.index("<body"):body_tag_end]
-
+    style_block = style_path.read_text(encoding="utf-8")
+    bundle_script = bundle_path.read_text(encoding="utf-8")
+    head_before = '<meta charset="utf-8" />\n    '
+    body_open = '<body class="dark-mode">'
     return style_block, head_before, body_open, bundle_script
 
 
@@ -557,7 +530,7 @@ def _build_data(adata, report: dict) -> dict:
             logger.warning("Failed to build SCRIN network: %s", exc)
 
     # ── Histograms with outlier-capped axes ──
-    def _hist(values, color="#3b82f6", xlabel="", ylabel="Cells", cap_pct=98):
+    def _hist(values, color=COLOR_HISTOGRAM, xlabel="", ylabel="Cells", cap_pct=98):
         """Plot histogram with x-axis capped at *cap_pct* percentile.
 
         Values beyond the cap are grouped into the final "> threshold" bin,
@@ -606,7 +579,7 @@ def _build_data(adata, report: dict) -> dict:
                         "yaxis": {"title": {"text": ylabel}, "showline": False,
                                   "range": [ylo, yhi]},
                         "hovermode": "x",
-                        "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": 0.05,
+                        "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": COLOR_BAR_GAP,
                         },
         }
 
@@ -735,7 +708,7 @@ def _build_data(adata, report: dict) -> dict:
                 "x": ct_names,
                 "y": ct_vals,
                 "type": "bar",
-                "marker": {"color": "#8b5cf6"},
+                "marker": {"color": COLOR_ACCENT},
                 "hovertemplate": "%{y} cells<extra>%{x}</extra>",
                 "showlegend": False,
             }],
@@ -744,7 +717,7 @@ def _build_data(adata, report: dict) -> dict:
                 "yaxis": {"title": {"text": "Cells"}, "showline": False},
                 "hovermode": "x",
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 120},
-                "bargap": 0.4,
+                "bargap": 0.3,
             },
         }
     else:
@@ -761,7 +734,7 @@ def _build_data(adata, report: dict) -> dict:
                 "x": labels,
                 "y": counts,
                 "type": "bar",
-                "marker": {"color": "#06b6d4"},
+                "marker": {"color": COLOR_DOMAIN},
                 "hovertemplate": "%{y} cells<extra>Domain %{x}</extra>",
                 "showlegend": False,
             }],
@@ -781,11 +754,11 @@ def _build_data(adata, report: dict) -> dict:
         "alarms": {"alarms": []},
         "alarm_options": {"hide_alert_analysis": True, "use_triangle_icon_for_errors": False},
         "calibration_uuid": hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest(),
-        "cell_size_distribution": _hist(cell_area_vals, color="#22c55e", xlabel=cell_area_label, ylabel="Cells"),
+        "cell_size_distribution": _hist(cell_area_vals, color=COLOR_SECONDARY, xlabel=cell_area_label, ylabel="Cells"),
         "clustering_selector": clustering_selector,
         "dark_mode": True,
         "fov_missing_transcript_rate_plot": (
-            _hist(np.array(fov_tx_counts), color="#6366f1", xlabel="Transcript per FOV", ylabel="FOVs")
+            _hist(np.array(fov_tx_counts), color=COLOR_PRIMARY, xlabel="Transcripts per FOV", ylabel="FOVs")
             if fov_tx_counts else {"data": [], "layout": {}}
         ),
         "genes_per_cell_plot": _hist(genes_vals, xlabel="Genes per Cell", ylabel="Cells"),
@@ -862,7 +835,7 @@ def generate_html_report(output_dir: str | Path) -> Path:
 
     adata = ad.read_h5ad(h5ads[0])
 
-    # ── Load template components ──
+    # ── Load template components (from local src/ — no cluster dependency) ──
     style_block, head_before, body_open, bundle_script = _load_template()
 
     # ── Build data ──
