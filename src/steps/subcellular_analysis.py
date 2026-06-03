@@ -11,6 +11,7 @@ inside the runner, controlled by the ``domain_backend`` parameter.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -344,7 +345,7 @@ def _subcell_scrin(
     adata: sc.AnnData,
     scrin_radius: float = 4.16,
     scrin_mode: str = "fast",
-    scrin_background: str = "cooccurrence",
+    scrin_background: str = "all",
     scrin_detection: str = "radius",
     scrin_mpi_np: int = 1,
     scrin_timeout: int = 3600,
@@ -416,6 +417,11 @@ def _subcell_scrin(
             try:
                 result_df = pd.read_csv(result_csv)
                 n_pairs = len(result_df)
+                # Store top results in adata.uns for the report
+                top_cols = ["gene_A", "gene_B", "pvalue", "qvalue_BH", "enrichment_ratio"]
+                available = [c for c in top_cols if c in result_df.columns]
+                top_df = result_df.nsmallest(50, "qvalue_BH") if "qvalue_BH" in result_df.columns else result_df.head(50)
+                scrin_meta["results"] = json.loads(top_df[available].to_json(orient="records"))
             except Exception:
                 logger.warning("SCRIN: failed to parse output CSV.")
 
@@ -465,7 +471,7 @@ def run_subcellular_analysis(
     domain_backend: str = "hdbscan",
     scrin_radius: float = 4.16,
     scrin_mode: str = "fast",
-    scrin_background: str = "cooccurrence",
+    scrin_background: str = "all",
     scrin_detection: str = "radius",
     scrin_mpi_np: int = 1,
     scrin_timeout: int = 3600,
@@ -564,7 +570,7 @@ def _run_subcellular_analysis(
         domain_backend = "none"
     scrin_radius = params.get("scrin_radius", 4.16)
     scrin_mode = params.get("scrin_mode", "fast")
-    scrin_background = params.get("scrin_background", "cooccurrence")
+    scrin_background = params.get("scrin_background", "all")
     scrin_detection = params.get("scrin_detection", "radius")
     scrin_mpi_np = params.get("scrin_mpi_np", 1)
     scrin_timeout = params.get("scrin_timeout", 3600)

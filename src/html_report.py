@@ -452,10 +452,21 @@ def _build_data(adata, report: dict) -> dict:
     scrin_net = adata.uns.get("scrin_colocalization_network", {})
     if scrin_net.get("status") == "completed":
         n_pairs = scrin_net.get("n_significant_pairs", 0)
-        table_data.append({"feature.id": "--- SCRIN ---", "feature.fn": f"{n_pairs} significant pairs"})
-        # SCRIN results CSV is not stored in adata; only metadata is kept
         params = scrin_net.get("parameters", {})
-        table_data.append({"feature.id": f"radius={params.get('r_check', '?')}", "feature.fn": f"mode={params.get('mode', '?')}"})
+        table_data.append({
+            "feature.id": "══ SCRIN Co-localization ══",
+            "feature.fn": f"{n_pairs:,} pairs (radius={params.get('r_check', '?')}, {params.get('background', '?')})"
+        })
+        # Add top results from adata.uns if available
+        results = scrin_net.get("results", [])
+        for r in results[:30]:
+            label = f"{r.get('gene_A', '?')} - {r.get('gene_B', '?')}"
+            qval = r.get("qvalue_BH", 1.0)
+            enrich = r.get("enrichment_ratio", 0)
+            table_data.append({
+                "feature.id": label,
+                "feature.fn": f"q={qval:.4f}, enrich={enrich:.2f}"
+            })
     if table_data:
         clustering_selector["tables"]["clusterings"][0]["data"]["data"] = table_data
         clustering_selector["table_help"] = {"title": "Top Features",
