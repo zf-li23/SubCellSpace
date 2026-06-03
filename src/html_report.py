@@ -99,6 +99,17 @@ COLOR_DOMAIN = "#06b6d4"        # Cyan — spatial domain distribution
 COLOR_HISTOGRAM = COLOR_PRIMARY # Default histogram color
 COLOR_BAR_GAP = 0.05            # Gap between histogram bars
 
+# ── Plotly dark theme layout fields ──
+# The Xenium JS bundle only applies its built-in dark theme to known plot keys
+# (e.g. cell_size_distribution). Custom keys like cell_type_plot fall back to
+# Plotly's default light theme. We explicitly set these fields on ALL plots
+# to ensure consistent dark-background rendering.
+_DARK_LAYOUT = {
+    "paper_bgcolor": "rgb(17,17,17)",
+    "plot_bgcolor": "rgb(17,17,17)",
+    "font": {"color": "#f2f5fa"},
+}
+
 
 def _load_template() -> tuple[str, str, str, str]:
     """Load the bundled SubCellSpace report template from local source files.
@@ -291,6 +302,7 @@ def _build_data(adata, report: dict) -> dict:
             "margin": {"l": 50, "r": 20, "t": 40, "b": 50},
             "hovermode": "closest", "title": {"text": title},
             "hoverlabel": {"namelength": -1},
+            **_DARK_LAYOUT,
         }
 
     umap_x_arr = adata.obsm["X_umap"][:, 0] if "X_umap" in adata.obsm else np.array([])
@@ -430,7 +442,7 @@ def _build_data(adata, report: dict) -> dict:
             scrin_rows.append([f"#{i}  {gA} \u2194 {gB}", f"q={qval:.4e}  enrichment={enrich:.2f}"])
 
     # ── SCRIN network visualization ──
-    scrin_network_plot: dict = {"data": [], "layout": {}}
+    scrin_network_plot: dict = {"data": [], "layout": dict(_DARK_LAYOUT)}
     if scrin_net.get("status") == "completed" and scrin_net.get("results_json", ""):
         try:
             import networkx as nx
@@ -452,23 +464,24 @@ def _build_data(adata, report: dict) -> dict:
                     max_w = max(d["weight"] for _, _, d in G.edges(data=True)) or 1
 
                     # Edge trace: each edge drawn as a line segment
+                    # Color intensity based on -log10(q-value), using brand palette
                     edge_x, edge_y, edge_colors = [], [], []
                     for u, v, d in G.edges(data=True):
                         x0, y0 = pos[u]
                         x1, y1 = pos[v]
                         edge_x.extend([x0, x1, None])
                         edge_y.extend([y0, y1, None])
-                        # Color intensity based on -log10(q-value)
                         intensity = d["weight"] / max_w
-                        r = int(60 + 140 * intensity)
-                        g = int(100 + 55 * intensity)
-                        b = int(200 + 55 * intensity)
+                        # Blend from #6366f1 (indigo, low) to #22c55e (green, high)
+                        r = int(99 + (34 - 99) * intensity)
+                        g = int(102 + (197 - 102) * intensity)
+                        b = int(241 + (94 - 241) * intensity)
                         edge_colors.extend([f"rgba({r},{g},{b},0.8)", f"rgba({r},{g},{b},0.8)", None])
 
                     edge_trace = {
                         "x": edge_x, "y": edge_y,
                         "type": "scattergl", "mode": "lines",
-                        "line": {"color": edge_colors, "width": 0, "shape": "linear"},
+                        "line": {"color": edge_colors, "width": 1.5, "shape": "linear"},
                         "hoverinfo": "none", "showlegend": False,
                     }
 
@@ -504,7 +517,7 @@ def _build_data(adata, report: dict) -> dict:
                         "type": "scattergl", "mode": "markers+text",
                         "marker": {
                             "size": node_sizes, "color": node_colors,
-                            "colorscale": [[0, "#6366f1"], [1, "#f59e0b"]],
+                            "colorscale": [[0, COLOR_PRIMARY], [1, COLOR_SECONDARY]],
                             "colorbar": {"title": "Degree", "x": 1.02},
                             "line": {"color": "#1e1b4b", "width": 1},
                         },
@@ -524,6 +537,7 @@ def _build_data(adata, report: dict) -> dict:
                             "margin": {"l": 10, "r": 60, "t": 10, "b": 10},
                             "dragmode": "pan",
                             "showlegend": False,
+                            **_DARK_LAYOUT,
                         },
                     }
         except Exception as exc:
@@ -537,7 +551,7 @@ def _build_data(adata, report: dict) -> dict:
         preventing extreme outliers from compressing the main distribution.
         """
         if len(values) == 0:
-            return {"data": [], "layout": {}}
+            return {"data": [], "layout": dict(_DARK_LAYOUT)}
         # Cap at the given percentile
         cap = float(np.percentile(values, cap_pct))
         capped = np.clip(values, None, cap)
@@ -580,6 +594,7 @@ def _build_data(adata, report: dict) -> dict:
                                   "range": [ylo, yhi]},
                         "hovermode": "x",
                         "margin": {"l": 50, "r": 20, "t": 20, "b": 50}, "bargap": COLOR_BAR_GAP,
+                        **_DARK_LAYOUT,
                         },
         }
 
@@ -718,10 +733,11 @@ def _build_data(adata, report: dict) -> dict:
                 "hovermode": "x",
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 120},
                 "bargap": 0.3,
+                **_DARK_LAYOUT,
             },
         }
     else:
-        cell_type_plot = {"data": [], "layout": {}}
+        cell_type_plot = {"data": [], "layout": dict(_DARK_LAYOUT)}
 
     # ── Spatial Domain Distribution plot (bar chart, dark theme) ──
     spat_info = steps.get("spatial_analysis", {})
@@ -744,10 +760,11 @@ def _build_data(adata, report: dict) -> dict:
                 "hovermode": "x",
                 "margin": {"l": 50, "r": 20, "t": 20, "b": 50},
                 "bargap": 0.3,
+                **_DARK_LAYOUT,
             },
         }
     else:
-        spatial_domain_plot = {"data": [], "layout": {}}
+        spatial_domain_plot = {"data": [], "layout": dict(_DARK_LAYOUT)}
 
     data: dict[str, Any] = {
         # ── Core working components (preserved) ──
@@ -759,7 +776,7 @@ def _build_data(adata, report: dict) -> dict:
         "dark_mode": True,
         "fov_missing_transcript_rate_plot": (
             _hist(np.array(fov_tx_counts), color=COLOR_PRIMARY, xlabel="Transcripts per FOV", ylabel="FOVs")
-            if fov_tx_counts else {"data": [], "layout": {}}
+            if fov_tx_counts else {"data": [], "layout": dict(_DARK_LAYOUT)}
         ),
         "genes_per_cell_plot": _hist(genes_vals, xlabel="Genes per Cell", ylabel="Cells"),
         "has_analysis": 1 if "cluster" in obs.columns else 0,
