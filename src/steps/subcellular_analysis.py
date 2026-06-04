@@ -348,7 +348,7 @@ def _subcell_scrin(
     scrin_background: str = "all",
     scrin_detection: str = "radius",
     scrin_mpi_np: int = 1,
-    scrin_timeout: int = 3600,
+    scrin_timeout: int = 21600,
     **scrin_kwargs: Any,
 ) -> dict[str, Any]:
     """Run SCRIN co-localization network analysis.
@@ -474,7 +474,7 @@ def run_subcellular_analysis(
     scrin_background: str = "all",
     scrin_detection: str = "radius",
     scrin_mpi_np: int = 1,
-    scrin_timeout: int = 3600,
+    scrin_timeout: int = 21600,
     **domain_kwargs: Any,
 ) -> StepResult:
     """Run subcellular analysis: optional domain clustering + analysis.
@@ -573,7 +573,7 @@ def _run_subcellular_analysis(
     scrin_background = params.get("scrin_background", "all")
     scrin_detection = params.get("scrin_detection", "radius")
     scrin_mpi_np = params.get("scrin_mpi_np", 1)
-    scrin_timeout = params.get("scrin_timeout", 3600)
+    scrin_timeout = params.get("scrin_timeout", 21600)
 
     # Extract domain-specific kwargs
     domain_kwargs = {k: v for k, v in params.items()

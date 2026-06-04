@@ -50,6 +50,98 @@ def _seg_fov_cell_id(df: pd.DataFrame) -> pd.DataFrame:
     return assigned
 
 
+# ── Backend: polygon_intersect (spatial join with provided boundaries) ─
+
+
+def _seg_polygon_intersect(df: pd.DataFrame, sdata: Any = None) -> pd.DataFrame:
+    """Assign each transcript to a cell via polygon containment.
+
+    Uses ``sdata.shapes["provided_boundaries"]`` (loaded from CosMx
+    polygon companion files) to spatially assign transcripts to cells.
+    Polygons are per-(FOV, cellID), so the join filters by FOV first,
+    then does spatial containment within each FOV.  This is essential
+    for datasets (e.g. D0021) where the tx_file has no meaningful
+    ``cell_ID`` column.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transcript-level DataFrame with ``x``, ``y`` and ``fov`` columns.
+    sdata : SpatialData or None
+        The SpatialData object containing polygon shapes.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of *df* with ``cell_id`` column set from polygon containment.
+        Transcripts outside all polygons are dropped.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    if sdata is None:
+        raise ValueError(
+            "polygon_intersect backend requires a SpatialData object "
+            "with provided_boundaries."
+        )
+
+    key = "provided_boundaries"
+    if key not in sdata.shapes:
+        raise KeyError(f"SpatialData has no '{key}' shapes. Available: {list(sdata.shapes)}")
+
+    poly_gdf = sdata.shapes[key]
+    if "cell_id" not in poly_gdf.columns or "fov" not in poly_gdf.columns:
+        raise KeyError(f"Polygon GeoDataFrame missing 'cell_id' or 'fov' columns. Columns: {list(poly_gdf.columns)}")
+
+    x_col = resolve_col_strict(df.columns, COL_X)
+    y_col = resolve_col_strict(df.columns, COL_Y)
+    fov_col = resolve_col_strict(df.columns, COL_FOV)
+    cell_col = resolve_col_strict(df.columns, COL_CELL_ID)
+
+    # Process each FOV separately to keep memory and time manageable
+    all_chunks = []
+    fovs = sorted(df[fov_col].unique())
+    for fov in fovs:
+        fov_poly = poly_gdf[poly_gdf["fov"] == fov].copy()
+        if fov_poly.empty:
+            continue
+
+        fov_tx = df[df[fov_col] == fov].copy()
+        if fov_tx.empty:
+            continue
+
+        # Build transcript GeoDataFrame for this FOV
+        pts = [Point(x, y) for x, y in zip(fov_tx[x_col], fov_tx[y_col])]
+        tx_gdf = gpd.GeoDataFrame(
+            fov_tx.reset_index(drop=True),
+            geometry=pts,
+            crs=poly_gdf.crs,
+        )
+
+        # Spatial join within this FOV
+        joined = gpd.sjoin(
+            tx_gdf,
+            fov_poly[["cell_id", "geometry"]],
+            how="inner",
+            predicate="within",
+        )
+
+        joined[cell_col] = joined["cell_id_right"]
+        joined = joined.drop(columns=["cell_id_right", "index_right", "geometry"], errors="ignore")
+        all_chunks.append(joined)
+
+    if not all_chunks:
+        logger.warning("polygon_intersect: no transcripts assigned to any cell")
+        return df.iloc[:0].copy()
+
+    result = pd.concat(all_chunks, ignore_index=True)
+    logger.info(
+        "polygon_intersect: assigned %d / %d transcripts to %d cells",
+        len(result), len(df), result[cell_col].nunique(),
+    )
+    return result
+
+
 # ── Backend: cellpose (image-based) ──────────────────────────────────
 
 
@@ -288,6 +380,7 @@ def _seg_baysor(
 
 register_backend("segmentation", "provided_cells")(_seg_provided_cells)
 register_backend("segmentation", "fov_cell_id")(_seg_fov_cell_id)
+register_backend("segmentation", "polygon_intersect")(_seg_polygon_intersect)
 if _CELLPOSE_AVAILABLE:
     register_backend("segmentation", "cellpose")(_seg_cellpose)
 register_backend("segmentation", "baysor")(_seg_baysor)
@@ -296,6 +389,7 @@ register_backend("segmentation", "baysor")(_seg_baysor)
 _SEGMENTATION_FUNCS: dict[str, Any] = {
     "provided_cells": _seg_provided_cells,
     "fov_cell_id": _seg_fov_cell_id,
+    "polygon_intersect": _seg_polygon_intersect,
 }
 if _CELLPOSE_AVAILABLE:
     _SEGMENTATION_FUNCS["cellpose"] = _seg_cellpose
@@ -339,6 +433,9 @@ def assign_cells(df: pd.DataFrame, backend: str, **kwargs: Any) -> StepResult:
         assigned, extra = func(df, **kwargs)
     elif backend == "baysor":
         assigned, extra = func(df, **kwargs)
+    elif backend == "polygon_intersect":
+        assigned = func(df, **kwargs)
+        extra = {}
     else:
         assigned = func(df)
         extra = {}
@@ -380,6 +477,15 @@ def _run_segmentation(
                      "max_cells"):
             if key in _params:
                 kwargs[key] = _params[key]
+    elif backend == "polygon_intersect":
+        kwargs["sdata"] = ctx.sdata
+
+    # Debug: check input to segmentation
+    cell_col_seg = resolve_col_strict(ctx.denoised_df.columns, COL_CELL_ID)
+    logger.info("SEG DEBUG: input has %d rows, cell col='%s', %d unique values, %d FOVs",
+                 len(ctx.denoised_df), cell_col_seg,
+                 ctx.denoised_df[cell_col_seg].nunique(),
+                 ctx.denoised_df[resolve_col_strict(ctx.denoised_df.columns, COL_FOV)].nunique())
 
     # Attempt segmentation with graceful fallback
     # Cellpose needs image_path + model download; if unavailable, fall back to fov_cell_id

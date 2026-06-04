@@ -364,12 +364,12 @@ class CosMxIngestor(BaseIngestor):
                 return None
 
             x_col = None
-            for candidate in ("x_local_px", "x_global_px", "x"):
+            for candidate in ("x_global_px", "x_local_px", "x"):
                 if candidate in df.columns:
                     x_col = candidate
                     break
             y_col = None
-            for candidate in ("y_local_px", "y_global_px", "y"):
+            for candidate in ("y_global_px", "y_local_px", "y"):
                 if candidate in df.columns:
                     y_col = candidate
                     break
@@ -377,9 +377,11 @@ class CosMxIngestor(BaseIngestor):
                 logger.warning("[%s] Polygon file missing coordinate columns", self.platform)
                 return None
 
-            # Build polygons per cell
+            # Build polygons per (fov, cellID) — NanoString polygon files
+            # have per-FOV vertex groups for each cell.  Grouping by cellID
+            # alone would merge vertices from all FOVs into one giant polygon.
             records = []
-            for cell_id, group in df.groupby(cell_col):
+            for (fov_id, cell_id_val), group in df.groupby(["fov", cell_col]):
                 pts = group[[x_col, y_col]].dropna().to_numpy()
                 if len(pts) < 3:
                     continue
@@ -389,7 +391,8 @@ class CosMxIngestor(BaseIngestor):
                     continue
                 centroid = poly.centroid
                 records.append({
-                    "cell_id": str(cell_id),
+                    "fov": int(fov_id),
+                    "cell_id": f"{int(fov_id)}_{str(cell_id_val)}",
                     "geometry": poly,
                     "area": poly.area,
                     "centroid_x": centroid.x,
@@ -415,20 +418,27 @@ class CosMxIngestor(BaseIngestor):
         logger.info("[%s] Loading expression matrix from %s …", self.platform, expr_path.name)
         try:
             df = _read_csv_or_gz(expr_path)
-            # CosMx exprMat: first column is fov/cell_ID, rest are genes
-            # Identify the index column
-            id_col = None
-            for candidate in ("cell_ID", "cell_id", "fov"):
-                if candidate in df.columns:
-                    id_col = candidate
-                    break
-            if id_col is None:
-                # Assume first column is the index
-                id_col = df.columns[0]
-            df = df.set_index(id_col)
+            # CosMx exprMat: may have (fov, cell_ID) as separate columns.
+            # Create a combined "fov_cellID" index to ensure uniqueness.
+            has_fov = "fov" in df.columns
+            has_cell_id = any(c in df.columns for c in ("cell_ID", "cell_id"))
+            if has_fov and has_cell_id:
+                id_col = "cell_ID" if "cell_ID" in df.columns else "cell_id"
+                df["fov_cellID"] = df["fov"].astype(str) + "_" + df[id_col].astype(str)
+                df = df.set_index("fov_cellID")
+            else:
+                # Fallback: use the first identifier column found
+                id_col = None
+                for candidate in ("cell_ID", "cell_id", "fov"):
+                    if candidate in df.columns:
+                        id_col = candidate
+                        break
+                if id_col is None:
+                    id_col = df.columns[0]
+                df = df.set_index(id_col)
             df.index = df.index.astype(str)
-            # Drop non-gene columns (fov, etc.)
-            drop_cols = [c for c in df.columns if c.lower() in ("fov", "cell_id", "cell", "")]
+            # Drop non-gene columns (fov, cell_ID, cell, etc.)
+            drop_cols = [c for c in df.columns if c.lower() in ("fov", "cell_id", "cell", "fov_cellid", "")]
             if drop_cols:
                 df = df.drop(columns=drop_cols, errors="ignore")
             return df.astype(np.float32)
@@ -479,11 +489,19 @@ class CosMxIngestor(BaseIngestor):
         return df
 
     def _column_mapping(self) -> list[tuple[str, str]]:
+        # Include all known aliases for cell_id so datasets that use
+        # "cell_ID", "CellID", "barcode_id" etc. are handled correctly.
+        # D0021 (organoid) uses "cell_ID" instead of "cell".
         return [
             ("x_global_px", COL_X),
             ("y_global_px", COL_Y),
             ("target", COL_GENE),
             ("cell", COL_CELL_ID),
+            ("cell_id", COL_CELL_ID),
+            ("cell_ID", COL_CELL_ID),
+            ("CellID", COL_CELL_ID),
+            ("cell_label", COL_CELL_ID),
+            ("barcode_id", COL_CELL_ID),
             ("fov", COL_FOV),
             ("CellComp", COL_CELLCOMP),
         ]
