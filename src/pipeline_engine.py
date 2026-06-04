@@ -259,6 +259,25 @@ def run_pipeline(
             )
             backend = fallback
 
+        # ── Auto-detect polygon_intersect for CosMx datasets ─────────
+        # If the SpatialData has provided_boundaries (loaded from CosMx
+        # polygon companion files), use polygon_intersect instead of the
+        # generic fov_cell_id backend. Only auto-switch when no explicit
+        # CLI override was provided (backend still equals the config default).
+        if (
+            step_cfg.name == "segmentation"
+            and backend == step_cfg.default_backend
+            and ctx.sdata is not None
+            and "provided_boundaries" in ctx.sdata.shapes
+            and "polygon_intersect" in available
+        ):
+            logger.info(
+                "Auto-detected provided_boundaries — switching segmentation "
+                "backend from '%s' to 'polygon_intersect'",
+                backend,
+            )
+            backend = "polygon_intersect"
+
         # Build per-step params from overrides
         # Skip the 'backend' param as it's already resolved above
         step_params: dict[str, Any] = dict(step_cfg.params)
