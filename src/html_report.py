@@ -493,14 +493,19 @@ def _build_data(adata, report: dict) -> dict:
         """
         if len(values) == 0:
             return {"data": [], "layout": dict(_DARK_LAYOUT)}
-        # Cap at the given percentile
+
+        # Detect integer-type data BEFORE capping: check original values
+        is_integer = bool(np.all(values[np.isfinite(values)] == np.floor(values[np.isfinite(values)])))
+
+        # Cap at the given percentile. For integer data, round cap to nearest
+        # integer to avoid np.percentile interpolation creating fractional caps
+        # that would break integer detection.
         cap = float(np.percentile(values, cap_pct))
+        if is_integer:
+            cap = round(cap)
         capped = np.clip(values, None, cap)
         vmin = float(capped.min())
         vmax = float(capped.max())
-
-        # Detect integer-type data: all values are whole numbers
-        is_integer = bool(np.all(capped == np.floor(capped)))
 
         if is_integer and (vmax - vmin) <= 200:
             # Integer data with small range: use one bin per integer value.
