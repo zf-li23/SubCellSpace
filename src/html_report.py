@@ -510,6 +510,21 @@ def _build_data(adata, report: dict) -> dict:
             edges = np.arange(vmin, vmax + 2) - 0.5  # bin edges at half-integers
             h, _ = np.histogram(capped, bins=edges)
             bin_centers = list(range(int(vmin), int(vmax) + 1))
+        elif is_integer:
+            # Integer data with large range: use _optimal_bins but align
+            # bin edges at integer boundaries so x-axis stays integer-valued.
+            nbins = _optimal_bins(capped)
+            # Compute integer-aligned bin edges
+            raw_edges = np.linspace(vmin, vmax, nbins + 1)
+            # Round edges to nearest integer (floor for left, ceil for right)
+            edges = np.floor(raw_edges).astype(int)
+            edges[-1] = int(np.ceil(raw_edges[-1]))
+            # Deduplicate adjacent identical edges
+            edges = np.unique(edges)
+            if len(edges) < 2:
+                edges = np.array([int(vmin) - 1, int(vmax) + 1])
+            h, _ = np.histogram(capped, bins=edges)
+            bin_centers = [float((edges[i] + edges[i + 1]) / 2) for i in range(len(edges) - 1)]
         else:
             nbins = _optimal_bins(capped)
             h, edges = np.histogram(capped, bins=nbins)
@@ -528,11 +543,13 @@ def _build_data(adata, report: dict) -> dict:
                     h[i] += n_outliers
         else:
             for i in range(len(bin_centers)):
-                lo = int(vmin) + i * (vmax - vmin) / nbins if False else 0  # placeholder
                 cid = bin_centers[i]
-                hi = cid + (bin_centers[1] - bin_centers[0]) / 2 if len(bin_centers) > 1 else cid + 1
-                lo = cid - (bin_centers[1] - bin_centers[0]) / 2 if len(bin_centers) > 1 else cid - 1
-                if hi - lo >= 1:
+                half_w = (bin_centers[1] - bin_centers[0]) / 2 if len(bin_centers) > 1 else 0.5
+                lo = cid - half_w
+                hi = cid + half_w
+                if is_integer:
+                    label = f"{int(round(lo))} - {int(round(hi))}"
+                elif hi - lo >= 1:
                     label = f"{int(lo)} - {int(hi)}"
                 else:
                     label = f"{lo:.1f} - {hi:.1f}"
@@ -549,14 +566,21 @@ def _build_data(adata, report: dict) -> dict:
         xhi = vmax + spread * 0.05
         ylo = 0
         yhi = float(h.max()) * 1.2  # 20% headroom
+
+        # For integer data, force integer x-axis ticks
+        xaxis_cfg = {
+            "title": {"text": xlabel}, "showline": False,
+            "range": [xlo, xhi],
+        }
+        if is_integer:
+            xaxis_cfg["tickformat"] = "d"
+
         return {
             "data": [{"x": bin_centers, "customdata": customdata, "y": h.tolist(), "type": "bar",
                        "hovertemplate": "%{y}",
                        "showlegend": False,
                        "marker": {"color": color}}],
-            "layout": {"xaxis": {"title": {"text": xlabel}, "showline": False,
-                                 "range": [xlo, xhi],
-                                 "dtick": 1 if (is_integer and (vmax - vmin) <= 80) else None},
+            "layout": {"xaxis": xaxis_cfg,
                         "yaxis": {"title": {"text": ylabel}, "showline": False,
                                   "range": [ylo, yhi]},
                         "hovermode": "x",
