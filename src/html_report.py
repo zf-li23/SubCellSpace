@@ -516,18 +516,14 @@ def _build_data(adata, report: dict) -> dict:
             h, _ = np.histogram(capped, bins=edges)
             bin_centers = list(range(int(vmin), int(vmax) + 1))
         elif is_integer:
-            # Integer data with large range: use _optimal_bins but align
-            # bin edges at integer boundaries so x-axis stays integer-valued.
-            nbins = _optimal_bins(capped)
-            # Compute integer-aligned bin edges
-            raw_edges = np.linspace(vmin, vmax, nbins + 1)
-            # Round edges to nearest integer (floor for left, ceil for right)
-            edges = np.floor(raw_edges).astype(int)
-            edges[-1] = int(np.ceil(raw_edges[-1]))
-            # Deduplicate adjacent identical edges
-            edges = np.unique(edges)
-            if len(edges) < 2:
-                edges = np.array([int(vmin) - 1, int(vmax) + 1])
+            # Integer data with large range: use a fixed-width integer bin
+            # width so every bin covers the SAME number of integer values.
+            # This eliminates all periodicity aliasing artifacts.
+            n_data = int(vmax - vmin + 1)          # number of unique integer values
+            n_bins = min(80, _optimal_bins(capped))  # desired number of bins
+            bin_width = max(1, int(np.ceil(n_data / n_bins)))  # ceil ensures ≥1
+            # Build integer-aligned edges with consistent width
+            edges = np.arange(int(vmin), int(vmax) + bin_width + 1, bin_width)
             h, _ = np.histogram(capped, bins=edges)
             bin_centers = [float((edges[i] + edges[i + 1]) / 2) for i in range(len(edges) - 1)]
         else:
