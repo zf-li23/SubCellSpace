@@ -90,15 +90,41 @@ def _seg_polygon_intersect(df: pd.DataFrame, sdata: Any = None) -> pd.DataFrame:
         raise KeyError(f"SpatialData has no '{key}' shapes. Available: {list(sdata.shapes)}")
 
     poly_gdf = sdata.shapes[key]
-    if "cell_id" not in poly_gdf.columns or "fov" not in poly_gdf.columns:
-        raise KeyError(f"Polygon GeoDataFrame missing 'cell_id' or 'fov' columns. Columns: {list(poly_gdf.columns)}")
+    has_fov = "fov" in poly_gdf.columns
+    if "cell_id" not in poly_gdf.columns:
+        raise KeyError(f"Polygon GeoDataFrame missing 'cell_id' column. Columns: {list(poly_gdf.columns)}")
 
     x_col = resolve_col_strict(df.columns, COL_X)
     y_col = resolve_col_strict(df.columns, COL_Y)
     fov_col = resolve_col_strict(df.columns, COL_FOV)
     cell_col = resolve_col_strict(df.columns, COL_CELL_ID)
 
-    # Process each FOV separately to keep memory and time manageable
+    # Process each FOV separately to keep memory and time manageable.
+    # Xenium/MERFISH boundaries may lack a 'fov' column — in that case
+    # do a single global spatial join.
+    if not has_fov:
+        # Single global spatial join (no FOV batching)
+        pts = [Point(x, y) for x, y in zip(df[x_col], df[y_col])]
+        tx_gdf = gpd.GeoDataFrame(
+            df.reset_index(drop=True),
+            geometry=pts,
+            crs=poly_gdf.crs,
+        )
+        joined = gpd.sjoin(
+            tx_gdf,
+            poly_gdf[["cell_id", "geometry"]],
+            how="inner",
+            predicate="within",
+        )
+        joined[cell_col] = joined["cell_id_right"]
+        joined = joined.drop(columns=["cell_id_right", "index_right", "geometry"], errors="ignore")
+        logger.info(
+            "polygon_intersect: assigned %d / %d transcripts to %d cells (no FOV grouping)",
+            len(joined), len(df), joined[cell_col].nunique(),
+        )
+        return joined
+
+    # Per-FOV batching (CosMx-style)
     all_chunks = []
     fovs = sorted(df[fov_col].unique())
     for fov in fovs:

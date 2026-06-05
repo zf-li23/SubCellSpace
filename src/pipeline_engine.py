@@ -237,11 +237,13 @@ def run_pipeline(
 
         # Resolve backend: check step-specific key, then CLI alias keys
         backend = overrides.get(f"{step_cfg.name}_backend")
+        backend_was_overridden = backend is not None
         if backend is None:
             # Walk STEP_ARG_ALIASES to find CLI args that map to this step
             for arg_key, mapped_step in STEP_ARG_ALIASES.items():
                 if mapped_step == step_cfg.name and arg_key in overrides:
                     backend = overrides[arg_key]
+                    backend_was_overridden = True
                     break
         if backend is None:
             backend = step_cfg.default_backend
@@ -258,16 +260,16 @@ def run_pipeline(
                 fallback,
             )
             backend = fallback
+            backend_was_overridden = False
 
         # ── Auto-detect polygon_intersect for CosMx datasets ─────────
-        # If the SpatialData has provided_boundaries (loaded from CosMx
-        # polygon companion files), use polygon_intersect instead of the
-        # generic fov_cell_id backend. Only auto-switch when no explicit
-        # CLI override was provided (backend still equals the config default).
+        # Only auto-switch when the user did NOT explicitly override
+        # the backend (i.e. backend came from the config default).
         if (
-            step_cfg.name == "segmentation"
-            and backend == step_cfg.default_backend
+            not backend_was_overridden
+            and step_cfg.name == "segmentation"
             and ctx.sdata is not None
+            and ctx.sdata.attrs.get("platform") == "cosmx"
             and "provided_boundaries" in ctx.sdata.shapes
             and "polygon_intersect" in available
         ):
