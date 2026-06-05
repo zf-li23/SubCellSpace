@@ -591,8 +591,9 @@ def _build_data(adata, report: dict) -> dict:
         except Exception as exc:
             logger.warning("Failed to compute cell areas from polygons: %s", exc)
     if len(cell_area_vals) == 0:
-        cell_area_vals = tx_vals  # fallback to transcript counts
-        cell_area_label = "Transcripts per Cell"
+        # No valid cell area data available — don't show misleading chart
+        cell_area_vals = np.array([])
+        cell_area_label = "Cell Area (µm²)"
 
     # ── Build new SubCellSpace-specific tables ──
 

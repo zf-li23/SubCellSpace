@@ -379,10 +379,20 @@ def run_pipeline(
             if key in ctx.sdata.shapes:
                 gdf = ctx.sdata.shapes[key]
                 if hasattr(gdf, "geometry"):
-                    for cell_id in gdf.index:
-                        geom = gdf.loc[cell_id, "geometry"]
+                    # Use cell_id column if available (Xenium/MERFISH), else fall back to index
+                    id_col = None
+                    for c in ("cell_id", "cell_ID", "CellID"):
+                        if c in gdf.columns:
+                            id_col = c
+                            break
+                    for i in range(len(gdf)):
+                        if id_col is not None:
+                            cell_id = str(gdf.iloc[i][id_col])
+                        else:
+                            cell_id = str(gdf.index[i])
+                        geom = gdf.iloc[i]["geometry"]
                         if geom is not None and not geom.is_empty:
-                            cell_area_map[str(cell_id)] = geom.area
+                            cell_area_map[cell_id] = geom.area
                     logger.info("Extracted %d cell areas from %s", len(cell_area_map), key)
                     break
 
@@ -397,12 +407,26 @@ def run_pipeline(
     if cell_area_map and ctx.adata is not None:
         obs = ctx.adata.obs
         obs["cell_area"] = -1.0
+        # Try exact match first, then suffix match (for fov_cell_id format)
+        n_matched = 0
         for cid, area in cell_area_map.items():
             if cid in obs.index:
                 obs.loc[cid, "cell_area"] = area
+                n_matched += 1
+        # If no exact matches, try matching by suffix (e.g. "1_57" → "57")
+        if n_matched == 0 and cell_area_map:
+            for idx in obs.index:
+                parts = str(idx).split("_")
+                suffix = parts[-1] if len(parts) >= 2 else str(idx)
+                if suffix in cell_area_map:
+                    obs.loc[idx, "cell_area"] = cell_area_map[suffix]
+                    n_matched += 1
         valid = (obs["cell_area"] > 0).sum()
         if valid:
             logger.info("Merged cell_area for %d / %d cells", valid, len(obs))
+        elif cell_area_map:
+            logger.warning("cell_area extracted but none matched obs_names (samples: %s vs %s)",
+                           list(cell_area_map.keys())[:3], list(obs.index[:3]))
 
     layer_evaluation = build_layer_evaluation(
         raw_df=ctx.transcripts,
