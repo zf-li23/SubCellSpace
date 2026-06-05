@@ -488,33 +488,60 @@ def _build_data(adata, report: dict) -> dict:
 
         Values beyond the cap are grouped into the final "> threshold" bin,
         preventing extreme outliers from compressing the main distribution.
+        Uses integer-aligned bins when data are integers to avoid the
+        "alternating bar" aliasing artifact (bins covering 2 vs 3 values).
         """
         if len(values) == 0:
             return {"data": [], "layout": dict(_DARK_LAYOUT)}
         # Cap at the given percentile
         cap = float(np.percentile(values, cap_pct))
         capped = np.clip(values, None, cap)
-        nbins = _optimal_bins(capped)
-        h, edges = np.histogram(capped, bins=nbins)
-        # Count outliers beyond the cap
-        n_outliers = int((values > cap).sum())
-        customdata = []
-        for i in range(len(edges) - 1):
-            lo, hi = edges[i], edges[i + 1]
-            if hi - lo >= 1:
-                label = f"{int(lo)} - {int(hi)}"
-            else:
-                label = f"{lo:.1f} - {hi:.1f}"
-            customdata.append(label)
-        # Add outlier count to last bin label
-        if n_outliers > 0:
-            customdata[-1] += f" (+{n_outliers} outliers)"
-            h[-1] += n_outliers  # add outliers to last bin
-        # Compute bin centers for Plotly x values (convert to native float for JSON)
-        bin_centers = [float((edges[i] + edges[i + 1]) / 2) for i in range(len(edges) - 1)]
-        # Auto-scale axes with padding
         vmin = float(capped.min())
         vmax = float(capped.max())
+
+        # Detect integer-type data: all values are whole numbers
+        is_integer = bool(np.all(capped == np.floor(capped)))
+
+        if is_integer and (vmax - vmin) <= 200:
+            # Integer data with small range: use one bin per integer value.
+            # This avoids the aliasing artifact where bins alternate between
+            # covering 2 vs 3 integer values.
+            nbins = int(vmax - vmin + 1)
+            edges = np.arange(vmin, vmax + 2) - 0.5  # bin edges at half-integers
+            h, _ = np.histogram(capped, bins=edges)
+            bin_centers = list(range(int(vmin), int(vmax) + 1))
+        else:
+            nbins = _optimal_bins(capped)
+            h, edges = np.histogram(capped, bins=nbins)
+            bin_centers = [float((edges[i] + edges[i + 1]) / 2) for i in range(len(edges) - 1)]
+
+        # Count outliers beyond the cap
+        n_outliers = int((values > cap).sum())
+        # Build customdata labels
+        customdata = []
+        if is_integer and (vmax - vmin) <= 200:
+            for i in range(len(bin_centers)):
+                cid = bin_centers[i]
+                customdata.append(f"{int(cid)}")
+                if n_outliers > 0 and cid == int(vmax):
+                    customdata[-1] += f" (+{n_outliers} outliers)"
+                    h[i] += n_outliers
+        else:
+            for i in range(len(bin_centers)):
+                lo = int(vmin) + i * (vmax - vmin) / nbins if False else 0  # placeholder
+                cid = bin_centers[i]
+                hi = cid + (bin_centers[1] - bin_centers[0]) / 2 if len(bin_centers) > 1 else cid + 1
+                lo = cid - (bin_centers[1] - bin_centers[0]) / 2 if len(bin_centers) > 1 else cid - 1
+                if hi - lo >= 1:
+                    label = f"{int(lo)} - {int(hi)}"
+                else:
+                    label = f"{lo:.1f} - {hi:.1f}"
+                customdata.append(label)
+            if n_outliers > 0:
+                customdata[-1] += f" (+{n_outliers} outliers)"
+                h[-1] += n_outliers
+
+        # Auto-scale axes with padding
         spread = vmax - vmin
         if spread == 0:
             spread = max(abs(vmin), 1)
@@ -528,7 +555,8 @@ def _build_data(adata, report: dict) -> dict:
                        "showlegend": False,
                        "marker": {"color": color}}],
             "layout": {"xaxis": {"title": {"text": xlabel}, "showline": False,
-                                 "range": [xlo, xhi]},
+                                 "range": [xlo, xhi],
+                                 "dtick": 1 if (is_integer and (vmax - vmin) <= 80) else None},
                         "yaxis": {"title": {"text": ylabel}, "showline": False,
                                   "range": [ylo, yhi]},
                         "hovermode": "x",
