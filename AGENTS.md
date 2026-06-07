@@ -77,16 +77,18 @@ data/                          scripts/
 ### ID numbering scheme
 
 ```
-{D|M|R}{platform_digit:0=CosMx,1=Xenium,2=MERFISH}{seq:03d}
+{D|M|R}{platform_digit:0=CosMx,1=Xenium}{seq:03d}  (MERFISH exception: D5xxx)
 ```
 
 | Prefix | Meaning | Platform digit | Meaning |
 |--------|---------|:---:|---------|
 | `D` | Standard | `0` | CosMx |
 | `M` | Merged | `1` | Xenium |
-| `R` | Raw_Fragment | `2` | MERFISH |
+│ `R` | Raw_Fragment | `2` | CosMx (fragment) |
 
 `project_id` follows the same convention: `P{platform}{seq:03d}`.
+
+> **MERFISH exception**: MERFISH originally used D2xxx/P2xxx IDs. After migration (2026-06-08), MERFISH now uses `D5xxx`/`P5xxx` to free D2xxx space for potential Xenium overflow. The platform digit `2` no longer applies to MERFISH; treat D5xxx as a reserved MERFISH block.
 
 > **Build note**: The database was built once from three platform-specific source CSVs (`database_info_*.csv`). Those source CSVs have since been removed; the canonical data is now `datasets.db` itself. The primary workflow for modifying data is the DataEditor UI, scripted updates (see §9), or the CSV round-trip workflow (`subcellspace db export` → edit → `subcellspace db import`).
 
@@ -182,7 +184,7 @@ lab-pull FILE  # → scp from cluster to local
 ├── MERFISH/
 │   ├── MERFISH_P002/                     (Moffitt_Hypothalamus.csv — not in DB)
 │   ├── MERFISH_P003/                     (not in DB)
-│   └── P2001/D2001/  … P2008/D2018/     (8 projects, 18 datasets — in DB)
+│   └── P5001/D5001/  … P5008/D5018/     (8 projects, 18 datasets — in DB, migrated D2→D5 2026-06-08)
 ```
 
 ### Download relay (jumpbox) — bio-download (`/data/yangxrlab/`)
@@ -403,7 +405,7 @@ Three representative datasets selected for QA testing (2026-05-19):
 |----|----------|------|------|-------------|-------|
 | D0059 | CosMx | `…/P0032/D0059/GSM8522533_6226_S496622_tx_file.csv` | 167 MB | 2.4M | 8,726 |
 | D1033 | Xenium | `…/P1012/D1033/transcripts.csv.gz` | 205 MB | 5.1M | 56,510 |
-| D2010 | MERFISH | `…/P2005/D2010/HumanOvarianCancerPatient2Slice2_detected_transcripts.csv` | 1.4 GB | 32.1M | 550 |
+| D5010 | MERFISH | `…/P5005/D5010/HumanOvarianCancerPatient2Slice2_detected_transcripts.csv` | 1.4 GB | 32.1M | 550 |
 
 Full paths: `/data3/yangxr002/{CosMx|Xenium|MERFISH}/...` as above.
 
