@@ -97,11 +97,11 @@ data/                          scripts/
 | Platform | Rows | Standard | Merged | Raw_Fragment |
 |----------|-----:|----------|--------|-------------|
 | CosMx    | 1069 | 62       | 8      | 999 |
-| Xenium   | 350  | 350      | 0      | 0 |
-| MERFISH  | 70   | 70       | 0      | 0 |
-| **Total**| 1526 | 488      | 8      | 999 |
+| Xenium   | 1501 | 1501     | 0      | 0 |
+| MERFISH  | 70    | 70       | 0      | 0 |
+| **Total**| 2641 | 1603     | 8      | 999 |
 
-> Xenium expanded from 53 → 350 rows (128 ready, 222 pending). Most new rows are GEO datasets awaiting URL/cell-count completion.
+> Xenium expanded from 53 → 350 → **1501 rows** (178 ready, 1323 pending from GEO extraction + GSM sorting). Most new rows have `local_path` set but lack metadata (GSE URL, cell count, etc.).
 
 ### Frontend pages
 
