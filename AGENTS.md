@@ -98,8 +98,8 @@ data/                          scripts/
 |----------|-----:|----------|--------|-------------|
 | CosMx    | 1069 | 62       | 8      | 999 |
 | Xenium   | 350  | 350      | 0      | 0 |
-| MERFISH  | 18   | 18       | 0      | 0 |
-| **Total**| 1437 | 430      | 8      | 999 |
+| MERFISH  | 70   | 70       | 0      | 0 |
+| **Total**| 1526 | 488      | 8      | 999 |
 
 > Xenium expanded from 53 → 350 rows (128 ready, 222 pending). Most new rows are GEO datasets awaiting URL/cell-count completion.
 
@@ -184,7 +184,7 @@ lab-pull FILE  # → scp from cluster to local
 ├── MERFISH/
 │   ├── MERFISH_P002/                     (Moffitt_Hypothalamus.csv — not in DB)
 │   ├── MERFISH_P003/                     (not in DB)
-│   └── P5001/D5001/  … P5008/D5018/     (8 projects, 18 datasets — in DB, migrated D2→D5 2026-06-08)
+│   └── P5001/D5001/  … P5056/D5070/     (56 projects, 70 datasets — 8 original + 52 from GEO plan 2026-06-08)
 ```
 
 ### Download relay (jumpbox) — bio-download (`/data/yangxrlab/`)
@@ -294,7 +294,7 @@ lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
 - **`database_info_Xenium.csv`** is a GEO collection plan (200+ rows) on the cluster — reference only, not a data source.
 - **Pipeline is NOT plugin-based anymore** — it's a single scverse-native pipeline. See `config/pipeline.yaml` for the only config. Do NOT try to add new backends via decorators; modify the source code directly.
 - **Three ingestors** (CosMx, Xenium, MERFISH) each auto-detect companion files from the same directory. See `src/io/` for details.
-- **227/1437 rows are `pending`** — they have been added to the database but lack `project_url`, `download_url`, and/or `estimated_cell_count`.
+- **279/1526 rows are `pending`** — they have been added to the database but lack `project_url`, `download_url`, and/or `estimated_cell_count`.
 
 ---
 
