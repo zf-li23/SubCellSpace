@@ -158,6 +158,8 @@ def run_pipeline(
     sdata : SpatialData or None
         Pre-ingested spatial data object (from Phase 0).  If provided,
         the pipeline skips data loading and uses this directly.
+    dataset_meta : dict or None
+        GEO / database metadata (GSE, GSM, dataset_id) for output injection.
     **overrides
         Any keyword argument overrides configuration values.
 
@@ -174,6 +176,9 @@ def run_pipeline(
     from .constants import KEY_RAW_TRANSCRIPTS
 
     settings = settings or default_settings
+
+    # Extract dataset_meta before applying overrides (it's not a settings key)
+    dataset_meta = overrides.pop("dataset_meta", None)
 
     # Apply overrides
     if overrides:
@@ -227,6 +232,12 @@ def run_pipeline(
         extra={k: v for k, v in summary_dict.items()
                if k not in ("n_transcripts", "n_cells", "n_genes", "n_fovs", "source_path", "platform")},
     )
+
+    # ── Attach dataset_meta to sdata.attrs for Phase C output ──
+    if dataset_meta:
+        existing = sdata.attrs.get("dataset_meta", {})
+        existing.update(dataset_meta)
+        sdata.attrs["dataset_meta"] = existing
 
     # ── Dynamic step execution ───────────────────────────────────────
     step_names = cfg.get_step_names()
@@ -570,7 +581,8 @@ def run_pipeline(
     if not skip_container:
         try:
             from .container import generate_container
-            generate_container(ctx.adata, report, output_dir)
+            dataset_meta = sdata.attrs.get("dataset_meta")
+            generate_container(ctx.adata, report, output_dir, dataset_meta=dataset_meta)
             report["outputs"]["metadata"] = str(output_dir / "metadata.json")
 
             from .html_report import generate_html_report

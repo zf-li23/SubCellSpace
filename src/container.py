@@ -31,6 +31,7 @@ def generate_container(
     adata: anndata.AnnData,
     report_json: dict,
     output_dir: str | Path,
+    dataset_meta: dict | None = None,
 ) -> Path:
     """Generate metadata.json in *output_dir*.
 
@@ -47,6 +48,8 @@ def generate_container(
         Pipeline report payload (from ``*_report.json``).
     output_dir : str or Path
         Pipeline output directory.
+    dataset_meta : dict or None
+        GEO / database metadata (GSE, GSM, dataset_id) from resolver.
 
     Returns
     -------
@@ -56,7 +59,7 @@ def generate_container(
     output_dir = Path(output_dir)
 
     # ── Build & write metadata.json (only) ──
-    metadata = _build_metadata(adata, report_json, output_dir)
+    metadata = _build_metadata(adata, report_json, output_dir, dataset_meta=dataset_meta)
     meta_path = output_dir / "metadata.json"
     meta_path.write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2, default=str),
@@ -70,6 +73,7 @@ def _build_metadata(
     adata: anndata.AnnData,
     report_json: dict,
     output_dir: Path,
+    dataset_meta: dict | None = None,
 ) -> dict:
     clusters_dist: dict[str, int] = {}
     cluster_col = _resolve_obs_column(adata.obs, ["cluster", "leiden"])
@@ -92,7 +96,7 @@ def _build_metadata(
     else:
         logger.warning("No 'spatial_domain'/'domain' column — spatial_domains empty.")
 
-    return {
+    meta = {
         "run_name": report_json.get("pipeline_name", "unknown"),
         "platform": report_json.get("platform", "unknown"),
         "pipeline_version": report_json.get("pipeline_version", "0.1.0"),
@@ -109,6 +113,24 @@ def _build_metadata(
         "n_obs": report_json.get("n_obs", int(adata.n_obs)),
         "n_vars": report_json.get("n_vars", int(adata.n_vars)),
     }
+
+    # ── Phase C: Inject GEO / database metadata ──
+    if dataset_meta:
+        meta["dataset_meta"] = {k: v for k, v in dataset_meta.items() if v is not None}
+        # Also add a human-readable GEO URL when applicable
+        gse = dataset_meta.get("gse")
+        if gse:
+            geo_url = f"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={gse}"
+            meta["dataset_meta"]["geo_url"] = geo_url
+            if dataset_meta.get("gsm"):
+                meta["dataset_meta"]["geo_gsm_url"] = f"{geo_url}&t=self&view=full"
+        elif dataset_meta.get("id"):
+            # Non-GEO dataset: add project URL if available
+            project_url = report_json.get("project_url")
+            if project_url:
+                meta["dataset_meta"]["project_url"] = project_url
+
+    return meta
 
 
 def _safe_dist(series: pd.Series) -> dict[str, int]:

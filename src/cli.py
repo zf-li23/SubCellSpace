@@ -56,6 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run full pipeline: auto-ingest → analyze → export")
     run_parser.add_argument("input_path", type=str,
                             help="Path to .zarr/raw data, or DB ID (D0059 / GSE234713 / GSE234713/GSM7473682)")
+    run_parser.add_argument("--gsm", type=str, default=None,
+                            help="GSM accession to run (e.g. GSM7473682); use with GSE in input_path")
     run_parser.add_argument("--platform", type=str, default="auto",
                             help="Platform: auto (detect) / cosmx / xenium / merfish / stereoseq / generic")
     run_parser.add_argument("--output-dir", "-o", type=Path, default=Path("outputs/pipeline_run"))
@@ -228,32 +230,76 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     # ── Step 1: Try DB lookup if input is not a regular file/dir ──
     platform = args.platform
+    dataset_meta: dict | None = None  # ← for Phase C: GEO metadata injection
+
     if not input_path.exists() and not input_raw.startswith("/"):
-        # Looks like a DB query (D0059 / GSE234713 / GSE234713/GSM7473682)
-        results = db_lookup(input_raw)
+        # ├─ Build query from input_path + optional --gsm
+        gsm_override = getattr(args, "gsm", None)
+
+        if gsm_override:
+            # --gsm specified: combine with input_path (GSE) or search standalone
+            query = f"{input_raw}/{gsm_override}" if input_raw.startswith("GSE") else gsm_override
+        else:
+            query = input_raw
+
+        results = db_lookup(query)
+
         if not results:
-            print(f"Error: '{input_raw}' not found as file or database entry.")
+            print(f"Error: '{query}' not found as file or database entry.")
             return
 
+        # ── GSE-level query (multiple rows) without --gsm — list & exit ──
+        if len(results) > 1 and not gsm_override:
+            ready = [r for r in results if r.status == "ready"]
+            pending = [r for r in results if r.status == "pending"]
+            platform_set = {r.platform for r in results if r.platform}
+
+            print(f"GSE '{input_raw}' — {len(results)} entries, "
+                  f"{len(ready)} ready, {len(pending)} pending")
+            if platform_set:
+                print(f"  Platform(s): {', '.join(sorted(platform_set))}")
+            print()
+            if ready:
+                print("  Ready GSMs (use --gsm to pick one):")
+                for r in ready:
+                    gsm_tag = r.gsm or "?"
+                    path_tag = r.resolved_path or "(no path)"
+                    print(f"    {gsm_tag:25s} {path_tag}")
+            if pending:
+                print(f"  Pending GSMs (data not yet on disk): {len(pending)}")
+            return
+
+        # ── Single-entry or --gsm-specified: resolve path ──
         info = results[0]
-        # GSE-level query returns multiple rows — pick the first ready one, or list
         if info.status != "ready":
-            print(f"Warning: '{input_raw}' status = '{info.status}', skipping.")
+            print(f"Error: '{query}' status = '{info.status}', not ready.")
             return
 
         resolved = info.resolved_path
         if not resolved:
-            print(f"Error: '{input_raw}' has no local path and cannot be resolved.")
+            print(f"Error: '{query}' has no local path and cannot be resolved.")
             return
+
+        # ── Build dataset_meta for Phase C ──
+        dataset_meta = {}
+        if info.id:
+            dataset_meta["dataset_id"] = info.id
+        if info.gse:
+            dataset_meta["gse"] = info.gse
+        if info.gsm:
+            dataset_meta["gsm"] = info.gsm
+        if info.platform:
+            dataset_meta["platform"] = info.platform
+        if info.name:
+            dataset_meta["dataset_name"] = info.name
+        dataset_meta["source"] = info.source
 
         input_path = Path(resolved)
         platform = platform if platform != "auto" else (info.platform or "auto").lower()
-        print(f"Resolved '{input_raw}' → {input_path} (platform={platform})")
+        print(f"Resolved '{query}' → {input_path} (platform={platform})")
+        if dataset_meta:
+            print(f"  Dataset meta: {dataset_meta}")
 
-        # If there are multiple ready results (GSE query), show them
-        if len(results) > 1:
-            ready_count = sum(1 for r in results if r.status == "ready")
-            print(f"  ({len(results)} total entries, {ready_count} ready — running first)")
     elif not input_path.exists():
         print(f"Error: Input file not found: {input_path}")
         return
@@ -288,6 +334,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
             sdata.write(zarr_path)
             print(f"  Saved: {zarr_path}")
 
+    # ── Inject dataset_meta into sdata.attrs for downstream use (Phase C) ──
+    if dataset_meta:
+        existing = sdata.attrs.get("dataset_meta", {})
+        existing.update(dataset_meta)
+        sdata.attrs["dataset_meta"] = existing
+
     # ── Run pipeline ──
     # Only pass non-None CLI args as overrides (so --config values take precedence)
     overrides: dict[str, Any] = {}
@@ -300,6 +352,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         if val is not None:
             overrides[key] = val
     overrides["skip_container"] = getattr(args, "skip_container", False)
+    overrides["dataset_meta"] = dataset_meta or {}
 
     result = run_pipeline(
         settings=settings_obj,
@@ -327,6 +380,7 @@ def _cmd_export(args: argparse.Namespace) -> None:
 
     # ── pipeline_results.json ────────────────────────────────────────
     summary = sdata.attrs.get("ingestion_summary", {})
+    dataset_meta = sdata.attrs.get("dataset_meta", None)
     results = {
         "platform": sdata.attrs.get("platform", "unknown"),
         "summary": summary,
@@ -335,6 +389,8 @@ def _cmd_export(args: argparse.Namespace) -> None:
         "tables_keys": list(sdata.tables.keys()),
         "images_keys": list(sdata.images.keys()),
     }
+    if dataset_meta:
+        results["dataset_meta"] = dataset_meta
 
     # Cell-level stats from main_table if available
     # Try from zarr tables first, then from h5ad in output dir
