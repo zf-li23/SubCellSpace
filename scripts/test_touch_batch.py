@@ -8,30 +8,40 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.touch import touch
 
 TEST_PATHS = [
-    # CosMx GEO (8 samples)
-    "/data3/yangxr002/CosMx_GEO/GSE234713/GSM7473682/",
-    "/data3/yangxr002/CosMx_GEO/GSE234713/GSM7473683/",
-    "/data3/yangxr002/CosMx_GEO/GSE273530/GSM8431774/",
-    "/data3/yangxr002/CosMx_GEO/GSE282026/GSM8634610-GSM8634614/",
-    "/data3/yangxr002/CosMx_GEO/GSE282026/GSM8634615-GSM8634619/",
-    "/data3/yangxr002/CosMx_GEO/GSE286935/GSM8734558/",
-    "/data3/yangxr002/CosMx_GEO/GSE299786/GSM9046088/",
-    "/data3/yangxr002/CosMx_GEO/GSE299786/GSM9046089/",
-    # Xenium GEO (8 samples)
-    "/data3/yangxr002/Xenium_GEO/GSE243168/GSM7780153/",
-    "/data3/yangxr002/Xenium_GEO/GSE271936/GSM8389375/",
-    "/data3/yangxr002/Xenium_GEO/GSE283832/GSM8672828/",
-    "/data3/yangxr002/Xenium_GEO/GSE291378/GSM8834057/",
-    "/data3/yangxr002/Xenium_GEO/GSE296331/GSM8968701/",
-    "/data3/yangxr002/Xenium_GEO/GSE302642/GSM9107838/",
-    "/data3/yangxr002/Xenium_GEO/GSE310658/GSM9305563/",
-    "/data3/yangxr002/Xenium_GEO/GSE315644/GSM9433805/",
-    # MERFISH GEO (5 samples)
-    "/data3/yangxr002/MERFISH_GEO/GSE202623/GSM6125919/",
-    "/data3/yangxr002/MERFISH_GEO/GSE273606/GSM8433816/",
-    "/data3/yangxr002/MERFISH_GEO/GSE275954/GSM8488517/",
-    "/data3/yangxr002/MERFISH_GEO/GSE299886/GSM9049384/",
-    "/data3/yangxr002/MERFISH_GEO/GSE313704/GSM9372788/",
+    # ── CosMx GEO (9 samples, 6 GSEs) ──
+    "/data3/yangxr002/CosMx_GEO/GSE305978/GSM9190966/",
+    "/data3/yangxr002/CosMx_GEO/GSE277782/GSM8529621-GSM8529624/",
+    "/data3/yangxr002/CosMx_GEO/GSE277782/GSM8529618-GSM8529620/",
+    "/data3/yangxr002/CosMx_GEO/GSE292268/GSM8855042/",
+    "/data3/yangxr002/CosMx_GEO/GSE292268/GSM8855043/",
+    "/data3/yangxr002/CosMx_GEO/GSE277441/GSM8522535/",
+    "/data3/yangxr002/CosMx_GEO/GSE277441/GSM8522534/",
+    "/data3/yangxr002/CosMx_GEO/GSE283625/GSM8668172-GSM8668179/",
+    "/data3/yangxr002/CosMx_GEO/GSE291308/GSM8833258/",
+    # ── Xenium GEO (11 samples, 6 GSEs) ──
+    "/data3/yangxr002/Xenium_GEO/GSE313081/GSM9360616/",
+    "/data3/yangxr002/Xenium_GEO/GSE313081/GSM9360614/",
+    "/data3/yangxr002/Xenium_GEO/GSE320403/GSM9542521/",
+    "/data3/yangxr002/Xenium_GEO/GSE290468/GSM8815002/",
+    "/data3/yangxr002/Xenium_GEO/GSE290468/GSM8814979/",
+    "/data3/yangxr002/Xenium_GEO/GSE266690/GSM8253800/",
+    "/data3/yangxr002/Xenium_GEO/GSE266690/GSM8253792/",
+    "/data3/yangxr002/Xenium_GEO/GSE308148/GSM9238737/",
+    "/data3/yangxr002/Xenium_GEO/GSE308148/GSM9238738/",
+    "/data3/yangxr002/Xenium_GEO/GSE313636/GSM9371395/",
+    "/data3/yangxr002/Xenium_GEO/GSE313636/GSM9371393/",
+    # ── MERFISH GEO (11 samples, 7 GSEs) ──
+    "/data3/yangxr002/MERFISH_GEO/GSE274617/GSM8453700/",
+    "/data3/yangxr002/MERFISH_GEO/GSE269617/GSM8323064/",
+    "/data3/yangxr002/MERFISH_GEO/GSE269617/GSM8323033/",
+    "/data3/yangxr002/MERFISH_GEO/GSE319949/GSM9530210/",
+    "/data3/yangxr002/MERFISH_GEO/GSE319949/GSM9530211/",
+    "/data3/yangxr002/MERFISH_GEO/GSE313704/GSM9372789/",
+    "/data3/yangxr002/MERFISH_GEO/GSE313704/GSM9372791/",
+    "/data3/yangxr002/MERFISH_GEO/GSE301696/GSM9087497/",
+    "/data3/yangxr002/MERFISH_GEO/GSE301696/GSM9087496/",
+    "/data3/yangxr002/MERFISH_GEO/GSE330849/GSM9733697/",
+    "/data3/yangxr002/MERFISH_GEO/GSE330849/GSM9733696/",
 ]
 
 # Also test CosMx merged (GSM range - needs platform hint)

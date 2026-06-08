@@ -38,8 +38,8 @@ GEO CSVs (GSE + GSM/sample_name dual-key)
 
 | Metric | Value |
 |--------|-------|
-| `data/xenium_geo.csv` | 1727 rows, 161 GSEs |
-| Ready | 1173 (data on disk) |
+| `data/xenium_geo.csv` | 1525 rows, 159 GSEs |
+| Ready | 971 (data on disk) |
 | Pending | 554 (expanded via GEO API) |
 | Cluster dirs | `/data3/yangxr002/Xenium_GEO/` — 120 GSEs, ~1197 GSM dirs |
 | datasets.csv (non-GEO) | 82 rows, P1001-P1045 (continuous) |

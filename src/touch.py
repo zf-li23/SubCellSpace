@@ -32,7 +32,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 MANIFEST: dict[str, list[dict]] = {
     "cosmx": [
-        {"pattern": "*_tx_file.csv*",     "required": True,  "name": "transcripts",
+        {"pattern": "*tx_file.csv*",      "required": True,  "name": "transcripts",
          "desc": "转录本坐标文件 (x_global_px, y_global_px, target)"},
         {"pattern": "*[_-]polygons.csv*", "required": False, "name": "polygons",
          "desc": "细胞多边形边界 (cell_ID, x/y_local_px)"},
@@ -382,10 +382,11 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
 
     规则:
     1. 删除所有以 . 开头的隐藏文件（解压产生的临时/残留文件）
-    2. Xenium: 解压 cell_feature_matrix.h5.gz → cell_feature_matrix.h5
-    3. 如果同时存在 .csv 和 .csv.gz，删除 .csv（保留 .csv.gz）
-    4. 如果只有 .csv，将其压缩为 .csv.gz 并删除原文件
-    5. 如果只有 .csv.gz，保持不变
+    2. GEO 数据集：为无前缀的数据文件添加 GSM 前缀（如 tx_file.csv → GSMxxx_tx_file.csv）
+    3. Xenium: 解压 cell_feature_matrix.h5.gz → cell_feature_matrix.h5
+    4. 如果同时存在 .csv 和 .csv.gz，删除 .csv（保留 .csv.gz）
+    5. 如果只有 .csv，将其压缩为 .csv.gz 并删除原文件
+    6. 如果只有 .csv.gz，保持不变
     """
     # ── 规则 1: 删除 dotfiles ──
     for f in sorted(data_dir.iterdir()):
@@ -393,7 +394,41 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
             f.unlink()
             report.actions_taken.append(f"Deleted dotfile: {f.name}")
 
-    # ── 规则 2: Xenium cell_feature_matrix.h5 解压 ──
+    # ── 规则 2: 为 GEO 数据集的文件添加 GSM 前缀 ──
+    # 如果目录名以 GSM 开头，但数据文件没有 GSM 前缀，
+    # 则重命名文件使其包含 GSM 前缀，增强 Pipeline 鲁棒性。
+    dir_name = data_dir.name
+    gsm_prefix = None
+    if dir_name.startswith("GSM"):
+        gsm_prefix = dir_name
+    else:
+        # Try to extract GSM from parent directory
+        import re as _re
+        parent = data_dir.parent
+        if parent.name.startswith("GSE"):
+            gsm_match = _re.search(r"(GSM[\d\-]+)", dir_name)
+            if gsm_match:
+                gsm_prefix = gsm_match.group(1)
+    if gsm_prefix:
+        for f in sorted(data_dir.iterdir()):
+            if not f.is_file():
+                continue
+            # Skip files that already have the GSM prefix
+            if f.name.startswith(gsm_prefix):
+                continue
+            # Skip archive files and dotfiles
+            if f.name.startswith(".") or f.name.endswith((".tar", ".tar.gz", ".zip")):
+                continue
+            # Rename: add GSM prefix
+            new_name = f"{gsm_prefix}_{f.name}"
+            new_path = data_dir / new_name
+            if not new_path.exists():
+                f.rename(new_path)
+                report.actions_taken.append(
+                    f"Prefixed {f.name} → {new_name}"
+                )
+
+    # ── 规则 3: Xenium cell_feature_matrix.h5 解压 ──
     h5_gz = data_dir / "cell_feature_matrix.h5.gz"
     h5 = data_dir / "cell_feature_matrix.h5"
     if h5_gz.exists() and not h5.exists():
@@ -410,7 +445,7 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
         h5_gz.unlink()
         report.actions_taken.append(f"Removed redundant cell_feature_matrix.h5.gz (already have .h5)")
 
-    # ── 规则 3-5: CSV 压缩规范化 ──
+    # ── 规则 4-6: CSV 压缩规范化 ──
     for status in report.files:
         if not status.found:
             continue
