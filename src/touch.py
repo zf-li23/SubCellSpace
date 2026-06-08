@@ -111,6 +111,8 @@ class TouchReport:
     unexpected: list[str] = field(default_factory=list)  # 不符合预期的文件
     missing_required: list[str] = field(default_factory=list)
     actions_taken: list[str] = field(default_factory=list)
+    rollback_manifest: list[dict] = field(default_factory=list)
+    """回退清单，每个条目记录一个可逆操作。"""
 
     def to_dict(self) -> dict:
         return {
@@ -132,6 +134,7 @@ class TouchReport:
             "unexpected_files": self.unexpected,
             "missing_required": self.missing_required,
             "actions_taken": self.actions_taken,
+            "rollback_manifest": self.rollback_manifest,
         }
 
 
@@ -391,6 +394,13 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
     # ── 规则 1: 删除 dotfiles ──
     for f in sorted(data_dir.iterdir()):
         if f.is_file() and f.name.startswith("."):
+            # 记录回退信息（点文件内容不可恢复，仅记录）
+            report.rollback_manifest.append({
+                "action": "delete_dotfile",
+                "path": str(f),
+                "name": f.name,
+                "reversible": False,
+            })
             f.unlink()
             report.actions_taken.append(f"Deleted dotfile: {f.name}")
 
@@ -423,7 +433,14 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
             new_name = f"{gsm_prefix}_{f.name}"
             new_path = data_dir / new_name
             if not new_path.exists():
+                old_path = str(f)
                 f.rename(new_path)
+                report.rollback_manifest.append({
+                    "action": "prefix",
+                    "before": old_path,
+                    "after": str(new_path),
+                    "reversible": True,
+                })
                 report.actions_taken.append(
                     f"Prefixed {f.name} → {new_name}"
                 )
@@ -433,9 +450,16 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
     h5 = data_dir / "cell_feature_matrix.h5"
     if h5_gz.exists() and not h5.exists():
         gz_size = h5_gz.stat().st_size
+        gz_path_bak = str(h5_gz)
         _gzip_decompress(h5_gz, h5)
         h5_gz.unlink()
         h5_size = h5.stat().st_size
+        report.rollback_manifest.append({
+            "action": "decompress_h5",
+            "before": gz_path_bak,
+            "after": str(h5),
+            "reversible": True,
+        })
         report.actions_taken.append(
             f"Decompressed cell_feature_matrix.h5.gz → cell_feature_matrix.h5 "
             f"({gz_size:,}B → {h5_size:,}B)"
@@ -443,6 +467,11 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
     elif h5_gz.exists() and h5.exists():
         # Both exist — keep .h5, remove .gz
         h5_gz.unlink()
+        report.rollback_manifest.append({
+            "action": "remove_redundant_h5gz",
+            "path": str(h5_gz),
+            "reversible": False,
+        })
         report.actions_taken.append(f"Removed redundant cell_feature_matrix.h5.gz (already have .h5)")
 
     # ── 规则 4-6: CSV 压缩规范化 ──
@@ -456,22 +485,35 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
                      if not str(c).endswith(".gz") and not str(c).endswith(".parquet")]
         gz_files = [c for c in candidates if str(c).endswith(".gz")]
 
-        # 规则 3: 同时有 .csv 和 .csv.gz → 删除 .csv
+        # 规则 4: 同时有 .csv 和 .csv.gz → 删除 .csv
         if csv_files and gz_files:
             for csv_f in csv_files:
+                report.rollback_manifest.append({
+                    "action": "remove_redundant_csv",
+                    "path": str(csv_f),
+                    "name": csv_f.name,
+                    "reversible": False,
+                })
                 csv_f.unlink()
                 report.actions_taken.append(
                     f"Removed redundant {csv_f.name} (already have .gz)"
                 )
 
-        # 规则 4: 只有 .csv → 压缩
+        # 规则 5: 只有 .csv → 压缩
         elif csv_files and not gz_files:
             for csv_f in csv_files:
                 gz_path = csv_f.parent / (csv_f.name + ".gz")
+                orig_path = str(csv_f)
                 _gzip_compress(csv_f, gz_path)
                 csv_f.unlink()
                 orig_size = status.size_bytes
                 new_size = gz_path.stat().st_size
+                report.rollback_manifest.append({
+                    "action": "compress_csv",
+                    "before": orig_path,
+                    "after": str(gz_path),
+                    "reversible": True,
+                })
                 report.actions_taken.append(
                     f"Compressed {csv_f.name} → {gz_path.name} "
                     f"({orig_size:,}B → {new_size:,}B, {new_size/orig_size*100:.0f}%)"
@@ -490,6 +532,80 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
                 csv_version = p.parent / p.stem
                 if not csv_version.exists():
                     status.redundant = False
+
+
+# ── 回退 ──────────────────────────────────────────────────────────
+
+
+def rollback(report_path: str | Path) -> list[str]:
+    """根据 touch_report.json 中的 rollback_manifest 回退所有操作。
+
+    参数:
+        report_path: touch_report.json 的路径
+
+    返回:
+        回退操作的人类可读记录列表
+    """
+    import json
+    report_path = Path(report_path)
+    if not report_path.exists():
+        raise FileNotFoundError(f"Report not found: {report_path}")
+
+    data = json.loads(report_path.read_text())
+    manifest = data.get("rollback_manifest", [])
+    actions: list[str] = []
+
+    if not manifest:
+        actions.append("No rollback entries found in report.")
+        return actions
+
+    # 按逆序回退（后做的先回退）
+    for entry in reversed(manifest):
+        action = entry.get("action", "unknown")
+        reversible = entry.get("reversible", False)
+
+        if not reversible:
+            actions.append(f"[SKIP] {action}: not reversible ({entry.get('name', entry.get('path', '?'))})")
+            continue
+
+        try:
+            if action == "prefix":
+                # rename after → before
+                before = Path(entry["before"])
+                after = Path(entry["after"])
+                if after.exists() and not before.exists():
+                    after.rename(before)
+                    actions.append(f"[UNDO] Prefixed: {after.name} → {before.name}")
+
+            elif action == "decompress_h5":
+                # compress after → before (.gz)
+                before = Path(entry["before"])
+                after = Path(entry["after"])
+                if after.exists() and not before.exists():
+                    _gzip_compress(after, before)
+                    after.unlink()
+                    actions.append(f"[UNDO] Decompressed h5: {after.name} → {before.name}")
+
+            elif action == "compress_csv":
+                # decompress after → before
+                before = Path(entry["before"])
+                after = Path(entry["after"])
+                if after.exists() and not before.exists():
+                    import gzip as _gz
+                    with _gz.open(after, "rb") as src:
+                        with open(before, "wb") as dst:
+                            import shutil as _sh
+                            _sh.copyfileobj(src, dst)
+                    after.unlink()
+                    actions.append(f"[UNDO] Compressed: {after.name} → {before.name}")
+
+            else:
+                actions.append(f"[SKIP] Unknown action type: {action}")
+
+        except Exception as e:
+            actions.append(f"[FAIL] {action}: {e}")
+
+    return actions
 
 
 def _gzip_compress(src: Path, dst: Path) -> None:

@@ -166,6 +166,8 @@ def build_parser() -> argparse.ArgumentParser:
     touch_parser.add_argument("--verbose", action="store_true", help="Show all files including missing optional")
     touch_parser.add_argument("--platform", type=str, default=None,
                               help="Force platform (cosmx / xenium / merfish), skip auto-detection")
+    touch_parser.add_argument("--rollback", type=str, default=None,
+                              help="Undo normalization using a saved touch_report.json")
 
     return parser
 
@@ -693,6 +695,15 @@ def _cmd_touch(args: argparse.Namespace) -> None:
     from pathlib import Path as _Path
 
     from .touch import touch, format_report
+
+    # ── --rollback 模式：从报告回退 ──
+    rollback_path = getattr(args, "rollback", None)
+    if rollback_path:
+        from .touch import rollback as _rollback
+        results = _rollback(rollback_path)
+        for line in results:
+            print(f"  {line}")
+        return
 
     input_path = getattr(args, "input_path", None)
 
