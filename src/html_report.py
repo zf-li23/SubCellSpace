@@ -875,7 +875,7 @@ const data = {data_json};
 </body>
 </html>"""
 
-    html_path = output_dir / "report.html"
+    html_path = output_dir / "subcellspace_report.html"
     html_path.write_text(html, encoding="utf-8")
     logger.info("Xenium-style HTML report: %s (%d KB)", html_path, html_path.stat().st_size // 1024)
     return html_path
