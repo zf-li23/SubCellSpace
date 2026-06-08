@@ -34,7 +34,7 @@ MANIFEST: dict[str, list[dict]] = {
     "cosmx": [
         {"pattern": "*_tx_file.csv*",     "required": True,  "name": "transcripts",
          "desc": "转录本坐标文件 (x_global_px, y_global_px, target)"},
-        {"pattern": "*_polygons.csv*",    "required": False, "name": "polygons",
+        {"pattern": "*[_-]polygons.csv*", "required": False, "name": "polygons",
          "desc": "细胞多边形边界 (cell_ID, x/y_local_px)"},
         {"pattern": "*_exprMat_file*",    "required": False, "name": "expr_matrix",
          "desc": "预计算表达矩阵 (fov, cell_ID + 基因列)"},
@@ -293,21 +293,30 @@ def _check_file(data_dir: Path, entry: dict) -> FileStatus:
 
 
 def _detect_platform_from_files(data_dir: Path) -> str | None:
-    """通过目录中的特征文件推测平台。"""
+    """通过目录中的特征文件推测平台。
+
+    注意检测顺序：
+    1. MERFISH 优先（detected_transcripts 是 MERFISH 独有关键词）
+    2. CosMx（tx_file 关键词）
+    3. Xenium（精确文件名 transcripts.csv / cell_feature_matrix.h5）
+    4. Generic 回退
+    """
     files_lower = {f.name.lower() for f in data_dir.iterdir() if f.is_file()}
+
+    # MERFISH: detected_transcripts (独特关键词，不会被其他平台误匹配)
+    if any("detected_transcripts" in f for f in files_lower):
+        return "merfish"
 
     # CosMx: *tx_file.csv*
     if any("tx_file" in f for f in files_lower):
         return "cosmx"
 
-    # Xenium: transcripts.csv or cell_feature_matrix.h5
-    if any("transcripts.csv" in f or f == "transcripts.parquet" or
-           f == "cell_feature_matrix.h5" for f in files_lower):
+    # Xenium: 精确文件名 transcripts.csv 或 cell_feature_matrix.h5
+    # 不能用 "transcripts.csv" in f 因为 MERFISH 的 *_detected_transcripts.csv 也会匹配
+    xenium_names = {"transcripts.csv", "transcripts.csv.gz", "transcripts.parquet",
+                    "cell_feature_matrix.h5"}
+    if files_lower & xenium_names:
         return "xenium"
-
-    # MERFISH: detected_transcripts
-    if any("detected_transcripts" in f for f in files_lower):
-        return "merfish"
 
     # Generic: any .csv with spatial-looking name
     csv_files = [f for f in files_lower if f.endswith(".csv") or f.endswith(".csv.gz")]

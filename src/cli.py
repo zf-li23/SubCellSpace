@@ -159,10 +159,12 @@ def build_parser() -> argparse.ArgumentParser:
                               help="Dataset directory, DB ID (D0059), or GEO (GSE234713/GSM7473682)")
     touch_parser.add_argument("--normalize", action="store_true",
                               help="Normalize: compress .csv → .csv.gz, remove redundant .csv")
-    touch_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    touch_parser.add_argument("--json", action="store_true", help="Print report as JSON to stdout")
+    touch_parser.add_argument("--output", type=Path, default=None,
+                              help="Save .touch_report.json to this path (default: <input_dir>/.touch_report.json)")
     touch_parser.add_argument("--verbose", action="store_true", help="Show all files including missing optional")
     touch_parser.add_argument("--platform", type=str, default=None,
-                              help="Force platform (skip auto-detection)")
+                              help="Force platform (cosmx / xenium / merfish), skip auto-detection")
 
     return parser
 
@@ -687,6 +689,8 @@ def _cmd_lookup(args: argparse.Namespace) -> None:
 
 def _cmd_touch(args: argparse.Namespace) -> None:
     """Handle ``subcellspace touch`` — dataset integrity check & normalization."""
+    from pathlib import Path as _Path
+
     from .touch import touch, format_report
 
     report = touch(
@@ -695,10 +699,26 @@ def _cmd_touch(args: argparse.Namespace) -> None:
         platform_override=getattr(args, "platform", None),
     )
 
-    if args.json:
-        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str))
-    else:
-        print(format_report(report, verbose=getattr(args, "verbose", False)))
+    # ── Resolve output path ──
+    output_path = getattr(args, "output", None)
+    if output_path is None:
+        # Default: write .touch_report.json in the dataset directory
+        data_dir = report.input_path
+        if data_dir and _Path(data_dir).is_dir():
+            output_path = _Path(data_dir) / ".touch_report.json"
+        else:
+            output_path = _Path(".touch_report.json")
+
+    # ── Write JSON report ──
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+
+    # ── Print human-readable summary ──
+    print(format_report(report, verbose=getattr(args, "verbose", False)))
+    print(f"\n  [report saved] {output_path}")
 
 
 def _cmd_db(args: argparse.Namespace) -> None:
