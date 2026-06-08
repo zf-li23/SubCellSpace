@@ -425,6 +425,79 @@ rsync -avz -e "ssh -J bio-download" \
 
 ---
 
+## 12. Database & Cluster Operations — Lessons Learned (2026-06-08)
+
+### 12.1 ID Namespace Rules
+
+| Namespace | Platform | Rule |
+|-----------|----------|------|
+| `D0xxx` | CosMx | Fixed, do not modify |
+| `D1xxx~D2xxx` | Xenium | Sequential by project_id |
+| `D5xxx` | MERFISH | Migrated from D2xxx (2026-06-08) |
+| `Mxxx` / `Rxxx` | Any | **Merged** / **Raw_Fragment** — special semantic meaning, do NOT renumber as D IDs |
+
+**Critical:** `D5xxx` is exclusively MERFISH. Never assign Xenium rows to D5xxx.
+
+### 12.2 Directory Renaming — Chain Conflict Prevention
+
+When renaming cluster directories in bulk, **always sort by old D ID in descending order** (largest → smallest):
+
+```bash
+# ❌ Wrong: pass1/pass2 approach causes chain conflicts
+#    A→B, then B→C fails because B was already renamed
+
+# ✅ Correct: descending order
+#    D1236→D1237, then D1235→D1236, then D1234→D1235
+#    Each step frees up the destination name for the next
+```
+
+This avoids the `mv` creating nested subdirectories (e.g., `D1227/D1212/D1185`).
+
+### 12.3 Row Operations — Golden Rules
+
+1. **Never create new rows for orphans** if they can be matched to existing pending rows. Always match 1:1 by project_id first.
+2. **Always preserve non-target platforms.** When modifying Xenium, never touch CosMx or MERFISH rows.
+3. **GSM-expanded pending rows must have empty `local_path`.** Only assign `local_path` after cluster data exists.
+4. **After any rename: touch ALL paths** and verify 0 pending before committing.
+5. **Use `git show <commit>:data/datasets.csv`** as a reliable reference when recovering lost data.
+
+### 12.4 Recovery Workflow
+
+When cluster directories and CSV get out of sync:
+
+```
+1. Get current cluster state:  find ... -type d -name 'D*' | sort
+2. Get current CSV paths:      SELECT local_path FROM datasets WHERE status='ready'
+3. Diff: orphans = cluster - csv_paths, missing = csv_paths - cluster
+4. For orphans: match to pending rows by project_id (if available)
+5. For remaining orphans: restore from git history (911a3bf or earlier)
+6. Rename dirs descending → touch → rebuild DB → commit
+```
+
+### 12.5 Reference Commits
+
+| Commit | Description | When to use |
+|--------|-------------|-------------|
+| `911a3bf` | Post-GSM-import, pre-sort (correct metadata) | Restoring lost rows |
+| `c7368c1` | Post-GSM-expansion (has D5xxx bug) | Reference only — D IDs partially wrong |
+| `4d01fa1` | Earliest Xenium GEO data | Ultimate fallback |
+
+### 12.6 Data Transfer Direction
+
+```
+# ✅ Correct: FROM cluster, PULL from jumpbox (internal network)
+ssh a-cluster
+scp -r bio@192.168.1.1:/data/yangxrlab/file.txt /data3/yangxr002/
+
+# ❌ Wrong: FROM jumpbox, PUSH to cluster (no SSH key configured)
+ssh bio-download
+scp file.txt yangxr002@192.168.1.2:/data3/  # Permission denied
+```
+
+The `bio` user on the jumpbox does NOT have SSH key access to `yangxr002` on the cluster. But `yangxr002` on the cluster CAN access `bio@192.168.1.1`.
+
+---
+
 ## 11. Data Transfer Between Jumpbox and Cluster
 
 ### Topology
