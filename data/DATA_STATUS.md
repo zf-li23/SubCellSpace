@@ -1,8 +1,9 @@
 # Data Layer Status
 
-> Last updated: 2026-06-08 21:30  
+> Last updated: 2026-06-08 22:30  
 > **Phase 5 complete** — All three platforms migrated to GSE/GSM-based GEO database system  
-> **Phase 6 in progress** — MERFISH data extraction and format normalization
+> **Phase 6 complete** — MERFICH 格式统一，Xenium 数据完整性修复  
+> **Phase 7 in progress** — 通用 GEO 工具模块 (`src/geo/`) + CosMx/MERFISH/Xenium 批量下载
 
 ---
 
@@ -25,8 +26,8 @@ datasets.csv (998 rows, non-GEO only)
 
 GEO CSVs (GSE + GSM/sample_name dual-key)
 ├── cosmx_geo.csv:  1932 rows, 63 GSEs (53 ready, 1879 pending)
-├── merfish_geo.csv:  801 rows, 44 GSEs (6 ready, 749 pending, 46 no_data)
-└── xenium_geo.csv: 1745 rows, 162 GSEs (1191 ready, 554 pending)
+├── merfish_geo.csv:  164 rows, 27 GSEs (118 ready, 46 pending)
+└── xenium_geo.csv: 1727 rows, 161 GSEs (1173 ready, 554 pending)
 ```
 
 ---
@@ -37,10 +38,10 @@ GEO CSVs (GSE + GSM/sample_name dual-key)
 
 | Metric | Value |
 |--------|-------|
-| `data/xenium_geo.csv` | 1745 rows, 162 GSEs |
-| Ready | 1191 (data on disk) |
+| `data/xenium_geo.csv` | 1727 rows, 161 GSEs |
+| Ready | 1173 (data on disk) |
 | Pending | 554 (expanded via GEO API) |
-| Cluster dirs | `/data3/yangxr002/Xenium_GEO/` — 120 GSEs, ~1195 samples |
+| Cluster dirs | `/data3/yangxr002/Xenium_GEO/` — 120 GSEs, ~1197 GSM dirs |
 | datasets.csv (non-GEO) | 82 rows, P1001-P1045 (continuous) |
 
 ### Key Operations
@@ -49,7 +50,12 @@ GEO CSVs (GSE + GSM/sample_name dual-key)
 2. **Cluster migration**: 127 GEO projects from `Xenium/` to `Xenium_GEO/`
 3. **Directory rename**: D* → GSM*, P* → GSE* (1059 dirs)
 4. **ID renumbering**: Xenium projects P1001-P1045 (P1009 gap filled)
-5. **Key scripts**: `prepare_xenium_data.py`, `fix_nested_dirs.py`, `renumber_xenium.py`, `fix_xenium_rename.py`, `diagnose_xenium.py`
+5. **Xenium data integrity fixes** (2026-06-08):
+   - Fixed **96 nested GSM dirs** (moved files up, removed subdirectories)
+   - Removed **GSE269884 (Visium)** from cluster and CSV (18 rows)
+   - Fixed **GSE272303** GSM dir names (8 GSMs, sequential rename by file prefix)
+   - Fixed **GSE280088** GSM dir names (40 GSMs, sequential rename by file prefix)
+6. **Key scripts**: `prepare_xenium_data.py`, `fix_nested_dirs.py`, `renumber_xenium.py`, `fix_xenium_rename.py`, `diagnose_xenium.py`
 
 ---
 
@@ -115,6 +121,7 @@ GSE253474 (P0036): 116 R-fragments with TMA grouping resolved via R→GSM mappin
 | 归类 | 按 GSM 编号归入子目录 | 44 GSE 全部整理完毕 |
 | 格式分析 | 逐 GSE 分析文件格式 | 8 种格式分类 |
 | **清理** | **删除 22 个无转录本数据的 GSE（637 行）** | **只剩 MERFISH_full** |
+| **补下载** | SCP 3 个补充 tar（GSE202623 4.8G, GSE255892 14G, GSE266688 63G） | 全部到位 |
 
 ### 格式统一策略
 
@@ -151,27 +158,31 @@ GSE253474 (P0036): 116 R-fragments with TMA grouping resolved via R→GSM mappin
 
 ## 五、Pending Work
 
-### CosMx (43 new GSEs, 1879 pending)
-- Download `*_RAW.tar` from GEO to jumpbox
+### CosMx (43 new GSEs, 1879 pending) — ⏳ 下载中
+- Download `*_RAW.tar` from GEO to jumpbox — **PID 1042937, 5/43 done**
 - SCP to cluster `CosMx_GEO/`
 - Extract and organize into GSM/sample_name dirs
 - Many GSEs have mixed platforms (only some samples are CosMx)
 
-### MERFISH (37 tars extracting, 2332 pending)
-- Wait for Slurm job 230864 to complete
-- Verify extraction results (GSM dirs created)
-- Update `merfish_geo.csv` status (pending → ready)
+### Missing tars (44: 15 CosMx + 29 Xenium) — ⏳ 下载中
+- Download from GEO — **PID 1045019, 5/44 done**
+- SCP to cluster, extract, and organize
+
+### MERFISH (5 GSEs, 46 pending)
+- GSE193760, GSE221106, GSE282127, GSE282950, GSE333737 — 下载失败需重试
 
 ### Xenium (554 pending)
-- Download missing GEO tars
-- Extract and organize into GSM dirs
+- 43 GSEs 待下载（部分可能已包含在 missing tars batch 中）
 
 ### General
 - Rebuild `datasets.db` from updated `datasets.csv`
 - Update `frontend/public/datasets.json`
 - Clean up old `scripts/` (remove redundant/fix scripts)
 
-## 4. Cluster Infrastructure
+### 工具模块
+- `src/geo/` — ✅ 已创建 6 个通用 GEO 工具模块 (api/download/extract/format/migrate)
+
+## 6. Cluster Infrastructure
 
 ### Data paths
 
