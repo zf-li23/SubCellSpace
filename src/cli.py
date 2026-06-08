@@ -153,6 +153,17 @@ def build_parser() -> argparse.ArgumentParser:
     patchify_resolve.add_argument("--patch-dir", type=Path, required=True)
     patchify_resolve.add_argument("--output", type=Path, required=True)
 
+    # ── Dataset touch (integrity check & normalization) ────────────
+    touch_parser = subparsers.add_parser("touch", help="Check dataset file integrity and normalize compression")
+    touch_parser.add_argument("input_path", type=str,
+                              help="Dataset directory, DB ID (D0059), or GEO (GSE234713/GSM7473682)")
+    touch_parser.add_argument("--normalize", action="store_true",
+                              help="Normalize: compress .csv → .csv.gz, remove redundant .csv")
+    touch_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    touch_parser.add_argument("--verbose", action="store_true", help="Show all files including missing optional")
+    touch_parser.add_argument("--platform", type=str, default=None,
+                              help="Force platform (skip auto-detection)")
+
     return parser
 
 
@@ -603,6 +614,10 @@ def main() -> None:
         _cmd_lookup(args)
         return
 
+    if args.command == "touch":
+        _cmd_touch(args)
+        return
+
 # ── Database command handlers ────────────────────────────────────────
 
 
@@ -668,6 +683,22 @@ def _cmd_lookup(args: argparse.Namespace) -> None:
         if path:
             print(f"  {'':14s} path: {path}")
         print()
+
+
+def _cmd_touch(args: argparse.Namespace) -> None:
+    """Handle ``subcellspace touch`` — dataset integrity check & normalization."""
+    from .touch import touch, format_report
+
+    report = touch(
+        args.input_path,
+        normalize=getattr(args, "normalize", False),
+        platform_override=getattr(args, "platform", None),
+    )
+
+    if args.json:
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str))
+    else:
+        print(format_report(report, verbose=getattr(args, "verbose", False)))
 
 
 def _cmd_db(args: argparse.Namespace) -> None:
