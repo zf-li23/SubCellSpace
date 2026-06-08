@@ -30,7 +30,19 @@ def _denoise_intracellular(df: pd.DataFrame) -> pd.DataFrame:
         )
         df.attrs["denoise_fallback"] = "none (missing CellComp column)"
         return df
-    return df[df[cc].isin(["Nuclear", "Cytoplasm"])].copy()
+    # 检查 CellComp 是否有实际的有效值（Nuclear/Cytoplasm）
+    # MERFISH 等平台没有 CellComp，标准化后全部为 "Unknown"，不应过滤
+    valid_mask = df[cc].isin(["Nuclear", "Cytoplasm"])
+    if not valid_mask.any():
+        import logging
+        logging.getLogger(__name__).warning(
+            "Column '%s' exists but no valid values (Nuclear/Cytoplasm) — "
+            "denoise backend 'intracellular' falling back to 'none'.",
+            COL_CELLCOMP,
+        )
+        df.attrs["denoise_fallback"] = "none (no valid CellComp values)"
+        return df
+    return df[valid_mask].copy()
 
 
 def _denoise_nuclear_only(df: pd.DataFrame) -> pd.DataFrame:
@@ -43,6 +55,14 @@ def _denoise_nuclear_only(df: pd.DataFrame) -> pd.DataFrame:
             COL_CELLCOMP,
         )
         df.attrs["denoise_fallback"] = "none (missing CellComp column)"
+        return df
+    valid_mask = df[cc].isin(["Nuclear", "Cytoplasm"])
+    if not valid_mask.any():
+        import logging
+        logging.getLogger(__name__).warning(
+            "No valid CellComp values — denoise backend 'nuclear_only' falling back to 'none'.",
+        )
+        df.attrs["denoise_fallback"] = "none (no valid CellComp values)"
         return df
     return df[df[cc] == "Nuclear"].copy()
 
