@@ -1,18 +1,18 @@
 # SubCellSpace — AGENTS.md
 
-> **Last updated**: 2026-05-19  
-> **Current phase**: Phase 0-4 complete, Phase 5 in progress (Xenium data completion)
+> **Last updated**: 2026-06-08  
+> **Current phase**: Phase 5 complete — All three platforms migrated to GSE/GSM-based GEO database system
 
 ---
 
 ## 1. Project Overview
 
-SubCellSpace is a **scverse-native** subcellular spatial transcriptomics analysis platform supporting CosMx / Xenium / MERFISH platforms with a single unified 6-step pipeline. Built on scanpy + squidpy + spatialdata. The frontend is a pure static viewer; all analysis runs via CLI on a compute cluster.
+SubCellSpace is a **scverse-native** subcellular spatial transcriptomics analysis platform supporting CosMx / Xenium / MERFISH platforms with a single unified 6-step pipeline. Built on scanpy + squidpy + spatialdata.
 
 - **Python backend**: CLI + FastAPI server (`src/`)
 - **React frontend**: Pure data browser (no business logic) (`frontend/`)
-- **Data layer**: Unified SQLite database of datasets with static JSON export for frontend browsing + dev-mode Web UI editor
-- **Design**: Single pipeline config (`config/pipeline.yaml`), scverse-native backends only, zero external dependencies
+- **Data layer**: **Dual system** — `datasets.csv` (non-GEO metadata) + per-platform `{platform}_geo.csv` (GSE+GSM keyed)
+- **Design**: Single pipeline config (`config/pipeline.yaml`), scverse-native
 
 ---
 
@@ -21,13 +21,10 @@ SubCellSpace is a **scverse-native** subcellular spatial transcriptomics analysi
 ```bash
 conda activate subcellspace
 
-# CLI: full pipeline run (auto-detect platform + companion files)
+# CLI: full pipeline run
 subcellspace run data.csv -o outputs/my_run/
 
-# With specific backends
-subcellspace run data.csv --subcellular-analysis-backend scrin
-
-# CLI: database management
+# CLI: database management (legacy SQLite)
 subcellspace db export     # export to CSV + frontend JSON
 subcellspace db validate   # check DB integrity
 ```
@@ -41,96 +38,131 @@ frontend/src/                  Python src/
 ├── App.tsx         routes     ├── cli.py             argparse CLI
 ├── main.tsx        entry      ├── api_server.py      FastAPI (uvicorn)
 ├── api.ts          HTTP       ├── pipeline_engine.py  step runner
-├── pages/                     ├── registry.py        backend registry
-│   ├── HomePage.tsx           ├── io/                ingestion (cosmx,xenium,merfish)
-│   ├── ReportPage.tsx         ├── steps/             6 pipeline steps
-│   ├── DataBrowser.tsx        ├── database/          DB module
-│   ├── DataEditor.tsx         │   ├── schema.py      19-column schema
-│   └── BenchmarkPage.tsx      │   └── exporter.py     SQLite→CSV/JSON
-├── components/                ├── container.py       flat output generator
-├── types/datasets.ts          ├── html_report.py     HTML report
-└── styles.css                 └── evaluation/        layer metrics
+├── pages/                     ├── io/                ingestion (cosmx,xenium,merfish)
+│   ├── HomePage.tsx           ├── steps/             6 pipeline steps
+│   ├── ReportPage.tsx         ├── container.py       flat output generator
+│   ├── DataBrowser.tsx        ├── html_report.py     HTML report
+│   └── DataEditor.tsx         └── evaluation/        layer metrics
+├── components/
+├── types/datasets.ts
+└── styles.css
 
 config/
-├── pipeline.yaml              single unified config
+└── pipeline.yaml              single unified config
 
-data/                          scripts/
-├── datasets.db         ← NEW  └── setup-*.sh
-├── datasets.csv
-└── DATA_FORMATS.md
+data/
+├── datasets.csv               Non-GEO datasets (998 rows)
+├── datasets.db                Legacy SQLite (deprecated)
+├── DATA_FORMATS.md            Data format reference
+├── DATA_STATUS.md             Full status documentation
+├── cosmx_geo.csv              CosMx GEO database (1932 rows, 63 GSEs)
+├── merfish_geo.csv            MERFISH GEO database (2332 rows, 52 GSEs)
+├── xenium_geo.csv             Xenium GEO database (1745 rows, 162 GSEs)
+├── COSMX_PLAN.txt             CosMx GEO collection plan (65 GSEs)
+├── MERFISH_PLAN.txt           MERFISH GEO collection plan
+└── Xenium_PLAN.txt            Xenium GEO collection plan
+
+scripts/
+├── query_cosmx_geo.py         GEO API GSM expansion
+├── migrate_cosmx_geo.sh       Cluster data migration
+├── prepare_xenium_data.py     Batch preprocessing
+├── fix_nested_dirs.py         Fix nested directory issues
+├── fix_xenium_rename.py       Fix rename chain conflicts
+├── extract_merfish_tars.slurm Slurm tar extraction
+└── ...
 ```
 
 ---
 
-## 4. Database System (Current Development Focus)
+## 4. Database System
 
-### Schema: 19 columns, 5 categories
+### 4.1 Dual Database Architecture
 
-| Category | Columns |
-|----------|---------|
-| **Identity** | `id`, `project_id`, `platform`, `name` |
-| **Provenance** | `project_url`, `download_url`, `publication_doi`, `data_source` |
-| **Biological** | `species`, `tissue`, `disease_state` |
-| **Technical** | `spatial_resolution_um`, `gene_panel_size`, `estimated_cell_count`, `data_size_bytes`, `data_size_display`, `status` |
-| **Storage** | `local_path`, `file_name` |
+**Phase 1-4 (legacy):** Single `datasets.csv` (19 columns, SQLite-backed)
+**Phase 5 (current):** GEO data migrated out → per-platform `{platform}_geo.csv` files
 
-### ID numbering scheme
+| File | Purpose | Rows | Key |
+|------|---------|:----:|-----|
+| `datasets.csv` | Non-GEO metadata + frontend source | 998 | `id` (D/M/R prefix) |
+| `cosmx_geo.csv` | CosMx GEO datasets | 1932 | `GSE` + `sample_name` |
+| `merfish_geo.csv` | MERFISH GEO datasets | 801 | `GSE` + `GSM` |
+| `xenium_geo.csv` | Xenium GEO datasets | 1745 | `GSE` + `GSM` |
+
+### 4.2 Legacy datasets.csv Schema (13 columns)
+
+| Column | Description |
+|--------|-------------|
+| `id` | D/M/R prefixed ID (e.g. D0001, R0001, M0001) |
+| `project_id` | P-prefixed project ID |
+| `platform` | CosMx / MERFISH / Xenium |
+| `name` | Dataset name |
+| `project_url` | Source URL |
+| `download_url` | Data download URL |
+| `data_source` | Nanostring / Vizgen / 10x Genomics / GEO / Zenodo |
+| `species` | Homo sapiens / Mus musculus |
+| `tissue` | Tissue type |
+| `disease_state` | Disease condition |
+| `status` | ready / pending |
+| `local_path` | Cluster path |
+| `file_name` | Primary data file name |
+
+### 4.3 GEO CSV Schema (4 columns)
+
+All three `*_geo.csv` files share the same format:
+
+| Column | Description |
+|--------|-------------|
+| `GSE` | GEO Series accession (e.g. GSE234713) |
+| `name` | Dataset description from PLAN file |
+| `sample_name` | GSM accession **or** GSM range for merged datasets |
+| `status` | ready / pending |
+
+### 4.4 ID Numbering Scheme
 
 ```
-{D|M|R}{platform_digit:0=CosMx,1=Xenium}{seq:03d}  (MERFISH exception: D5xxx)
+datasets.csv (legacy, non-GEO only):
+  CosMx:    D0001-D0011  (Standard),  R0001-R0883  (Raw_Fragment),  M0001-M0004  (Merged)
+            P0001-P0013  (13 projects, continuous)
+  MERFISH:  D2001-D2018  (Vizgen),    P2001-P2008  (8 projects, continuous)
+  Xenium:   D1001-D1082  (10x Genomics),  P1001-P1045  (45 projects, continuous)
 ```
 
-| Prefix | Meaning | Platform digit | Meaning |
-|--------|---------|:---:|---------|
-| `D` | Standard | `0` | CosMx |
-| `M` | Merged | `1` | Xenium |
-│ `R` | Raw_Fragment | `2` | CosMx (fragment) |
+### 4.5 Current Data Stats
 
-`project_id` follows the same convention: `P{platform}{seq:03d}`.
+| Category | CosMx | MERFISH | Xenium | **Total** |
+|----------|------:|--------:|-------:|:---------:|
+| **datasets.csv** | 898 | 18 | 82 | **998** |
+| **GEO CSV rows** | 1932 | 801 | 1745 | **4478** |
+| **GEO CSV ready** | 53 | 6 | 1191 | **1250** |
+| **GEO CSV pending** | 1879 | 749 | 554 | **3182** |
+| **GEO CSV no_data** | 0 | 46 | 0 | **46** |
+| **GSEs** | 63 | 44 | 162 | **269** |
 
-> **MERFISH exception**: MERFISH originally used D2xxx/P2xxx IDs. After migration (2026-06-08), MERFISH now uses `D5xxx`/`P5xxx` to free D2xxx space for potential Xenium overflow. The platform digit `2` no longer applies to MERFISH; treat D5xxx as a reserved MERFISH block.
+### 4.6 Cluster Directory Layout
 
-> **Build note**: The database was built once from three platform-specific source CSVs (`database_info_*.csv`). Those source CSVs have since been removed; the canonical data is now `datasets.db` itself. The primary workflow for modifying data is the DataEditor UI, scripted updates (see §9), or the CSV round-trip workflow (`subcellspace db export` → edit → `subcellspace db import`).
+```
+/data3/yangxr002/
+├── CosMx/              (8 projects, non-GEO only)
+│   ├── P0001-D0010/    NanoString/Bruker public datasets
+│   └── P0011-D0011/    Zenodo (HGSOC)
+├── CosMx_GEO/          (23 GSEs, 55 samples)
+│   └── GSE*/{sample_name}/
+├── MERFISH/            (8 projects, non-GEO Vizgen)
+│   └── P2xxx/D2xxx/
+├── MERFISH_GEO/        (44 GSEs, sorted into GSM dirs)
+│   └── GSE*/GSM*/
+├── Xenium/             (6 projects, non-GEO 10x Genomics)
+│   └── P10xx/D10xx/
+└── Xenium_GEO/         (120 GSEs, 1195 samples)
+    └── GSE*/GSM*/
+```
 
-### Current data stats
-
-| Platform | Rows | Standard | Merged | Raw_Fragment |
-|----------|-----:|----------|--------|-------------|
-| CosMx    | 1069 | 62       | 8      | 999 |
-| Xenium   | 1501 | 1501     | 0      | 0 |
-| MERFISH  | 70    | 70       | 0      | 0 |
-| **Total**| 2641 | 1603     | 8      | 999 |
-
-> Xenium expanded from 53 → 350 → **1501 rows** (178 ready, 1323 pending from GEO extraction + GSM sorting). Most new rows have `local_path` set but lack metadata (GSE URL, cell count, etc.).
-
-### Frontend pages
+### 4.7 Frontend Pages
 
 | Route | Access | Function |
 |-------|--------|----------|
-| `/browser` | Always | Static table view: category-grouped headers, search, platform/status/type filters, multi-column sort, pagination (25/50/100/All), **Raw_Fragment hidden by default** |
-| `/editor` | **Dev only** | Full CRUD: add/delete rows, inline edit, batch delete, row reorder, search/filter/sort, pagination. Auto re-exports after each mutation. |
-
-### CLI commands
-
-```bash
-subcellspace db export --db data/datasets.db \
-                       --csv data/datasets.csv \
-                       --json frontend/public/datasets.json
-subcellspace db validate --db data/datasets.db
-```
-
-### API endpoints (for DataEditor)
-
-| Method | Path | Function |
-|--------|------|----------|
-| `GET` | `/api/db/datasets` | List all rows |
-| `POST` | `/api/db/datasets` | Add row (auto-assigns next id) |
-| `PUT` | `/api/db/datasets/{id}` | Update row |
-| `DELETE` | `/api/db/datasets/{id}` | Delete row |
-| `POST` | `/api/db/reorder` | Batch reassign IDs |
-| `POST` | `/api/db/export` | Re-export CSV + JSON |
-
-Every mutation auto-re-exports `datasets.csv` + `datasets.json`.
+| `/browser` | Always | Static table view from `datasets.json` |
+| `/editor` | **Dev only** | Full CRUD via `/api/db/*` endpoints |
 
 ---
 
@@ -143,90 +175,85 @@ Internet
     │
     ▼
 ┌─────────────────────────────┐
-│ bio-download (101.6.122.79) │  ← Jumpbox / download relay
-│ User: bio                   │     Has internet access for wget downloads
-│ Data path: /data/yangxrlab/ │     Stores downloaded GEO tarballs
+│ bio-download (101.6.122.79) │  ← Jumpbox (has internet)
+│ User: bio                   │     /data/yangxrlab/
 └──────────┬──────────────────┘
-           │ 192.168.1.1 (internal)
+           │ 192.168.1.1
            ▼
 ┌─────────────────────────────┐
 │ a-cluster (192.168.1.2)     │  ← Compute cluster (no internet)
-│ User: yangxr002             │     Runs SubCellSpace pipeline + SCRIN
-│ Home: /Share/home/yangxr002/│
-│ Work: .../zf-li23/          │     Your working directory (scrin_run)
-│ Data: /data3/yangxr002/     │     All datasets stored here
+│ User: yangxr002             │     /data3/yangxr002/
 └─────────────────────────────┘
 ```
 
-### SSH shortcuts (from `~/.bash_aliases`)
+### SSH Shortcuts
 
 ```bash
-lab            # → ssh a-cluster (cluster home)
-lab-work       # → ssh a-cluster-work (→ /Share/home/yangxr002/zf-li23/)
-lab-data       # → ssh a-cluster-data (→ /data3/yangxr002/)
-lab-dl         # → ssh bio-download (jumpbox)
-lab-dl-work    # → ssh bio-download-work (→ /data/yangxrlab/)
-lab-push FILE  # → scp through jumpbox to cluster workdir
+lab            # → ssh a-cluster
+lab-work       # → ssh a-cluster-work (work dir)
+lab-data       # → ssh a-cluster-data (→ /data3/)
+lab-dl         # → ssh bio-download
+lab-push FILE  # → scp through jumpbox to cluster
 lab-pull FILE  # → scp from cluster to local
 ```
 
-### Data directory layout on cluster (`/data3/yangxr002/`) — verified 2026-05-13
+### Data Transfer Rule
 
-```
-/data3/yangxr002/
-├── CosMx/                     (36 projects, P0001–P0036)
-│   ├── P0001/D0001/           (S0_tx_file.csv — some use new D/M/R IDs)
-│   ├── P0003/                 (689 FOV fragments under R0xxx IDs)
-│   └── P0031/                 (Pancreas — full NanoString output)
-├── Xenium/
-│   ├── P1001/D1001/  … P1028/D1053/    (28 projects, 53 datasets)
-│   └── *.tar × 37                       (GEO tarballs, pending extraction)
-├── MERFISH/
-│   ├── MERFISH_P002/                     (Moffitt_Hypothalamus.csv — not in DB)
-│   ├── MERFISH_P003/                     (not in DB)
-│   └── P5001/D5001/  … P5056/D5070/     (56 projects, 70 datasets — 8 original + 52 from GEO plan 2026-06-08)
-```
-
-### Download relay (jumpbox) — bio-download (`/data/yangxrlab/`)
-
-Contains miscellaneous lab data (`00.sh`, `01.RawData.zip`, `MERFISH/`, `cuttag/`, `revision/`). Xenium GEO tarballs (37 files) are stored on the cluster at `/data3/yangxr002/Xenium/*.tar`, not on the jumpbox.
-
-### Work directory on cluster (`/Share/home/yangxr002/zf-li23/`)
-
-Contains `scrin_run/` — SCRIN analysis scripts and Slurm job files:
-- `run_cluster_test_real.slurm`, `run_rescue_mem.slurm`, `run_rescue_time.slurm`
-- `scrin_targets.txt`, `parse_scrin_logs.py`, `network_stats.csv`
-
-### File transfer workflow
-
-```bash
-# Push local file to cluster
-lab-push path/to/file data    # → /data3/yangxr002/
-
-# Pull cluster file to local
-lab-pull /data3/yangxr002/CosMx/P0001/D0001/S0_tx_file.csv .
-```
+**Always pull from cluster side:** `yangxr002@a-cluster` can `scp bio@192.168.1.1:/data/...`. Reverse does NOT work.
 
 ---
 
 ## 6. Development Phases
 
 ### ✅ Phase 0-1: Database foundation
-- SQLite schema (19 cols, 5 categories)
-- ID numbering scheme: `{D|M|R}{platform}{seq}` encodes type + platform
-- Exporter (SQLite → CSV/JSON) + Importer (CSV → SQLite)
-- CLI integration (`subcellspace db export|import|validate`)
-- Name normalization, data type parsing, Xenium project merging
+Legacy SQLite + CSV (19 columns), ID numbering scheme, CLI integration.
 
-### ✅ Phase 2: Static DataBrowser
-- Loads from `frontend/public/datasets.json` (zero API dependency)
-- Category-grouped headers, priority column toggle
-- Search, platform/status/type filters, multi-column sort
-- Clickable URL links, row detail modal
-- **Raw_Fragment hidden by default** (999 fragment rows)
-- Pagination: 25/50/100/All
+### ✅ Phase 2-3: Frontend
+Static DataBrowser + dev-mode DataEditor with CRUD.
 
-### ✅ Phase 3: Dev-mode DataEditor
+### ✅ Phase 4: Pipeline simplification
+Single scverse-native pipeline, unified config, SCRIN as optional extra.
+
+### ✅ Phase 5: GEO Database Overhaul (2026-06-08)
+**Massive data layer restructure — key accomplishments:**
+
+**Xenium GEO rebuild:**
+- 162 GSEs, 1745 GSM rows (1191 ready, 554 pending)
+- `/data3/yangxr002/Xenium_GEO/` — 120 GSE dirs, 1195 sample dirs
+- Xenium IDs renumbered: P1001-P1045 (continuous, P1009 gap filled)
+- Dedup & GSM expansion via GEO API
+
+**MERFISH GEO database:**
+- `data/merfish_geo.csv`: 44 GSEs, 801 GSM rows (6 ready, 749 pending, 46 no_data)
+- `/data3/yangxr002/MERFISH_GEO/` — 44 GSE dirs, sorted into GSM subdirs
+- 3 duplicate GSEs removed (data contained in other GSEs)
+- MERFISH renumbered: D5/P5 → D2/P2 (back to original namespace)
+- Non-GEO Vizgen data (18 rows) restored to `datasets.csv`
+
+**CosMx GEO rebuild:**
+- `data/cosmx_geo.csv`: 63 GSEs, 1932 rows (53 ready, 1879 pending)
+- `/data3/yangxr002/CosMx_GEO/` — 23 GSE dirs, 55 sample dirs
+- 6 conflict GSEs resolved (GSM range naming for merged datasets)
+- GSE253474 fragments (116 R records) migrated to GEO format
+- CosMx renumbered: P0001-P0013 (continuous)
+
+**Legacy cleanup:**
+- `datasets.csv`: 2641 → **998 rows** (GEO data removed)
+- All three `{platform}_GEO/` directories created on cluster
+- Old SQLite database deprecated; GEO CSVs are primary
+
+**Lessons learned:**
+- Chain rename: always sort by descending ID to avoid nesting
+- Data transfer: pull from cluster side, never push from jumpbox
+- RDS files >15GB are impractical to parse remotely
+- CosMx merged datasets use GSM range naming (`GSMxxxx-GSMyyyy`)
+- MERFISH D5/P5 moved back to D2/P2 after Xenium renumbering freed D2 space
+
+### ⏳ Phase 6: Data completion
+- Download & extract 43 new CosMx GSEs (1879 pending)
+- Process MERFISH heterogeneous data formats (801 rows, 44 GSEs)
+- Fill in missing metadata for GEO entries
+- CI/CD, Docker, documentation cleanup
 - Route `/editor` only in `import.meta.env.DEV`
 - Full CRUD via `/api/db/*` endpoints
 - Inline editing (double-click cell), add/delete rows

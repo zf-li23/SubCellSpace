@@ -59,11 +59,28 @@ outputs/my_run/
 ## 项目结构
 
 ```
-src/           Python 管线
-config/        单一管线配置
-frontend/      React 浏览器
-tools/SCRIN/   可选：SCRIN
-data/          数据库 + 测试数据
+src/              Python 管线
+config/          单一管线配置 pipeline.yaml
+frontend/        React 浏览器（DataBrowser + DataEditor）
+tools/SCRIN/     可选：SCRIN 亚细胞分析
+data/            数据层（GEO CSV + 非GEO元数据 + 文档）
+scripts/         辅助脚本（迁移、查询、诊断）
 ```
+
+## 数据层架构
+
+SubCellSpace 采用 **双系统数据库架构**：
+
+- `data/datasets.csv` — 非 GEO 数据集元数据（998 行，13 列）
+- `data/{platform}_geo.csv` — 各平台 GEO 数据集索引（GSE + GSM 双主键，4 列）
+  - `cosmx_geo.csv`: 1932 行, 63 GSEs
+  - `merfish_geo.csv`: 801 行, 44 GSEs
+  - `xenium_geo.csv`: 1745 行, 162 GSEs
+
+集群数据分两条路径：
+- `/data3/yangxr002/{Platform}/` — 非 GEO 官方数据
+- `/data3/yangxr002/{Platform}_GEO/` — GEO 来源数据（GSE*/GSM* 结构）
+
+详细文档：`data/DATA_FORMATS.md`、`data/DATA_STATUS.md`、`AGENTS.md`
 
 MIT License

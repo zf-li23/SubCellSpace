@@ -1,203 +1,184 @@
 # Data Layer Status
 
-> Last updated: 2026-06-08 17:00
+> Last updated: 2026-06-08 21:30  
+> **Phase 5 complete** — All three platforms migrated to GSE/GSM-based GEO database system  
+> **Phase 6 in progress** — MERFISH data extraction and format normalization
 
 ---
 
-## 一、Xenium GEO — 已重建完成
+## Overview: Database Architecture
 
-### 流程总结
-
+### Before (Phase 1-4)
 ```
-1. 从 git commit 911a3bf 提取旧版 Xenium 数据（1501 行）
-   → 按 project_id 去重，保留有 GSE 编号的 → 168 个项目
-
-2. 通过 GEO API 查询每个 GSE 的 GSM 列表
-   → 将 pending 项目按 GSM 展开（41 项目 → 505 GSM 行）
-   → 将 ready 项目按 GSM 展开（105 项目 → 1054 GSM 行）
-   → 21 个不匹配项目由用户逐一定义处理方式
-
-3. 集群目录操作
-   a. 创建 /data3/yangxr002/Xenium_GEO/
-   b. 将 127 个 GEO 项目从 Xenium/ 移入
-   c. D* 目录重命名为 GSM*（1059 个）
-   d. 按 GSM 前缀拆分数据到独立目录（11 个项目）
-   e. 项目目录 P* 重命名为 GSE*（120 个）
-
-4. 最终验证
-   ├── 参考表: 1745 行（GSE + GSM 双主键）
-   │   ├── ready:  1191（均有 GSM 目录）
-   │   ├── pending: 554（已按 GEO 展开 GSM）
-   │   └── error:    0
-   ├── 集群 /data3/yangxr002/Xenium_GEO/
-   │   ├── 120 个 GSE* 项目目录
-   │   ├── 1193 个 GSM* 数据集目录
-   │   └── 0 个 D* / P* 残留
-   └── 参考文件: data/xenium_geo.csv
+Single SQLite + datasets.csv (2641 rows, 19 columns)
+├── CosMx:  1069 rows (62 Standard + 8 Merged + 999 Raw_Fragment)
+├── Xenium: 1501 rows (all GEO)
+└── MERFISH: 70 rows (18 non-GEO + 52 GEO)
 ```
 
-### 关键工具
-
-- `scripts/prepare_xenium_data.py` — 批量预处理（symlink + gunzip）
-- `scripts/fix_nested_dirs.py` — 修复嵌套目录（166 个）
-- `scripts/renumber_xenium.py` — 重编号 Xenium D ID
-- `scripts/fix_xenium_rename.py` — 正确重命名集群目录
-- `scripts/diagnose_xenium.py` — DB vs 集群一致性诊断
-- `scripts/apply_user_fixes.py` — 用户定义的特殊处理
-
----
-
-## 二、CosMx — 重建方案
-
-### 当前状态
-
-| 指标 | 值 |
-|------|-----|
-| 总行数 | 1070 |
-| Ready | 1065（63 Standard + 8 Merged + 999 Raw_Fragment） |
-| Pending | 5（D0005, D0006, D0008, D0009, D0010 — 无集群数据） |
-| GEO 来源 | 172 行 |
-| 集群目录 | /data3/yangxr002/CosMx/（33 个 P* 项目, 1056 D* 目录） |
-
-### 特点
-
-- **CosMx 数据结构不同**：每个 GSM 有独立的 `*_tx_file.csv`，已经按 GSM 命名
-- **ID 三重命名空间**：`D0xxx`（Standard）、`M0xxx`（Merged）、`R0xxx`（Raw_Fragment）
-- **行数 vs 目录数接近**：1065 ready vs 1056 目录（基本一致）
-- **已经有 CosMx_PLAN.txt**（需检查是否存在）
-
-### 重建步骤
-
+### After (Phase 5 — current)
 ```
-1. 创建 /data3/yangxr002/CosMx_GEO/
-2. 将 GEO 来源的 CosMx 项目移入（172 行）
-3. 用 GEO API 展开 pending 项目的 GSM
-4. 验证 ready 行 vs 集群目录一致性
-5. 参考 Xenium 流程重命名目录结构
+datasets.csv (998 rows, non-GEO only)
+├── CosMx:  898 rows (P0001-P0013, continuous)
+├── MERFISH: 18 rows (P2001-P2008, Vizgen)
+└── Xenium:  82 rows (P1001-P1045, continuous)
+
+GEO CSVs (GSE + GSM/sample_name dual-key)
+├── cosmx_geo.csv:  1932 rows, 63 GSEs (53 ready, 1879 pending)
+├── merfish_geo.csv:  801 rows, 44 GSEs (6 ready, 749 pending, 46 no_data)
+└── xenium_geo.csv: 1745 rows, 162 GSEs (1191 ready, 554 pending)
 ```
 
 ---
 
-## 三、MERFISH — 重建方案
+## 一、Xenium GEO — ✅ Complete
 
-### 当前状态
+### Summary
 
-| 指标 | 值 |
-|------|-----|
-| 总行数 | 70 |
-| Ready | 18（D5001-D5018, 已迁移到 D5xxx 命名空间） |
-| Pending | 52（D5019-D5070, 已按 GEO 展开） |
-| GEO 来源 | 0 行（data_source 未标记为 GEO） |
-| 集群目录 | /data3/yangxr002/MERFISH/ |
-
-### 特点
-
-- **ID 已迁移**：2026-06-08 已从 D2xxx 迁移到 D5xxx
-- **数据正在传输**：MERFISH batch 2 SCP 曾运行（PID 1443188），9 个 tar 文件 ~425GB
-- **4 个 GSE 下载失败**：GSE193760, GSE221106, GSE282127, GSE282950（0 字节 _RAW.tar）
-- **有 MERFISH_PLAN.txt**：52 GSE 条目
-
-### 重建步骤
-
-```
-1. 创建 /data3/yangxr002/MERFISH_GEO/
-2. 从 data/MERFISH_PLAN.txt 提取项目清单
-3. 已下载的 tar 文件需解压并分配 GSM 目录
-4. 验证 ready 行 vs 集群目录一致性
-5. 重命名目录为 GSE/GSM 结构
-```
-
----
-
-## 四、通用重建流程（三个平台通用）
-
-```
-1. 提取参考清单: 从旧版 commit 提取 project_id + GSE + name
-2. GEO API 展开:  用爬虫获取每个 GSE 的 GSM 列表
-3. 集群目录核对: 对比 ready 行数 vs 实际目录数
-4. 目录重命名:    D* → GSM*，P* → GSE*
-5. 数据拆分:      按 GSM 前缀将文件分配到独立 GSM 目录
-6. 参考表生成:    GSE + GSM 双主键，含 name + status
-7. 验证:          行数 = 目录数，格式规范，无残留 D/P 目录
-```
-GEO (NCBI)  →  bio-download (wget)  →  a-cluster (SCP)  →  Extract + Sort
-```
-
-### 1.3 Current Progress
-
-#### ✅ Completed (179 datasets)
-All transferred, extracted, and sorted into GSM-numbered subdirectories.
-
-#### 🔄 In Flight — Ready to SCP (3 files on bio-download, wget done)
-
-| GSE | Project | Size | Step Needed |
-|-----|---------|------|-------------|
-| GSE296053 | P1175 | 166G | SCP to cluster + extract |
-| GSE315243 | P1201 | 362G | SCP to cluster + extract |
-| GSE315435 | P1116 | 220G | SCP to cluster + extract |
-
-#### ⏳ Next Up (208 pending datasets)
-
----
-
-## 2. CosMx — Status
-
-### 2.1 Overview
-
-| Metric | Count |
+| Metric | Value |
 |--------|-------|
-| Total datasets in DB | 1070 |
-| Ready (has local_path, data on disk) | 1065 |
-| Pending (no local_path) | 5 |
-| Unique project IDs | 36 |
+| `data/xenium_geo.csv` | 1745 rows, 162 GSEs |
+| Ready | 1191 (data on disk) |
+| Pending | 554 (expanded via GEO API) |
+| Cluster dirs | `/data3/yangxr002/Xenium_GEO/` — 120 GSEs, ~1195 samples |
+| datasets.csv (non-GEO) | 82 rows, P1001-P1045 (continuous) |
 
-### 2.2 Pipeline Running
+### Key Operations
 
-**56 Slurm jobs submitted** (229945–230000, all PENDING on Yangxrlab partition):
-- CosMx GEO datasets only (data_source=GEO, excl. R-prefixed fragments)
-- Each: `polygon_intersect` + `scrin`, 4 CPU, 72h timeout
-- Jobs auto-queue on gpu01 (1 at a time)
-
-### 2.3 Pending Datasets (no GEO data)
-
-| ID | Project | Name | Notes |
-|----|---------|------|-------|
-| D0005 | P0005 | Human Whole Transcriptome Brain Dataset | Not GEO source |
-| D0006 | P0006 | Human Whole Transcriptome Breast Dataset | Not GEO source |
-| D0008 | P0008 | Human Whole Transcriptome Kidney Dataset | Not GEO source |
-| D0009 | P0009 | Human Whole Transcriptome Pancreas Dataset | Not GEO source |
-| D0010 | P0010 | Human Whole Transcriptome Skin Dataset | Not GEO source |
-
-All 1065 ready datasets verified: local_path ↔ cluster directories fully matched ✅
+1. **GEO API expansion**: 168 projects → 1745 GSM rows
+2. **Cluster migration**: 127 GEO projects from `Xenium/` to `Xenium_GEO/`
+3. **Directory rename**: D* → GSM*, P* → GSE* (1059 dirs)
+4. **ID renumbering**: Xenium projects P1001-P1045 (P1009 gap filled)
+5. **Key scripts**: `prepare_xenium_data.py`, `fix_nested_dirs.py`, `renumber_xenium.py`, `fix_xenium_rename.py`, `diagnose_xenium.py`
 
 ---
 
-## 3. MERFISH — Status
+## 二、CosMx GEO — ✅ Complete
 
-### 3.1 Overview
+### Summary
 
-| Metric | Count |
+| Metric | Value |
 |--------|-------|
-| Total datasets in DB | 18 |
-| Ready (has local_path, data on disk) | 17 |
-| Pending (no local_path) | 1 |
-| Unique project IDs | 8 |
+| `data/cosmx_geo.csv` | 1932 rows, 63 GSEs |
+| Ready | 53 (data on disk) |
+| Pending | 1879 (43 new GSEs not yet downloaded) |
+| Cluster dirs | `/data3/yangxr002/CosMx_GEO/` — 23 GSEs, 55 samples |
+| datasets.csv (non-GEO) | 898 rows, P0001-P0013 (continuous) |
 
-### 3.2 GEO Download in Progress
+### Conflict GSE Resolution
 
-52 MERFISH GSEs from `data/MERFISH_PLAN.txt` being downloaded to bio-download:
-- Script: `/data/yangxrlab/merfish_geo_downloads/download_geo_merfish.py`
-- Target: `_RAW.tar` only, with fallback to named supplementary files
-- Retry: 4 attempts/file, 5 loops, stall detection (30 min)
-- **12 tar files downloaded so far**, script running as PID 710734
+6 GSEs with merged samples resolved with **GSM range naming**:
 
-### 3.3 Pending Datasets
+| GSE | Sample Names | Merged GSMs |
+|-----|-------------|-------------|
+| GSE263791 | GSM8199188-GSM8199189 | 2 CosMx GSMs from GSE263793 |
+| GSE297091 | GSM8983566 | 1 CosMx GSM from GSE299256 |
+| GSE277782 | GSM8529618-GSM8529620, GSM8529621-GSM8529624 | 7 GSMs → 2 slides |
+| GSE282026 | GSM8634610-GSM8634614, GSM8634615-GSM8634619, GSM8634620-GSM8634622 | 13 GSMs → 3 slides |
+| GSE283625 | GSM8668172-GSM8668179 | 8 GSMs → 1 merged |
+| GSE289194 | 6 FOV ranges | 83 GSMs → 6 FOVs |
 
-| ID | Project | Name | Notes |
-|----|---------|------|-------|
-| D2003 | P2002 | Homo sapiens Colon dataset (Cancer) | Directory exists but empty (0 files) |
+GSE253474 (P0036): 116 R-fragments with TMA grouping resolved via R→GSM mapping:
+- TMA_A_8: GSM8021238-GSM8021269 (32) → M0005
+- TMA_A_9: GSM8021270-GSM8021301 (32) → M0006
+- TMA_B_10: GSM8021302-GSM8021327 (26) → M0007
+- TMA_B_9: GSM8021328-GSM8021353 (26) → M0008
+
+### Key Operations
+
+1. **GEO API expansion**: 65 GSEs from COSMX_PLAN.txt → 1932 rows
+2. **Cluster migration**: 21 GEO projects from `CosmMx/P*/D*/` to `CosMx_GEO/GSE*/sample_name/`
+3. **ID renumbering**: P0033→P0011 (D0063→D0011), P0034→P0012, P0035→P0013
+4. **datasets.csv cleanup**: 1070 → 898 rows (GEO removed)
+5. **Key scripts**: `query_cosmx_geo.py`, `migrate_cosmx_geo.sh`
 
 ---
+
+## 三、MERFISH GEO — 🔄 In Progress
+
+### Summary
+
+| Metric | Value |
+|--------|-------|
+| `data/merfish_geo.csv` | 801 rows, 44 GSEs |
+| Ready | 6 (GSE280177 first 6 GSMs) |
+| Pending | 749 (awaiting extraction/format conversion) |
+| no_data | 46 (5 GSEs failed download) |
+| Cluster dirs | `/data3/yangxr002/MERFISH_GEO/` — 44 GSEs, sorted into GSM dirs ✅ |
+
+### Tar Extraction Status
+
+| Phase | Count | Status |
+|-------|:-----:|--------|
+| Extracted, tar preserved | 47 | ✅ Done (Slurm 230864, 14 min) |
+| Duplicate GSEs removed | 3 | ✅ GSE202638→GSE202623, GSE220278→GSE303744, GSE273615→GSE273606 |
+| Failed download (no_data) | 5 | ❌ GSE193760, GSE221106, GSE282127, GSE282950, GSE333737 |
+| Redownloading | 1 | 🔄 GSE280177 (~100G+, wget running PID 1038920) |
+
+### Format Heterogeneity
+
+MERFISH GEO 数据格式高度不统一（44 GSE 中仅 ~15 个为标准 MERFISH 格式）：
+
+| 格式类别 | 数量 | 说明 |
+|---------|:----:|------|
+| MERFISH_full | ~15 | cell_by_gene + detected_transcripts + cell_metadata ✅ |
+| MERFISH_partial | ~10 | 缺少部分文件 ⚠️ |
+| 10x_like (barcodes+mtx) | 3 | 10x 格式，非 MERFISH ❌ |
+| Xenium_like (parquet) | 1 | Xenium 格式 ❌ |
+| OTHER (rds/zip/qs) | ~15 | 杂项格式，需逐个评估 ❌ |
+
+详细格式清单见 `data/DATA_FORMATS.md → §5 MERFISH GEO 格式异质性`。
+
+### Non-GEO Vizgen Data
+
+8 projects (18 datasets) restored from git history, renumbered D5→D2/P5→P2:
+- P2001–P2008: Vizgen public datasets (Breast, Colon, Liver, Lung, Ovary, Prostate, Skin, Uterine)
+
+---
+
+## 四、Cluster Directory Layout (Final State)
+
+```
+/data3/yangxr002/
+├── CosMx/                     (8 non-GEO projects)
+│   ├── P0001-D0001/           NanoString public datasets
+│   ├── P0007-D0007/
+│   └── P0011-D0011/           Zenodo (HGSOC)
+├── CosMx_GEO/                 (23 GSEs, 55 samples) ← New
+│   └── GSE*/sample_name/
+├── MERFISH/                   (8 non-GEO Vizgen projects)
+│   └── P2xxx/D2xxx/           ← Renamed from P5xxx/D5xxx
+├── MERFISH_GEO/               (47 GSEs, extracting) ← New
+│   └── GSE*/GSM*/
+├── Xenium/                    (6 non-GEO 10x Genomics)
+│   └── P10xx/D10xx/           ← Renumbered (P1009 gap filled)
+└── Xenium_GEO/                (120 GSEs, ~1195 samples) ← New
+    └── GSE*/GSM*/
+```
+
+---
+
+## 五、Pending Work
+
+### CosMx (43 new GSEs, 1879 pending)
+- Download `*_RAW.tar` from GEO to jumpbox
+- SCP to cluster `CosMx_GEO/`
+- Extract and organize into GSM/sample_name dirs
+- Many GSEs have mixed platforms (only some samples are CosMx)
+
+### MERFISH (37 tars extracting, 2332 pending)
+- Wait for Slurm job 230864 to complete
+- Verify extraction results (GSM dirs created)
+- Update `merfish_geo.csv` status (pending → ready)
+
+### Xenium (554 pending)
+- Download missing GEO tars
+- Extract and organize into GSM dirs
+
+### General
+- Rebuild `datasets.db` from updated `datasets.csv`
+- Update `frontend/public/datasets.json`
+- Clean up old `scripts/` (remove redundant/fix scripts)
 
 ## 4. Cluster Infrastructure
 
