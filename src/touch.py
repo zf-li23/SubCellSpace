@@ -44,23 +44,23 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "FOV 空间布局"},
     ],
     "xenium": [
-        {"pattern": "transcripts.csv*",    "required": True,  "name": "transcripts",
+        {"pattern": "*transcripts.csv*",    "required": True,  "name": "transcripts",
          "desc": "转录本坐标 (x_location, y_location, feature_name, cell_id)"},
-        {"pattern": "transcripts.parquet", "required": False, "name": "transcripts_parquet",
+        {"pattern": "*transcripts.parquet*","required": False, "name": "transcripts_parquet",
          "desc": "Parquet 格式转录本（替代 CSV）"},
-        {"pattern": "cell_boundaries.parquet",  "required": False, "name": "cell_boundaries",
+        {"pattern": "*cell_boundaries.parquet*",  "required": False, "name": "cell_boundaries",
          "desc": "细胞边界多边形 (cell_id, vertex_x, vertex_y)"},
-        {"pattern": "cell_boundaries.csv*",     "required": False, "name": "cell_boundaries_csv",
+        {"pattern": "*cell_boundaries.csv*",     "required": False, "name": "cell_boundaries_csv",
          "desc": "CSV 格式细胞边界"},
-        {"pattern": "nucleus_boundaries.parquet","required": False, "name": "nucleus_boundaries",
+        {"pattern": "*nucleus_boundaries.parquet*","required": False, "name": "nucleus_boundaries",
          "desc": "细胞核边界"},
-        {"pattern": "nucleus_boundaries.csv*",  "required": False, "name": "nucleus_boundaries_csv",
+        {"pattern": "*nucleus_boundaries.csv*",  "required": False, "name": "nucleus_boundaries_csv",
          "desc": "CSV 格式细胞核边界"},
-        {"pattern": "cell_feature_matrix.h5",   "required": False, "name": "expr_matrix",
+        {"pattern": "*cell_feature_matrix.h5",   "required": False, "name": "expr_matrix",
          "desc": "h5 表达矩阵 (scanpy read_10x_h5)"},
-        {"pattern": "cells.csv*",          "required": False, "name": "cell_metadata",
+        {"pattern": "*cells.csv*",          "required": False, "name": "cell_metadata",
          "desc": "细胞元数据"},
-        {"pattern": "gene_panel.json",     "required": False, "name": "gene_panel",
+        {"pattern": "*gene_panel.json*",     "required": False, "name": "gene_panel",
          "desc": "基因 panel 信息"},
     ],
     "merfish": [
@@ -315,12 +315,16 @@ def _detect_platform_from_files(data_dir: Path) -> str | None:
     if any("tx_file" in f for f in files_lower):
         return "cosmx"
 
-    # Xenium: 精确文件名 transcripts.csv 或 cell_feature_matrix.h5
-    # 不能用 "transcripts.csv" in f 因为 MERFISH 的 *_detected_transcripts.csv 也会匹配
-    xenium_names = {"transcripts.csv", "transcripts.csv.gz", "transcripts.parquet",
-                    "cell_feature_matrix.h5"}
-    if files_lower & xenium_names:
-        return "xenium"
+    # Xenium: 特征文件名（支持 GSM 前缀）
+    # 用 " in f" 而非精确匹配，因为 GEO 数据常为 GSMxxxx_transcripts.csv.gz
+    # MERFISH 的 detected_transcripts 已在前面优先匹配，不会误判
+    xenium_indicators = {"transcripts.csv", "transcripts.parquet",
+                         "cell_feature_matrix.h5",
+                         "cell_boundaries.parquet", "nucleus_boundaries.parquet"}
+    for f in files_lower:
+        for indicator in xenium_indicators:
+            if indicator in f:
+                return "xenium"
 
     # Generic: any .csv with spatial-looking name
     csv_files = [f for f in files_lower if f.endswith(".csv") or f.endswith(".csv.gz")]
