@@ -320,7 +320,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
         print(f"Error: Input file not found: {input_path}")
         return
 
-    output_dir = Path(args.output_dir)
+    # ── 输出目录：DB 查询时默认用数据目录，否则用 --output-dir ──
+    if dataset_meta and str(args.output_dir) == "outputs/pipeline_run":
+        # 未显式指定 -o，使用数据目录作为输出目录
+        data_dir = input_path if input_path.is_dir() else input_path.parent
+        output_dir = data_dir
+    else:
+        output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Detect if input is .zarr or raw data ──

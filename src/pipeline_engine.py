@@ -456,9 +456,11 @@ def run_pipeline(
         or settings.get("input_csv", "unknown")
     )
 
-    adata_path = output_dir / f"{cfg_name}.h5ad"
-    report_path = output_dir / f"{cfg_name}_report.json"
-    transcripts_path = output_dir / f"{cfg_name}_transcripts.parquet"
+    # 使用 subcellspace_ 前缀，明确输出归属
+    prefix = "subcellspace"
+    adata_path = output_dir / f"{prefix}_results.h5ad"
+    report_path = output_dir / f"{prefix}_report.json"
+    transcripts_path = output_dir / f"{prefix}_transcripts.parquet"
 
     # ── Write pipeline provenance to adata.uns ──
     ctx.adata.uns["pipeline"] = {
@@ -580,10 +582,27 @@ def run_pipeline(
     # ── Generate flat container files & interactive HTML report ──
     if not skip_container:
         try:
-            from .container import generate_container
+            # 将 dataset_meta 注入 report（合并 metadata.json 到 report.json）
             dataset_meta = sdata.attrs.get("dataset_meta")
-            generate_container(ctx.adata, report, output_dir, dataset_meta=dataset_meta)
-            report["outputs"]["metadata"] = str(output_dir / "metadata.json")
+            if dataset_meta:
+                report["dataset_meta"] = dataset_meta
+
+            # 添加前端友好的聚合摘要（原 metadata.json 的核心内容）
+            obs = ctx.adata.obs
+            report["analysis_summary"] = {
+                "clusters": (
+                    obs["cluster"].value_counts().sort_index().to_dict()
+                    if "cluster" in obs.columns else {}
+                ),
+                "cell_types": (
+                    obs["cell_type"].value_counts().sort_index().to_dict()
+                    if "cell_type" in obs.columns else {}
+                ),
+                "spatial_domains": (
+                    obs["spatial_domain"].value_counts().sort_index().to_dict()
+                    if "spatial_domain" in obs.columns else {}
+                ),
+            }
 
             from .html_report import generate_html_report
             html_path = generate_html_report(output_dir)
