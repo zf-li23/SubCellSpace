@@ -30,6 +30,20 @@ from .base import BaseIngestor, register_ingestor
 logger = logging.getLogger(__name__)
 
 
+def _read_csv_or_gz(path: Path, **kwargs: Any) -> pd.DataFrame:
+    """Read a CSV file, transparently handling .gz compression.
+
+    Unlike relying on pandas auto-detection, this explicitly checks
+    the file extension and uses ``gzip.open()`` when needed — matching
+    the CosMx ``_read_csv_or_gz`` pattern for consistency.
+    """
+    if path.suffix == ".gz":
+        import gzip
+        with gzip.open(path, "rt") as f:
+            return pd.read_csv(f, **kwargs)
+    return pd.read_csv(path, **kwargs)
+
+
 def _find_companion(tx_path: Path, pattern_suffix: str) -> Path | None:
     """Look for a companion file next to *tx_path* matching *pattern_suffix*."""
     tx_name = tx_path.name
@@ -122,7 +136,7 @@ class MERFISHIngestor(BaseIngestor):
             return None
         logger.info("[%s] Loading expression matrix from %s …", self.platform, path.name)
         try:
-            df = pd.read_csv(path)
+            df = _read_csv_or_gz(path)
             # First column is typically barcode/cell_id
             id_col = df.columns[0]
             df = df.set_index(id_col)
@@ -138,7 +152,7 @@ class MERFISHIngestor(BaseIngestor):
             return None
         logger.info("[%s] Loading cell metadata from %s …", self.platform, path.name)
         try:
-            return pd.read_csv(path)
+            return _read_csv_or_gz(path)
         except Exception as exc:
             logger.warning("[%s] Failed to load cell metadata: %s", self.platform, exc)
             return None
