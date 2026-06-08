@@ -33,7 +33,7 @@
    │   ├── 120 个 GSE* 项目目录
    │   ├── 1193 个 GSM* 数据集目录
    │   └── 0 个 D* / P* 残留
-   └── 参考文件: data/xenium_reference.csv
+   └── 参考文件: data/xenium_geo.csv
 ```
 
 ### 关键工具
