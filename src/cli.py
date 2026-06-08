@@ -61,8 +61,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--platform", type=str, default="auto",
                             help="Platform: auto (detect) / cosmx / xenium / merfish / stereoseq / generic")
     run_parser.add_argument("--output-dir", "-o", type=Path, default=Path("outputs/pipeline_run"))
-    run_parser.add_argument("--min-transcripts", type=int, default=10)
-    run_parser.add_argument("--min-genes", type=int, default=10)
+    run_parser.add_argument("--min-transcripts", type=int, default=None,
+                            help="Min transcripts per cell (default: 10, MERFISH: 3)")
+    run_parser.add_argument("--min-genes", type=int, default=None,
+                            help="Min genes per cell (default: 10, MERFISH: 2)")
     run_parser.add_argument("--cell-id-column", type=str, default=None,
                             help="Override cell ID column name for ingestion (e.g. 'fov' for MERFISH data)")
     run_parser.add_argument("--denoise-backend", choices=get_available_backends("denoise"), default=None)
@@ -363,7 +365,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
         sdata.attrs["dataset_meta"] = existing
 
     # ── Run pipeline ──
-    # Only pass non-None CLI args as overrides (so --config values take precedence)
+    # Apply platform-specific defaults for MERFISH (low transcript counts per cell)
+    platform_lower = platform.lower() if platform else "auto"
+    merfish_defaults: dict[str, Any] = {}
+    if platform_lower == "merfish":
+        merfish_defaults = {"min_transcripts": 3, "min_genes": 2}
+
+    # Build overrides: explicit CLI args take precedence, then platform defaults
     overrides: dict[str, Any] = {}
     for key in ("min_transcripts", "min_genes", "denoise_backend", "patchify_backend",
                 "segmentation_backend", "clustering_backend", "leiden_resolution",
@@ -373,6 +381,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
         val = getattr(args, key, None)
         if val is not None:
             overrides[key] = val
+        elif key in merfish_defaults:
+            overrides[key] = merfish_defaults[key]
     overrides["skip_container"] = getattr(args, "skip_container", False)
     overrides["dataset_meta"] = dataset_meta or {}
 
