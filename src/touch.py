@@ -236,6 +236,10 @@ def touch(input_path: str | Path, normalize: bool = False,
         if fpath not in known_paths:
             report.unexpected.append(f.name)
 
+    # ── Step 4b: 解析必备文件的替代方案 ──
+    # Xenium 的 transcripts.csv* 和 transcripts.parquet 是替代关系
+    _resolve_required_alternatives(report)
+
     # ── Step 5: 规范化（可选） ──
     if normalize and platform:
         _normalize_files(data_dir, report)
@@ -339,6 +343,31 @@ def _find_any_transcript(data_dir: Path) -> Path | None:
 def _resolve_glob(data_dir: Path, pattern: str) -> list[Path]:
     """解析 glob 模式，返回匹配的文件列表。"""
     return sorted(data_dir.glob(pattern))
+
+
+def _resolve_required_alternatives(report: TouchReport) -> None:
+    """处理必备文件的替代关系。
+
+    已知替代关系:
+    - Xenium: transcripts.csv* 和 transcripts_parquet 可以互相替代
+    """
+    # 找到必备 transcripts 的索引
+    tx_idx = next((i for i, f in enumerate(report.files)
+                   if f.required and f.name == "transcripts"), None)
+    tx_parq_idx = next((i for i, f in enumerate(report.files)
+                        if f.name == "transcripts_parquet"), None)
+
+    if tx_idx is not None and tx_parq_idx is not None:
+        tx = report.files[tx_idx]
+        tx_parq = report.files[tx_parq_idx]
+        # 如果 CSV 没找到但 parquet 找到了，视为满足
+        if not tx.found and tx_parq.found:
+            tx.found = True
+            tx.path = tx_parq.path
+            tx.size_bytes = tx_parq.size_bytes
+            tx.is_parquet = True
+            if tx.name in report.missing_required:
+                report.missing_required.remove(tx.name)
 
 
 # ── 规范化 ──────────────────────────────────────────────────────────
@@ -520,7 +549,10 @@ def format_report(report: TouchReport, verbose: bool = False) -> str:
     return "\n".join(lines)
 
 
-def _fmt_size(size: int) -> str:
+def _fmt_size(size: int | None) -> str:
+    """返回人类可读文件大小。处理 None 和 0。"""
+    if not size:
+        return ""
     for unit in ["B", "KB", "MB", "GB"]:
         if size < 1024:
             return f"{size:.0f}{unit}" if unit == "B" else f"{size:.1f}{unit}"
