@@ -188,6 +188,17 @@ class MERFISHIngestor(BaseIngestor):
         else:
             df = pd.read_csv(resolved)
 
+        # ── Auto-detect cell ID column ──
+        # Try known aliases in priority order; only set if not already overridden
+        if getattr(self, "_cell_id_column", None) is None:
+            cell_id_candidates = ["barcode_id", "cell_id", "cell_ID", "CellID",
+                                   "barcode", "cell", "cell_label"]
+            for candidate in cell_id_candidates:
+                if candidate in df.columns:
+                    self._cell_id_column = candidate
+                    logger.info("[%s] Auto-detected cell_id column: '%s'", self.platform, candidate)
+                    break
+
         has_long = {"global_x", "global_y"}.issubset(df.columns)
         has_short = {"x", "y"}.issubset(df.columns)
         if has_long and has_short:
