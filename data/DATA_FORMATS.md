@@ -209,21 +209,13 @@ SubCellSpace 映射：`gene → gene`, `global_x → x`, `global_y → y`。
 - `_cell_by_gene.csv` 是标准密集矩阵（非稀疏），对大数据集可能非常大
 - 第一列为细胞 ID，其余列为基因名称
 
-### 3.4 MERFISH GEO 格式异质性
+### 3.4 MERFISH GEO 格式策略
 
-MERFISH GEO 数据来源高度异构（44 个 GSE 中仅约 15 个为标准 MERFISH 格式）：
+MERFISH GEO 数据来源原本高度异构（曾达 8 种格式），但通过**删除不可用数据**实现了格式统一。
 
-| 格式类别 | GSE 数量 | 典型文件 | 处理难度 |
-|---------|:--------:|---------|:--------:|
-| **MERFISH_full** | ~15 | `*_detected_transcripts.csv` + `*_cell_by_gene.csv` + `*_cell_metadata.csv` | ✅ 直接可用 |
-| **MERFISH_partial** | ~10 | 仅 `*_cell_by_gene.csv` 或仅 `*_detected_transcripts.csv` | ⚠️ 需补充 |
-| **10x_like** | 3 | `*_barcodes.tsv` + `*_features.tsv` + `*_matrix.mtx` | ❌ 非 MERFISH |
-| **Xenium_like** | 1 | `*_transcripts.parquet` | ❌ Xenium 格式 |
-| **R_qs_format** | 1 | `*.qs.gz`（R 序列化格式） | ❌ 需 R 环境 |
-| **RDS** | 2 | `*.rds`（R 数据对象） | ❌ 需 R 环境 |
-| **nested_tar** | 3 | 内含 `.tar.gz` 的嵌套压缩包 | ❌ 需二次解压 |
-| **zip** | 2 | `*.zip`（非标准压缩格式） | ❌ 需特殊处理 |
-| **其他** | ~7 | `.h5`, `.tsv.gz`, `_obs.txt.gz`, `_celltypes.tsv.gz` 等 | ❌ 逐个评估
+**现状**：22 个 ready GSE 全部为 **MERFISH_full 格式**（包含 `detected_transcripts.csv` + `cell_by_gene.csv` + `cell_metadata.csv`）。仅有 cell-level 数据或其他杂项格式的 GSE 已全部从数据库和集群中删除。
+
+**格式化要求**：所有 MERFISH GEO 数据必须有 `detected_transcripts.csv`（转录本坐标文件），这是运行 SubCellSpace 管线的最低要求。仅有表达矩阵或元数据的数据不被收录。
 
 ### 3.4 spatialdata-io 桥接
 

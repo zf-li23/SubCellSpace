@@ -94,40 +94,31 @@ GSE253474 (P0036): 116 R-fragments with TMA grouping resolved via R→GSM mappin
 
 ---
 
-## 三、MERFISH GEO — 🔄 In Progress
+## 三、MERFISH GEO — ✅ 数据层构建完成
 
-### Summary
+### 最终状态
 
 | Metric | Value |
 |--------|-------|
-| `data/merfish_geo.csv` | 801 rows, 44 GSEs |
-| Ready | 6 (GSE280177 first 6 GSMs) |
-| Pending | 749 (awaiting extraction/format conversion) |
-| no_data | 46 (5 GSEs failed download) |
-| Cluster dirs | `/data3/yangxr002/MERFISH_GEO/` — 44 GSEs, sorted into GSM dirs ✅ |
+| `data/merfish_geo.csv` | **164 rows, 27 GSEs** |
+| Ready | **118 rows, 22 GSEs** — 全为 MERFISH_full 格式（有 detected_transcripts） |
+| Pending | 46 rows, 5 GSEs — 下载失败，待重试 |
+| Cluster dirs | `/data3/yangxr002/MERFISH_GEO/` — **22 GSEs**, ~950 GSM dirs ✅ |
 
-### Tar Extraction Status
+### 处理历程
 
-| Phase | Count | Status |
-|-------|:-----:|--------|
-| Extracted, tar preserved | 47 | ✅ Done (Slurm 230864, 14 min) |
-| Duplicate GSEs removed | 3 | ✅ GSE202638→GSE202623, GSE220278→GSE303744, GSE273615→GSE273606 |
-| Failed download (no_data) | 5 | ❌ GSE193760, GSE221106, GSE282127, GSE282950, GSE333737 |
-| Redownloading | 1 | 🔄 GSE280177 (~100G+, wget running PID 1038920) |
+| 阶段 | 操作 | 结果 |
+|------|------|------|
+| 下载 | 47 GSE 的 RAW.tar 下载到跳板机，SCP 到集群 | 5 个 GSE 下载失败 |
+| 解压 | Slurm 230864 批量解压（37 tars, 642 GB, 14 min） | 全部解压完成，tar 保留 |
+| 去重 | GSE202638→GSE202623, GSE220278→GSE303744, GSE273615→GSE273606 | 3 个重复 GSE 删除 |
+| 归类 | 按 GSM 编号归入子目录 | 44 GSE 全部整理完毕 |
+| 格式分析 | 逐 GSE 分析文件格式 | 8 种格式分类 |
+| **清理** | **删除 22 个无转录本数据的 GSE（637 行）** | **只剩 MERFISH_full** |
 
-### Format Heterogeneity
+### 格式统一策略
 
-MERFISH GEO 数据格式高度不统一（44 GSE 中仅 ~15 个为标准 MERFISH 格式）：
-
-| 格式类别 | 数量 | 说明 |
-|---------|:----:|------|
-| MERFISH_full | ~15 | cell_by_gene + detected_transcripts + cell_metadata ✅ |
-| MERFISH_partial | ~10 | 缺少部分文件 ⚠️ |
-| 10x_like (barcodes+mtx) | 3 | 10x 格式，非 MERFISH ❌ |
-| Xenium_like (parquet) | 1 | Xenium 格式 ❌ |
-| OTHER (rds/zip/qs) | ~15 | 杂项格式，需逐个评估 ❌ |
-
-详细格式清单见 `data/DATA_FORMATS.md → §5 MERFISH GEO 格式异质性`。
+通过**删除不可用数据**实现格式统一——所有 ready GSE 必须包含 `detected_transcripts.csv`（转录本坐标）。仅有 `cell_by_gene`/`counts`/其他杂项格式的 GSE 全部删除。
 
 ### Non-GEO Vizgen Data
 
