@@ -336,13 +336,39 @@ def _resolve_glob(data_dir: Path, pattern: str) -> list[Path]:
 
 
 def _normalize_files(data_dir: Path, report: TouchReport) -> None:
-    """规范化数据目录中的文件压缩状态。
+    """规范化数据目录中的文件压缩状态与文件清理。
 
     规则:
-    1. 如果同时存在 .csv 和 .csv.gz，删除 .csv（保留 .csv.gz）
-    2. 如果只有 .csv，将其压缩为 .csv.gz 并删除原文件
-    3. 如果只有 .csv.gz，保持不变
+    1. 删除所有以 . 开头的隐藏文件（解压产生的临时/残留文件）
+    2. Xenium: 解压 cell_feature_matrix.h5.gz → cell_feature_matrix.h5
+    3. 如果同时存在 .csv 和 .csv.gz，删除 .csv（保留 .csv.gz）
+    4. 如果只有 .csv，将其压缩为 .csv.gz 并删除原文件
+    5. 如果只有 .csv.gz，保持不变
     """
+    # ── 规则 1: 删除 dotfiles ──
+    for f in sorted(data_dir.iterdir()):
+        if f.is_file() and f.name.startswith("."):
+            f.unlink()
+            report.actions_taken.append(f"Deleted dotfile: {f.name}")
+
+    # ── 规则 2: Xenium cell_feature_matrix.h5 解压 ──
+    h5_gz = data_dir / "cell_feature_matrix.h5.gz"
+    h5 = data_dir / "cell_feature_matrix.h5"
+    if h5_gz.exists() and not h5.exists():
+        gz_size = h5_gz.stat().st_size
+        _gzip_decompress(h5_gz, h5)
+        h5_gz.unlink()
+        h5_size = h5.stat().st_size
+        report.actions_taken.append(
+            f"Decompressed cell_feature_matrix.h5.gz → cell_feature_matrix.h5 "
+            f"({gz_size:,}B → {h5_size:,}B)"
+        )
+    elif h5_gz.exists() and h5.exists():
+        # Both exist — keep .h5, remove .gz
+        h5_gz.unlink()
+        report.actions_taken.append(f"Removed redundant cell_feature_matrix.h5.gz (already have .h5)")
+
+    # ── 规则 3-5: CSV 压缩规范化 ──
     for status in report.files:
         if not status.found:
             continue
@@ -353,7 +379,7 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
                      if not str(c).endswith(".gz") and not str(c).endswith(".parquet")]
         gz_files = [c for c in candidates if str(c).endswith(".gz")]
 
-        # 规则 1: 同时有 .csv 和 .csv.gz → 删除 .csv
+        # 规则 3: 同时有 .csv 和 .csv.gz → 删除 .csv
         if csv_files and gz_files:
             for csv_f in csv_files:
                 csv_f.unlink()
@@ -361,7 +387,7 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
                     f"Removed redundant {csv_f.name} (already have .gz)"
                 )
 
-        # 规则 2: 只有 .csv → 压缩
+        # 规则 4: 只有 .csv → 压缩
         elif csv_files and not gz_files:
             for csv_f in csv_files:
                 gz_path = csv_f.parent / (csv_f.name + ".gz")
@@ -374,7 +400,7 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
                     f"({orig_size:,}B → {new_size:,}B, {new_size/orig_size*100:.0f}%)"
                 )
 
-        # 规则 3: 只有 .csv.gz → 不动
+        # 规则 5: 只有 .csv.gz → 不动
         # (nothing to do)
 
     # 更新文件状态中的冗余标记
@@ -393,7 +419,14 @@ def _gzip_compress(src: Path, dst: Path) -> None:
     """将文件 gzip 压缩。"""
     with open(src, "rb") as f_in:
         with gzip.open(dst, "wb") as f_out:
-            shutil.copyfileobj(f_in)
+            shutil.copyfileobj(f_in, f_out)
+
+
+def _gzip_decompress(src: Path, dst: Path) -> None:
+    """将 gzip 文件解压。"""
+    with gzip.open(src, "rb") as f_in:
+        with open(dst, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
 
 
 # ── 格式化输出 ──────────────────────────────────────────────────────
