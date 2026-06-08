@@ -155,8 +155,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── Dataset touch (integrity check & normalization) ────────────
     touch_parser = subparsers.add_parser("touch", help="Check dataset file integrity and normalize compression")
-    touch_parser.add_argument("input_path", type=str,
-                              help="Dataset directory, DB ID (D0059), or GEO (GSE234713/GSM7473682)")
+    touch_parser.add_argument("input_path", type=str, nargs="?", default=None,
+                              help="Dataset directory, DB ID (D0059), or GEO (GSE234713/GSM7473682). "
+                                   "Omit to scan all ready GEO datasets from the database.")
     touch_parser.add_argument("--normalize", action="store_true",
                               help="Normalize: compress .csv → .csv.gz, remove redundant .csv")
     touch_parser.add_argument("--json", action="store_true", help="Print report as JSON to stdout")
@@ -693,8 +694,15 @@ def _cmd_touch(args: argparse.Namespace) -> None:
 
     from .touch import touch, format_report
 
+    input_path = getattr(args, "input_path", None)
+
+    if input_path is None:
+        # ── 无参模式：扫描所有 ready GEO 数据集 ──
+        _cmd_touch_all(args)
+        return
+
     report = touch(
-        args.input_path,
+        input_path,
         normalize=getattr(args, "normalize", False),
         platform_override=getattr(args, "platform", None),
     )
@@ -719,6 +727,85 @@ def _cmd_touch(args: argparse.Namespace) -> None:
     # ── Print human-readable summary ──
     print(format_report(report, verbose=getattr(args, "verbose", False)))
     print(f"\n  [report saved] {output_path}")
+
+
+def _cmd_touch_all(args: argparse.Namespace) -> None:
+    """扫描所有 ready GEO 数据集并逐个 touch。"""
+    from pathlib import Path as _Path
+    from .database.resolver import list_datasets
+    from .touch import touch
+    import time as _time
+
+    normalize = getattr(args, "normalize", False)
+    platform_filter = getattr(args, "platform", None)
+
+    # 收集所有 ready GEO 数据集
+    all_ready = []
+    for plat in ["CosMx", "Xenium", "MERFISH"]:
+        if platform_filter and plat.lower() != platform_filter:
+            continue
+        ready = [d for d in list_datasets(platform=plat, status="ready")
+                 if d.source.endswith("_geo") and d.resolved_path]
+        all_ready.extend(ready)
+        print(f"  {plat}: {len(ready)} ready GEO datasets")
+
+    if not all_ready:
+        print("No ready GEO datasets found.")
+        return
+
+    print(f"\n  Total: {len(all_ready)} datasets to scan")
+    print(f"  {'─' * 60}")
+
+    # 逐个 touch
+    summary_path = _Path("touch_summary.json")
+    results = []
+    for i, ds in enumerate(all_ready, 1):
+        path = ds.resolved_path
+        label = f"{ds.gse}/{ds.gsm}" if ds.gse else ds.id or path
+        print(f"  [{i}/{len(all_ready)}] {label} ...", end=" ", flush=True)
+
+        try:
+            report = touch(
+                path,
+                normalize=normalize,
+                platform_override=platform_filter or None,
+            )
+            s = report.to_dict()["summary"]
+            ok = s["required_found"] > 0
+            results.append({
+                "path": path, "gse": ds.gse, "gsm": ds.gsm,
+                "platform": report.platform,
+                "required_found": s["required_found"],
+                "total_required": s["total_files"],
+                "optional_found": s["optional_found"],
+                "unexpected": s["unexpected"],
+                "missing": report.missing_required,
+                "ok": ok,
+            })
+            print(f"{'✅' if ok else '⚠️'}  req={s['required_found']}/{s['total_files']} "
+                  f"opt={s['optional_found']} unexp={s['unexpected']}")
+        except Exception as e:
+            results.append({
+                "path": path, "gse": ds.gse, "gsm": ds.gsm,
+                "platform": None, "ok": False, "error": str(e),
+            })
+            print(f"❌ ERROR: {e}")
+
+        # 保存增量结果
+        summary_path.write_text(
+            json.dumps(results, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+
+    # 汇总
+    ok_count = sum(1 for r in results if r.get("ok"))
+    fail_count = sum(1 for r in results if not r.get("ok"))
+    err_count = sum(1 for r in results if r.get("error"))
+
+    print(f"\n  {'═' * 60}")
+    print(f"  Scan complete: {len(results)} datasets")
+    print(f"  ✅ OK: {ok_count} | ⚠️  No data: {fail_count} | ❌ Errors: {err_count}")
+    print(f"  Full results: {summary_path.resolve()}")
 
 
 def _cmd_db(args: argparse.Namespace) -> None:
