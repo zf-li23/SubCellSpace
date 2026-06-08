@@ -301,12 +301,12 @@ def run_pipeline(
                     continue  # already resolved as the backend arg
                 step_params[param_name] = value
         # Generic pipeline-level params that map to the analysis step
+        # CLI overrides and platform defaults take precedence over YAML
         if step_cfg.name == "analysis":
             for generic_param in ("min_transcripts", "min_genes", "clustering_backend"):
-                if generic_param in overrides and generic_param not in step_params:
+                if generic_param in overrides:
                     step_params[generic_param] = overrides[generic_param]
                 elif generic_param not in step_params:
-                    # Also check settings overrides (not just kwargs)
                     val = settings.get(generic_param)
                     if val is not None:
                         step_params[generic_param] = val
