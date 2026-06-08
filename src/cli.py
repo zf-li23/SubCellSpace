@@ -52,9 +52,10 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser.add_argument("--cell-id-column", type=str, default=None,
                                 help="Override cell ID column name (useful for MERFISH data where barcode_id ≠ cell_id)")
 
-    # ── Run pipeline (accepts .zarr or raw data file) ───────────────
+    # ── Run pipeline (accepts .zarr, raw data file, or DB ID) ──────
     run_parser = subparsers.add_parser("run", help="Run full pipeline: auto-ingest → analyze → export")
-    run_parser.add_argument("input_path", type=Path, help="Path to .zarr or raw data file (.csv/.parquet/.gem)")
+    run_parser.add_argument("input_path", type=str,
+                            help="Path to .zarr/raw data, or DB ID (D0059 / GSE234713 / GSE234713/GSM7473682)")
     run_parser.add_argument("--platform", type=str, default="auto",
                             help="Platform: auto (detect) / cosmx / xenium / merfish / stereoseq / generic")
     run_parser.add_argument("--output-dir", "-o", type=Path, default=Path("outputs/pipeline_run"))
@@ -108,6 +109,14 @@ def build_parser() -> argparse.ArgumentParser:
     db_import.add_argument("--csv", type=Path, default=Path("data/datasets.csv"), help="CSV to import")
     db_import.add_argument("--db", type=Path, default=Path("data/datasets.db"), help="SQLite database path")
     db_import.add_argument("--no-backup", action="store_true", help="Skip creating a .bak backup")
+
+    # ── Database lookup / GEO query ─────────────────────────────────
+    lookup_parser = subparsers.add_parser("lookup", help="Look up dataset by ID, GSE, or GSM across all data sources")
+    lookup_parser.add_argument("query", type=str,
+                               help="D0059 / GSE234713 / GSE234713/GSM7473682 / GSM7473682")
+    lookup_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    lookup_parser.add_argument("--resolve", action="store_true",
+                               help="Show resolved local path (file path for pipeline input)")
 
     # ── Patchify: Snakemake parallel scheduler ──────────────────────
     patchify_run = subparsers.add_parser("patchify-run", help="Run patchify via Snakemake parallel scheduler")
@@ -194,11 +203,12 @@ def _cmd_ingest(args: argparse.Namespace) -> None:
 def _cmd_run(args: argparse.Namespace) -> None:
     """Handle the ``subcellspace run`` command.
 
-    Accepts either a .zarr (pre-ingested) or a raw data file.
-    For raw files: auto-detect platform → ingest → run → export.
+    Accepts either a .zarr (pre-ingested), a raw data file,
+    or a database ID (D0059 / GSE234713 / GSE234713/GSM7473682).
     """
     import spatialdata
 
+    from .database.resolver import lookup as db_lookup
     from .pipeline_engine import run_pipeline
 
     # ── Load config file if specified ──
@@ -213,8 +223,38 @@ def _cmd_run(args: argparse.Namespace) -> None:
         print(f"Loaded config: {config_path} \u2192 pipeline '{settings_obj.pipeline.name}'")
 
 
-    input_path = Path(args.input_path)
-    if not input_path.exists():
+    input_raw = str(args.input_path)
+    input_path = Path(input_raw)
+
+    # ── Step 1: Try DB lookup if input is not a regular file/dir ──
+    platform = args.platform
+    if not input_path.exists() and not input_raw.startswith("/"):
+        # Looks like a DB query (D0059 / GSE234713 / GSE234713/GSM7473682)
+        results = db_lookup(input_raw)
+        if not results:
+            print(f"Error: '{input_raw}' not found as file or database entry.")
+            return
+
+        info = results[0]
+        # GSE-level query returns multiple rows — pick the first ready one, or list
+        if info.status != "ready":
+            print(f"Warning: '{input_raw}' status = '{info.status}', skipping.")
+            return
+
+        resolved = info.resolved_path
+        if not resolved:
+            print(f"Error: '{input_raw}' has no local path and cannot be resolved.")
+            return
+
+        input_path = Path(resolved)
+        platform = platform if platform != "auto" else (info.platform or "auto").lower()
+        print(f"Resolved '{input_raw}' → {input_path} (platform={platform})")
+
+        # If there are multiple ready results (GSE query), show them
+        if len(results) > 1:
+            ready_count = sum(1 for r in results if r.status == "ready")
+            print(f"  ({len(results)} total entries, {ready_count} ready — running first)")
+    elif not input_path.exists():
         print(f"Error: Input file not found: {input_path}")
         return
 
@@ -230,7 +270,6 @@ def _cmd_run(args: argparse.Namespace) -> None:
         sdata = spatialdata.read_zarr(input_path)
     else:
         # ── Raw data: auto-detect platform, ingest ──
-        platform = args.platform
         if platform == "auto":
             platform = detect_platform(input_path)
             print(f"Auto-detected platform: {platform}")
@@ -504,9 +543,75 @@ def main() -> None:
     if args.command == "db":
         _cmd_db(args)
         return
-
+    if args.command == "lookup":
+        _cmd_lookup(args)
+        return
 
 # ── Database command handlers ────────────────────────────────────────
+
+
+def _cmd_lookup(args: argparse.Namespace) -> None:
+    """Handle ``subcellspace lookup`` — query datasets / GEO databases."""
+    from .database.resolver import lookup as db_lookup
+
+    results = db_lookup(args.query)
+
+    if not results:
+        print(f"No results for '{args.query}'")
+        return
+
+    if args.resolve:
+        # Show resolved paths
+        for r in results:
+            path = r.resolved_path
+            src_tag = f"[{r.source}]"
+            if r.id:
+                src_tag += f" {r.id}"
+            if r.gse:
+                src_tag += f" {r.gse}"
+                if r.gsm:
+                    src_tag += f"/{r.gsm}"
+            status_tag = r.status or "?"
+            if path:
+                print(f"  {src_tag:45s} {status_tag:8s} {path}")
+            else:
+                print(f"  {src_tag:45s} {status_tag:8s} (no local path)")
+        return
+
+    if args.json:
+        import json
+        print(json.dumps([r.to_dict() for r in results], ensure_ascii=False, indent=2,
+                         default=str))
+        return
+
+    # Text output
+    print(f"Found {len(results)} result(s) for '{args.query}':")
+    print()
+    for r in results:
+        src = r.source
+        rid = r.id or ""
+        gse = r.gse or ""
+        gsm = r.gsm or ""
+        plat = r.platform or ""
+        name = (r.name or "")[:60]
+        st = r.status or "?"
+
+        if rid:
+            label = f"{rid} ({plat})"
+        elif gse and gsm:
+            label = f"{gse}/{gsm} ({plat})"
+        elif gse:
+            label = f"{gse} ({plat})"
+        else:
+            label = f"({plat})"
+
+        print(f"  [{src:12s}] {label:35s} status={st}")
+        if name:
+            print(f"  {'':14s} {name}")
+        path = r.resolved_path
+        if path:
+            print(f"  {'':14s} path: {path}")
+        print()
 
 
 def _cmd_db(args: argparse.Namespace) -> None:
