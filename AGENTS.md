@@ -452,20 +452,18 @@ rsync -avz -e "ssh -J bio-download" \
 
 ---
 
-## 12. Database & Cluster Operations — Lessons Learned (2026-06-08)
+## 11. Database & Cluster Operations — Lessons Learned (2026-06-08)
 
-### 12.1 ID Namespace Rules
+### 11.1 ID Namespace Rules
 
 | Namespace | Platform | Rule |
 |-----------|----------|------|
 | `D0xxx` | CosMx | Fixed, do not modify |
 | `D1xxx~D2xxx` | Xenium | Sequential by project_id |
-| `D5xxx` | MERFISH | Migrated from D2xxx (2026-06-08) |
+| `D2xxx` | MERFISH (Vizgen) | Non-GEO Vizgen data, D2001-D2018 |
 | `Mxxx` / `Rxxx` | Any | **Merged** / **Raw_Fragment** — special semantic meaning, do NOT renumber as D IDs |
 
-**Critical:** `D5xxx` is exclusively MERFISH. Never assign Xenium rows to D5xxx.
-
-### 12.2 Directory Renaming — Chain Conflict Prevention
+### 11.2 Directory Renaming — Chain Conflict Prevention
 
 When renaming cluster directories in bulk, **always sort by old D ID in descending order** (largest → smallest):
 
@@ -480,7 +478,7 @@ When renaming cluster directories in bulk, **always sort by old D ID in descendi
 
 This avoids the `mv` creating nested subdirectories (e.g., `D1227/D1212/D1185`).
 
-### 12.3 Row Operations — Golden Rules
+### 11.3 Row Operations — Golden Rules
 
 1. **Never create new rows for orphans** if they can be matched to existing pending rows. Always match 1:1 by project_id first.
 2. **Always preserve non-target platforms.** When modifying Xenium, never touch CosMx or MERFISH rows.
@@ -488,7 +486,7 @@ This avoids the `mv` creating nested subdirectories (e.g., `D1227/D1212/D1185`).
 4. **After any rename: touch ALL paths** and verify 0 pending before committing.
 5. **Use `git show <commit>:data/datasets.csv`** as a reliable reference when recovering lost data.
 
-### 12.4 Recovery Workflow
+### 11.4 Recovery Workflow
 
 When cluster directories and CSV get out of sync:
 
@@ -501,7 +499,7 @@ When cluster directories and CSV get out of sync:
 6. Rename dirs descending → touch → rebuild DB → commit
 ```
 
-### 12.5 Reference Commits
+### 11.5 Reference Commits
 
 | Commit | Description | When to use |
 |--------|-------------|-------------|
@@ -509,7 +507,7 @@ When cluster directories and CSV get out of sync:
 | `c7368c1` | Post-GSM-expansion (has D5xxx bug) | Reference only — D IDs partially wrong |
 | `4d01fa1` | Earliest Xenium GEO data | Ultimate fallback |
 
-### 12.6 Data Transfer Direction
+### 11.6 Data Transfer Direction
 
 ```
 # ✅ Correct: FROM cluster, PULL from jumpbox (internal network)
@@ -525,7 +523,7 @@ The `bio` user on the jumpbox does NOT have SSH key access to `yangxr002` on the
 
 ---
 
-## 11. Data Transfer Between Jumpbox and Cluster
+## 12. Data Transfer Between Jumpbox and Cluster
 
 ### Topology
 
