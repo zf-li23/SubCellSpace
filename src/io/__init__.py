@@ -105,6 +105,31 @@ def detect_platform(input_path: str | Path) -> str:
     if not resolved.exists():
         raise DataLoadError(f"Input file does not exist: {resolved}", path=resolved)
 
+    # ── If input is a directory, search for transcript files inside ──
+    if resolved.is_dir():
+        # Priority order: platform-specific patterns first, then generic CSV
+        patterns = [
+            "*tx_file.csv*",            # CosMx
+            "*detected_transcripts.csv*",  # MERFISH
+            "transcripts.csv*",         # Xenium
+            "transcripts.parquet",      # Xenium parquet
+            "*.csv", "*.csv.gz",        # Generic fallback
+        ]
+        for pattern in patterns:
+            candidates = sorted(resolved.glob(pattern))
+            if candidates:
+                # Try detecting platform from the first match
+                try:
+                    return detect_platform(candidates[0])
+                except DataLoadError:
+                    continue  # try next pattern
+        raise DataLoadError(
+            f"Cannot auto-detect platform for directory {resolved}. "
+            f"No recognized transcript file found. "
+            f"Please specify --platform explicitly.",
+            path=resolved,
+        )
+
     suffix = resolved.suffix.lower()
 
     # 1. By extension — strongest signal

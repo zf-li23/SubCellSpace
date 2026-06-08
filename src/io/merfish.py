@@ -72,7 +72,7 @@ class MERFISHIngestor(BaseIngestor):
 
     def ingest(self, input_path: str | Path) -> Any:
         input_path = Path(input_path)
-        tx_path = self._resolve_path(input_path)
+        tx_path = self._resolve_tx_path(input_path)
 
         # Parse transcripts
         logger.info("[%s] Parsing transcripts from %s …", self.platform, tx_path)
@@ -127,6 +127,26 @@ class MERFISHIngestor(BaseIngestor):
             if any(sdata.attrs['companion_files'].values()) else "",
         )
         return sdata
+
+    # ── Path resolution ───────────────────────────────────────────
+
+    def _resolve_tx_path(self, input_path: Path) -> Path:
+        """如果输入是目录，在其中搜索 detected_transcripts 文件。"""
+        if input_path.is_dir():
+            candidates = list(input_path.glob("*detected_transcripts.csv*"))
+            if not candidates:
+                # Fallback: any CSV with transcript-like name
+                candidates = list(input_path.glob("*transcripts.csv*"))
+            if not candidates:
+                # Fallback: any CSV
+                candidates = list(input_path.glob("*.csv*"))
+            if not candidates:
+                raise DataLoadError(
+                    f"No transcript file found in directory {input_path}",
+                    platform=self.platform, path=input_path,
+                )
+            return candidates[0]
+        return self._resolve_path(input_path)
 
     # ── Companion file loaders ──────────────────────────────────────
 
