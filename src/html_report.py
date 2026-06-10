@@ -483,7 +483,7 @@ def _build_data(adata, report: dict) -> dict:
             logger.warning("Failed to build SCRIN network: %s", exc)
 
     # ── Histograms with outlier-capped axes ──
-    def _hist(values, color=COLOR_HISTOGRAM, xlabel="", ylabel="Cells", cap_pct=98):
+    def _hist(values, color=COLOR_HISTOGRAM, xlabel="", ylabel="Cells", cap_pct=99.5):
         """Plot histogram with x-axis capped at *cap_pct* percentile.
 
         Values beyond the cap are grouped into the final "> threshold" bin,
@@ -519,9 +519,13 @@ def _build_data(adata, report: dict) -> dict:
             # Integer data with large range: use a fixed-width integer bin
             # width so every bin covers the SAME number of integer values.
             # This eliminates all periodicity aliasing artifacts.
+            # Use even bin_width to avoid odd/even value count oscillation
+            # when data only contains even values (e.g. CosMx total_counts).
             n_data = int(vmax - vmin + 1)          # number of unique integer values
             n_bins = min(80, _optimal_bins(capped))  # desired number of bins
-            bin_width = max(1, int(np.ceil(n_data / n_bins)))  # ceil ensures ≥1
+            bin_width = max(2, int(np.ceil(n_data / n_bins)))  # ceil ensures ≥1
+            if bin_width % 2 == 1:
+                bin_width += 1  # 偶数宽度，消除奇偶交替伪影
             # Build integer-aligned edges with consistent width
             edges = np.arange(int(vmin), int(vmax) + bin_width + 1, bin_width)
             h, _ = np.histogram(capped, bins=edges)
@@ -827,7 +831,7 @@ def _render_tabs_html() -> str:
 
 
 def generate_html_report(output_dir: str | Path) -> Path:
-    """Generate a Xenium-style HTML report from pipeline output."""
+    """Generate a SubCellSpace HTML report from pipeline output."""
     output_dir = Path(output_dir)
     if not output_dir.exists():
         raise FileNotFoundError(f"Output directory not found: {output_dir}")
@@ -877,5 +881,5 @@ const data = {data_json};
 
     html_path = output_dir / "subcellspace_report.html"
     html_path.write_text(html, encoding="utf-8")
-    logger.info("Xenium-style HTML report: %s (%d KB)", html_path, html_path.stat().st_size // 1024)
+    logger.info("SubCellSpace HTML report: %s (%d KB)", html_path, html_path.stat().st_size // 1024)
     return html_path
