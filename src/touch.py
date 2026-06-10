@@ -22,6 +22,10 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+# ── subcellspace 前缀 ──────────────────────────────────────────────
+# 所有 subcellspace 生成的文件使用此前缀，touch 会忽略此类文件
+SUBCELLPREFIX = "subcellspace_"
+
 # ── 平台文件清单 ────────────────────────────────────────────────────
 # 每个条目定义：文件模式、是否为必要、名字、说明
 #
@@ -40,7 +44,7 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "预计算表达矩阵 (fov, cell_ID + 基因列)"},
         {"pattern": "*_metadata_file*",   "required": False, "name": "cell_metadata",
          "desc": "细胞级元数据 (cell_id + 注释列)"},
-        {"pattern": "*_fov_positions*",   "required": False, "name": "fov_positions",
+        {"pattern": "*_fov_position*",   "required": False, "name": "fov_positions",
          "desc": "FOV 空间布局"},
     ],
     "xenium": [
@@ -236,6 +240,9 @@ def touch(input_path: str | Path, normalize: bool = False,
         fname = f.name.lower()
         if any(fname.endswith(ext) for ext in (".tar", ".tar.gz", ".zip", ".zarr.zip")):
             continue  # archive files — known but not for ingestion
+        # Skip subcellspace-generated files
+        if f.name.startswith(SUBCELLPREFIX):
+            continue
         if fpath not in known_paths:
             report.unexpected.append(f.name)
 
@@ -407,12 +414,12 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
     # ── 规则 2: 为 GEO 数据集的文件添加 GSM 前缀 ──
     # 如果目录名以 GSM 开头，但数据文件没有 GSM 前缀，
     # 则重命名文件使其包含 GSM 前缀，增强 Pipeline 鲁棒性。
+    # 跳过 subcellspace_* 文件（pipeline 输出/报告，不应被重命名）。
     dir_name = data_dir.name
     gsm_prefix = None
     if dir_name.startswith("GSM"):
         gsm_prefix = dir_name
     else:
-        # Try to extract GSM from parent directory
         import re as _re
         parent = data_dir.parent
         if parent.name.startswith("GSE"):
@@ -422,6 +429,9 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
     if gsm_prefix:
         for f in sorted(data_dir.iterdir()):
             if not f.is_file():
+                continue
+            # Skip subcellspace-generated files
+            if f.name.startswith(SUBCELLPREFIX):
                 continue
             # Skip files that already have the GSM prefix
             if f.name.startswith(gsm_prefix):

@@ -164,7 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
                               help="Normalize: compress .csv → .csv.gz, remove redundant .csv")
     touch_parser.add_argument("--json", action="store_true", help="Print report as JSON to stdout")
     touch_parser.add_argument("--output", type=Path, default=None,
-                              help="Save touch_report.json to this path (default: <input_dir>/touch_report.json)")
+                              help="Save report to this path (default: <input_dir>/subcellspace_touch_report.json)")
     touch_parser.add_argument("--verbose", action="store_true", help="Show all files including missing optional")
     touch_parser.add_argument("--platform", type=str, default=None,
                               help="Force platform (cosmx / xenium / merfish), skip auto-detection")
@@ -737,12 +737,12 @@ def _cmd_touch(args: argparse.Namespace) -> None:
     # ── Resolve output path ──
     output_path = getattr(args, "output", None)
     if output_path is None:
-        # Default: write touch_report.json in the dataset directory
+        # Default: write subcellspace_touch_report.json in the dataset directory
         data_dir = report.input_path
         if data_dir and _Path(data_dir).is_dir():
-            output_path = _Path(data_dir) / "touch_report.json"
+            output_path = _Path(data_dir) / "subcellspace_touch_report.json"
         else:
-            output_path = _Path("touch_report.json")
+            output_path = _Path("subcellspace_touch_report.json")
 
     # ── Write JSON report ──
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -813,7 +813,7 @@ def _cmd_touch_all(args: argparse.Namespace) -> None:
                   f"opt={s['optional_found']} unexp={s['unexpected']}")
 
             # 每个数据集单独保存报告
-            report_path = _Path(path.rstrip("/")) / "touch_report.json"
+            report_path = _Path(path.rstrip("/")) / "subcellspace_touch_report.json"
             report_path.write_text(
                 json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str),
                 encoding="utf-8",

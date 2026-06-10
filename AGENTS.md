@@ -1,7 +1,7 @@
 # SubCellSpace — AGENTS.md
 
-> **Last updated**: 2026-06-08  
-> **Current phase**: Phase 5 complete — All three platforms migrated to GSE/GSM-based GEO database system
+> **Last updated**: 2026-06-09  
+> **Current phase**: Phase 6 — CosMx data completion & batch pipeline execution
 
 ---
 
@@ -63,12 +63,22 @@ data/
 └── Xenium_PLAN.txt            Xenium GEO collection plan
 
 scripts/
-├── query_cosmx_geo.py         GEO API GSM expansion
-├── migrate_cosmx_geo.sh       Cluster data migration
-├── prepare_xenium_data.py     Batch preprocessing
-├── fix_nested_dirs.py         Fix nested directory issues
-├── fix_xenium_rename.py       Fix rename chain conflicts
-├── extract_merfish_tars.slurm Slurm tar extraction
+├── query_cosmx_geo.py          GEO API GSM expansion
+├── migrate_cosmx_geo.sh        Cluster data migration
+├── prepare_xenium_data.py      Batch preprocessing
+├── fix_nested_dirs.py          Fix nested directory issues
+├── fix_xenium_rename.py        Fix rename chain conflicts
+├── extract_merfish_tars.slurm  Slurm tar extraction
+├── batch_run_cosmx_pipeline.py Sequential batch pipeline runner
+├── submit_cosmx_pipeline.sh    Slurm submission wrapper
+├── run_cosmx_array.sh          Slurm job array for pipeline
+├── list_complete_datasets.py   List qualifying datasets
+├── gen_full_list.py            Generate full dataset list
+├── check_gsm253474.py          Inspect GSM touch reports
+├── check_merged_gse253474.py   Inspect merged GSM touch reports
+├── check_all_gsm253474.py      Bulk GSM touch checker
+├── scan_opt_distribution.py    Optional file distribution scan
+├── test_batch.sh               Slurm test job
 └── ...
 ```
 
@@ -133,9 +143,9 @@ datasets.csv (legacy, non-GEO only):
 |----------|------:|--------:|-------:|:---------:|
 | **datasets.csv** | 898 | 18 | 82 | **998** |
 | **GEO CSV rows** | 1932 | 801 | 1745 | **4478** |
-| **GEO CSV ready** | 53 | 6 | 1191 | **1250** |
-| **GEO CSV pending** | 1879 | 749 | 554 | **3182** |
-| **GEO CSV no_data** | 0 | 46 | 0 | **46** |
+| **GEO CSV ready** | 171 | 103 | 1191 | **1465** |
+| **GEO CSV pending** | 1761 | 698 | 554 | **3013** |
+| **GEO CSV no_data** | 0 | 0 | 0 | **0** |
 | **GSEs** | 63 | 44 | 162 | **269** |
 
 ### 4.6 Cluster Directory Layout
@@ -145,7 +155,7 @@ datasets.csv (legacy, non-GEO only):
 ├── CosMx/              (8 projects, non-GEO only)
 │   ├── P0001-D0010/    NanoString/Bruker public datasets
 │   └── P0011-D0011/    Zenodo (HGSOC)
-├── CosMx_GEO/          (23 GSEs, 55 samples)
+├── CosMx_GEO/          (63 GSEs, 171 ready samples)
 │   └── GSE*/{sample_name}/
 ├── MERFISH/            (8 projects, non-GEO Vizgen)
 │   └── P2xxx/D2xxx/
@@ -248,10 +258,74 @@ Single scverse-native pipeline, unified config, SCRIN as optional extra.
 - RDS files >15GB are impractical to parse remotely
 - CosMx merged datasets use GSM range naming (`GSMxxxx-GSMyyyy`)
 - MERFISH D5/P5 moved back to D2/P2 after Xenium renumbering freed D2 space
+- **polygon_intersect hangs on >500K points**: O(n) Point objects + O(n×log(m)) sjoin = OOM
+- **fov_position vs fov_positions**: CosMx data uses both singular/plural naming; always use `*_fov_position*` to match both
+- **subcellspace_ prefix protection**: Touch must ignore its own outputs to prevent re-normalization loops
+- **`/tmp/` is node-local**: Slurm job array tasks on compute nodes cannot read login node's `/tmp/`; use shared filesystem paths instead
+- **Slurm node recovery**: `scontrol update nodename=gpu01 state=resume` requires root/slurm admin privileges
+- **Spatial analysis is extremely slow**: squidpy `moran`/`geary` 100-iteration computation takes ~2.5h/dataset; skip for GEO batch runs
 
-### ⏳ Phase 6: Data completion
-- Download & extract 43 new CosMx GSEs (1879 pending)
-- Process MERFISH heterogeneous data formats (801 rows, 44 GSEs)
+### ✅ Phase 6a: CosMx touch normalize & data integrity (2026-06-09)
+
+**CosMx GEO touch normalize (171 datasets):**
+- Full `--platform cosmx --normalize` scan: all 171 ready datasets checked
+- 171/171 ✅ required=1, optional avg=2.5 (4 after normalize)
+- Fixed file naming: GSM prefix added to all data files
+- Removed 171 old `touch_report.json` files from cluster
+
+**fov_position pattern fix:**
+- Touch pattern `*_fov_positions*` (plural) missed `fov_position_file.csv.gz` (singular)
+- Changed to `*_fov_position*` — now matches both `fov_position` and `fov_positions`
+- Impact: GSE253474 120 GSMs went from opt=2 → opt=3; merged GSMs also detected correctly
+- Files affected: `src/touch.py` line 43 (CosMx manifest)
+
+**Touch module `subcellspace_` prefix protection:**
+- Added `SUBCELLPREFIX = "subcellspace_"` constant in `src/touch.py`
+- Touch scan ignores all `subcellspace_*` files (not counted as unexpected)
+- Normalize does NOT rename `subcellspace_*` files (skips GSM prefix addition)
+- Report files renamed: `touch_report.json` → `subcellspace_touch_report.json`
+- CLI help text and rollback path references updated in `src/cli.py`
+
+**GSE305978 normalize:**
+- 6 normalize actions: all OrganoidSlide2_* files prefixed with GSM9190966_
+- Duplicate tx file resolved (rename overwrote the duplicate)
+- Redundant files kept (RAW.tar, flatfiles.zip, RDS, sct_normalized) as backup per user request
+
+**Opt distribution after fixes:**
+| opt | Count | Details |
+|:---:|:-----:|---------|
+| 3 | 130 | GSE234713(9) + GSE253474(120) + GSE304111(1) — all missing polygons |
+| 4 | 41 | All other GSEs, fully complete |
+
+### ✅ Phase 6b: CosMx batch pipeline (2026-06-09)
+
+**Pipeline optimization for GEO batch runs:**
+- `--segmentation-backend fov_cell_id` — avoids polygon_intersect O(n×m) hang on large data
+- `--spatial-analysis-backend none` — skips squidpy 100-iteration spatial autocorrelation (too slow)
+- `--output-dir <data_dir>` — outputs saved directly to dataset directory with `subcellspace_` prefix
+
+**Slurm job array infrastructure:**
+- `scripts/gen_full_list.py` — generates dataset list with opt≥3 filtering, excludes GSE253474 individual GSMs
+- `scripts/run_cosmx_array.sh` — Slurm job array script with `--segmentation-backend fov_cell_id`, `--spatial-analysis-backend none`, `--output-dir` to data dir
+- Multi-job support: each dataset is independent; failures don't block others
+- Default: 10 concurrent tasks (`%10`) on Yangxrlab partition (gpu01, 80 CPUs)
+
+**Batch results:**
+- Task 16 completed successfully: GSE277441/GSM8522533 (2.4M tx, 8726 cells, 1178 genes) in ~30 min
+- All other tasks cancelled when user changed requirements; task 7 OOM-killed on spatial_analysis
+- gpu01 node went `down*` (NOT_RESPONDING) — likely caused by 10 concurrent spatial_analysis tasks
+- `scontrol update` requires admin privileges — cluster admin needed for recovery
+
+### ✅ Phase 6c: MERFISH touch normalize (2026-06-09)
+- 118 MERFISH GEO datasets scanned with `--platform merfish --normalize`
+- Results: 103 ✅ required≥1, 15 ⚠️ no data (req=0), 0 ❌ errors
+- Opt distribution: opt=2 (101), opt=1 (2), opt=0 (15)
+- 15 no-data datasets: GSE274621, GSE294469, GSE303809, GSE327147 (empty directories)
+
+### ⏳ Phase 6d: Remaining work
+- Recover gpu01 node (contact cluster admin: `linkai`, `qiyijun`, or IT support)
+- Download & extract 43 new CosMx GSEs (1761 pending)
+- Process MERFISH heterogeneous data formats (698 pending)
 - Fill in missing metadata for GEO entries
 - CI/CD, Docker, documentation cleanup
 - Route `/editor` only in `import.meta.env.DEV`
@@ -261,29 +335,6 @@ Single scverse-native pipeline, unified config, SCRIN as optional extra.
 - Search, filter, sort (like Browser)
 - Pagination
 - Auto-re-export after each mutation
-
-### ✅ Phase 4: Usability refactor (2026-05-19)
-- Pipeline simplified from 9→7 steps
-- GraphST removed; Baysor/SCRIN kept as optional extras
-- Install: `pip install subcellspace` (was 4-step setup)
-- Removed: `scripts/setup-step3.sh`, STAGATE/SpaGCN/GraphST from tools registry
-
-### ✅ Phase 4b: Pipeline simplification (2026-06-02)
-- **Single scverse-native pipeline** replacing plugin architecture
-- All external backends removed (cellpose, scvi, celltypist, spARC, etc.)
-- 3 platform configs merged into 1 unified `config/pipeline.yaml`
-- CosMx/Xenium/MERFISH ingestors now auto-integrate all companion files
-- SCRIN kept as optional `--subcellular-analysis-backend scrin`
-
-### 🔄 Phase 5: Data completion (in progress)
-- Xenium expanded 53 → 350 rows (128 ready, 222 pending)
-- Fill in missing `project_url` and `download_url` for all Xenium rows
-- Compute `estimated_cell_count` from actual data files on cluster
-
-### ⏳ Phase 6: CI/CD & docs
-- CI pipeline (ruff + mypy + pytest)
-- Docker image
-- Documentation cleanup (README, API, plan)
 
 ---
 
@@ -303,6 +354,7 @@ Single scverse-native pipeline, unified config, SCRIN as optional extra.
 | `frontend/src/pages/DataBrowser.tsx` | Static browser with pagination |
 | `frontend/src/pages/DataEditor.tsx` | Dev-mode CRUD editor |
 | `frontend/src/App.tsx` | Route definitions (editor only in DEV) |
+| `frontend/scripts/dev.mjs` | Dev launcher (auto-starts backend) |
 | `frontend/scripts/dev.mjs` | Dev launcher (auto-starts backend) |
 
 ---
