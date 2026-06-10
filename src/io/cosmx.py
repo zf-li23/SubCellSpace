@@ -393,6 +393,7 @@ class CosMxIngestor(BaseIngestor):
                 records.append({
                     "fov": int(fov_id),
                     "cell_id": f"{int(fov_id)}_{str(cell_id_val)}",
+                    "cell_name": str(group.iloc[0].get("cell", "")),
                     "geometry": poly,
                     "area": poly.area,
                     "centroid_x": centroid.x,

@@ -418,13 +418,36 @@ def run_pipeline(
     if cell_area_map and ctx.adata is not None:
         obs = ctx.adata.obs
         obs["cell_area"] = -1.0
-        # Try exact match first, then suffix match (for fov_cell_id format)
+        # Strategy 1: exact match (cell_id == obs.index)
+        # Strategy 2: fov_cell_id composite match ("fov_cellName")
+        # Strategy 3: suffix match (last part after "_")
         n_matched = 0
         for cid, area in cell_area_map.items():
             if cid in obs.index:
                 obs.loc[cid, "cell_area"] = area
                 n_matched += 1
-        # If no exact matches, try matching by suffix (e.g. "1_57" → "57")
+        if n_matched == 0 and cell_area_map:
+            # Build lookup from gdf rows with both fov and cell_name
+            for key in ["cell_boundaries", "provided_boundaries"]:
+                if key in ctx.sdata.shapes:
+                    gdf = ctx.sdata.shapes[key]
+                    break
+            else:
+                gdf = None
+            if gdf is not None and "fov" in gdf.columns:
+                cell_names = {}
+                for i in range(len(gdf)):
+                    row = gdf.iloc[i]
+                    fov = str(int(row["fov"])) if hasattr(row["fov"], "__int__") else str(row["fov"])
+                    for name_col in ("cell_name", "cell_id", "cell"):
+                        val = row.get(name_col)
+                        if val is not None and str(val).strip():
+                            cell_names[f"{fov}_{str(val).strip()}"] = row["geometry"].area
+                            break
+                for composite, area in cell_names.items():
+                    if composite in obs.index:
+                        obs.loc[composite, "cell_area"] = area
+                        n_matched += 1
         if n_matched == 0 and cell_area_map:
             for idx in obs.index:
                 parts = str(idx).split("_")
