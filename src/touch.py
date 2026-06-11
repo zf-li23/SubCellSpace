@@ -105,6 +105,7 @@ class FileStatus:
     is_gz: bool = False          # 是否 gzip 压缩
     is_parquet: bool = False     # 是否 parquet 格式
     redundant: bool = False      # 是否有冗余版本（同时有 .csv 和 .csv.gz）
+    is_alternative: bool = False # 是否为必须文件的替代格式（不计入 optional）
 
 
 @dataclass
@@ -136,7 +137,8 @@ class TouchReport:
                 "total_files": len(self.files),
                 "required_found": sum(1 for f in self.files if f.required and f.found),
                 "required_missing": len(self.missing_required),
-                "optional_found": sum(1 for f in self.files if not f.required and f.found),
+                "optional_found": sum(1 for f in self.files if not f.required and not f.is_alternative and f.found),
+                "alternative_found": sum(1 for f in self.files if not f.required and f.is_alternative and f.found),
                 "unexpected": len(self.unexpected),
                 "redundant": sum(1 for f in self.files if f.redundant),
             },
@@ -384,35 +386,56 @@ def _resolve_glob(data_dir: Path, pattern: str) -> list[Path]:
 
 
 def _resolve_required_alternatives(report: TouchReport) -> None:
-    """处理必备文件的替代关系。
+    """处理必备文件的替代关系和格式替代。
 
-    已知替代关系:
-    - Xenium: transcripts.csv* 和 transcripts.parquet/zarr.zip 可以互相替代
+    替代关系（同一信息的不同格式，合并计数）:
+    - transcripts: csv ↔ parquet.parquet ↔ zarr.zip  (required alternatives)
+    - cell_boundaries: parquet ↔ csv
+    - nucleus_boundaries: parquet ↔ csv
+    - expr_matrix: h5 ↔ zarr.zip
+    - cell_metadata: csv ↔ zarr.zip
+
+    替代格式不计入 optional 计数 (is_alternative=True)
     """
-    # 找到必备 transcripts 的索引
+    # 定义格式替代组: (主名, [替代名列表])
+    # 替代名列表中的格式被视为主格式的另一种存储方式，合并计数
+    alt_groups = [
+        ("transcripts_parquet", ["transcripts_zarr"]),
+        ("cell_boundaries",     ["cell_boundaries_csv"]),
+        ("nucleus_boundaries",  ["nucleus_boundaries_csv"]),
+        ("expr_matrix",         ["expr_matrix_zarr"]),
+        ("cell_metadata",       ["cell_metadata_zarr"]),
+    ]
+
+    # 标记所有替代格式（仅标记从属格式，主格式保持正常）
+    all_alt_names = set()
+    for primary, alts in alt_groups:
+        for a in alts:
+            all_alt_names.add(a)
+
+    for i, f in enumerate(report.files):
+        if f.name in all_alt_names and not f.required:
+            f.is_alternative = True
+
+    # transcripts 系列的替代关系（csv ↔ parquet ↔ zarr，必须满足其一）
     tx_idx = next((i for i, f in enumerate(report.files)
                    if f.required and f.name == "transcripts"), None)
-    if tx_idx is None:
-        return
-
-    tx = report.files[tx_idx]
-    if tx.found:
-        return
-
-    # 检查替代格式: parquet 或 zarr
-    for alt_name in ("transcripts_parquet", "transcripts_zarr"):
-        alt_idx = next((i for i, f in enumerate(report.files)
-                        if f.name == alt_name), None)
-        if alt_idx is not None:
-            alt = report.files[alt_idx]
-            if alt.found:
-                tx.found = True
-                tx.path = alt.path
-                tx.size_bytes = alt.size_bytes
-                tx.is_parquet = alt.is_parquet
-                if tx.name in report.missing_required:
-                    report.missing_required.remove(tx.name)
-                break
+    if tx_idx is not None:
+        tx = report.files[tx_idx]
+        if not tx.found:
+            for alt_name in ("transcripts_parquet", "transcripts_zarr"):
+                alt_idx = next((i for i, f in enumerate(report.files)
+                                if f.name == alt_name), None)
+                if alt_idx is not None:
+                    alt = report.files[alt_idx]
+                    if alt.found:
+                        tx.found = True
+                        tx.path = alt.path
+                        tx.size_bytes = alt.size_bytes
+                        tx.is_parquet = alt.is_parquet
+                        if tx.name in report.missing_required:
+                            report.missing_required.remove(tx.name)
+                        break
 
 
 # ── 规范化 ──────────────────────────────────────────────────────────
