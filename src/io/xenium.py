@@ -51,6 +51,7 @@ class XeniumIngestor(BaseIngestor):
     Accepts either:
     - A Xenium output directory (auto-detects all files)
     - A specific ``transcripts.csv(.gz)`` or ``transcripts.parquet`` file
+    - A ``transcripts.zarr.zip`` file (auto-extracted to temp dir)
     """
 
     platform: str = PLATFORM_XENIUM
@@ -60,7 +61,8 @@ class XeniumIngestor(BaseIngestor):
 
         # Resolve tx_path (directory or single file)
         if input_path.is_dir():
-            tx_path = _find_in_dir(input_path, "transcripts.csv.gz", "transcripts.csv", "transcripts.parquet")
+            tx_path = _find_in_dir(input_path, "transcripts.csv.gz", "transcripts.csv",
+                                   "transcripts.parquet", "transcripts.zarr.zip")
             if tx_path is None:
                 raise DataLoadError(f"No transcript file found in Xenium directory {input_path}", platform=self.platform, path=input_path)
             data_dir = input_path
@@ -138,13 +140,14 @@ class XeniumIngestor(BaseIngestor):
     # ── Companion file loaders ──────────────────────────────────────
 
     def _load_cell_boundaries(self, data_dir: Path) -> Any:
-        path = _find_in_dir(data_dir, "cell_boundaries.parquet", "cell_boundaries.csv.gz")
+        path = _find_in_dir(data_dir, "cell_boundaries.parquet", "cell_boundaries.parquet.gz",
+                            "cell_boundaries.csv.gz")
         if path is None:
             return None
         logger.info("[%s] Loading cell boundaries from %s …", self.platform, path.name)
         try:
-            # Xenium boundaries parquet is vertex-based (cell_id, x, y per vertex)
-            df = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+            df = (pd.read_parquet(path) if path.suffix in (".parquet", ".gz")
+                  and ".parquet" in path.name else pd.read_csv(path))
             gdf = self._vertices_to_polygons(df)
             if gdf is not None:
                 from spatialdata.models import ShapesModel
@@ -155,12 +158,14 @@ class XeniumIngestor(BaseIngestor):
             return None
 
     def _load_nucleus_boundaries(self, data_dir: Path) -> Any:
-        path = _find_in_dir(data_dir, "nucleus_boundaries.parquet", "nucleus_boundaries.csv.gz")
+        path = _find_in_dir(data_dir, "nucleus_boundaries.parquet", "nucleus_boundaries.parquet.gz",
+                            "nucleus_boundaries.csv.gz")
         if path is None:
             return None
         logger.info("[%s] Loading nucleus boundaries from %s …", self.platform, path.name)
         try:
-            df = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+            df = (pd.read_parquet(path) if path.suffix in (".parquet", ".gz")
+                  and ".parquet" in path.name else pd.read_csv(path))
             gdf = self._vertices_to_polygons(df)
             return gdf
         except Exception as exc:
@@ -213,11 +218,13 @@ class XeniumIngestor(BaseIngestor):
         return gpd.GeoDataFrame(records, crs=None)
 
     def _load_expression_matrix(self, data_dir: Path) -> pd.DataFrame | None:
-        path = _find_in_dir(data_dir, "cell_feature_matrix.h5")
+        path = _find_in_dir(data_dir, "cell_feature_matrix.h5", "cell_feature_matrix.zarr.zip")
         if path is None:
             return None
         logger.info("[%s] Loading expression matrix from %s …", self.platform, path.name)
         try:
+            if ".zarr.zip" in path.name:
+                return self._read_zarr_matrix(path)
             import scanpy as sc
             adata = sc.read_10x_h5(path)
             return pd.DataFrame(
@@ -228,16 +235,85 @@ class XeniumIngestor(BaseIngestor):
             logger.warning("[%s] Failed to load expression matrix: %s", self.platform, exc)
             return None
 
+    @staticmethod
+    def _read_zarr_matrix(path: Path) -> pd.DataFrame | None:
+        """读取 Xenium cell_feature_matrix.zarr.zip 到 DataFrame。"""
+        import tempfile, shutil, zipfile
+        tmp = tempfile.mkdtemp()
+        try:
+            with zipfile.ZipFile(path, "r") as zf:
+                zf.extractall(tmp)
+            # Find the zarr root
+            import zarr
+            import numpy as np
+            zarr_dirs = [d for d in Path(tmp).iterdir() if d.is_dir()]
+            if not zarr_dirs:
+                return None
+            z = zarr.open(str(zarr_dirs[0]), mode="r")
+            # Xenium zarr format: barcodes, data, indices, indptr, shape, features
+            barcodes = [b.decode() if isinstance(b, bytes) else b
+                        for b in z["barcodes"][:]]
+            feature_names = [f.decode() if isinstance(f, bytes) else f
+                             for f in z["features"]["name"][:]]
+            data = z["data"][:]
+            indices = z["indices"][:]
+            indptr = z["indptr"][:]
+            shape = tuple(z["shape"][:])
+            # Build sparse matrix
+            from scipy.sparse import csr_matrix
+            mat = csr_matrix((data, indices, indptr), shape=shape)
+            return pd.DataFrame(
+                mat.toarray().astype("float32"),
+                index=barcodes, columns=feature_names,
+            )
+        except Exception:
+            return None
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
     def _load_cell_metadata(self, data_dir: Path) -> pd.DataFrame | None:
-        path = _find_in_dir(data_dir, "cells.csv.gz", "cells.csv")
+        path = _find_in_dir(data_dir, "cells.csv.gz", "cells.csv", "cells.parquet",
+                            "cells.parquet.gz", "cells.zarr.zip")
         if path is None:
             return None
         logger.info("[%s] Loading cell metadata from %s …", self.platform, path.name)
         try:
+            if ".zarr.zip" in path.name:
+                return self._read_zarr_cells(path)
+            if ".parquet" in path.name:
+                return pd.read_parquet(path)
             return pd.read_csv(path, compression="gzip" if path.suffix == ".gz" else None)
         except Exception as exc:
             logger.warning("[%s] Failed to load cell metadata: %s", self.platform, exc)
             return None
+
+    @staticmethod
+    def _read_zarr_cells(path: Path) -> pd.DataFrame | None:
+        """读取 Xenium cells.zarr.zip 到 DataFrame。"""
+        import tempfile, shutil, zipfile
+        tmp = tempfile.mkdtemp()
+        try:
+            with zipfile.ZipFile(path, "r") as zf:
+                zf.extractall(tmp)
+            import zarr
+            zarr_dirs = [d for d in Path(tmp).iterdir() if d.is_dir()]
+            if not zarr_dirs:
+                return None
+            z = zarr.open(str(zarr_dirs[0]), mode="r")
+            arrays = {k: v[:] for k, v in z.arrays()}
+            df = pd.DataFrame(dict(arrays))
+            # Decode bytes
+            for col in df.columns:
+                if df[col].dtype == "O":
+                    try:
+                        df[col] = df[col].apply(lambda x: x.decode() if isinstance(x, bytes) else x)
+                    except Exception:
+                        pass
+            return df
+        except Exception:
+            return None
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def _load_gene_panel(self, data_dir: Path) -> dict | None:
         path = _find_in_dir(data_dir, "gene_panel.json")
@@ -256,6 +332,27 @@ class XeniumIngestor(BaseIngestor):
         resolved = self._resolve_path(input_path)
         if resolved.suffix == ".parquet":
             df = pd.read_parquet(resolved)
+        elif ".zarr.zip" in resolved.name:
+            import tempfile, shutil, zipfile
+            tmp = tempfile.mkdtemp()
+            try:
+                with zipfile.ZipFile(resolved, "r") as zf:
+                    zf.extractall(tmp)
+                import zarr
+                import numpy as np
+                zarr_dirs = [d for d in Path(tmp).iterdir() if d.is_dir()]
+                if not zarr_dirs:
+                    raise DataLoadError("Empty zarr archive", platform=self.platform, path=resolved)
+                z = zarr.open(str(zarr_dirs[0]), mode="r")
+                data = {}
+                for k in z.array_keys():
+                    arr = z[k][:]
+                    if arr.dtype.kind == "S" or arr.dtype.kind == "O":
+                        arr = np.array([x.decode() if isinstance(x, bytes) else x for x in arr])
+                    data[k] = arr
+                df = pd.DataFrame(data)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
         elif resolved.suffix == ".gz" and resolved.suffixes[-2:] == [".csv", ".gz"]:
             import gzip
             with gzip.open(resolved, "rt") as f:

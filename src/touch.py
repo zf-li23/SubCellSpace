@@ -52,6 +52,8 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "转录本坐标 (x_location, y_location, feature_name, cell_id)"},
         {"pattern": "*transcripts.parquet*","required": False, "name": "transcripts_parquet",
          "desc": "Parquet 格式转录本（替代 CSV）"},
+        {"pattern": "*transcripts.zarr.zip*","required": False, "name": "transcripts_zarr",
+         "desc": "Zarr 格式转录本（替代 CSV）"},
         {"pattern": "*cell_boundaries.parquet*",  "required": False, "name": "cell_boundaries",
          "desc": "细胞边界多边形 (cell_id, vertex_x, vertex_y)"},
         {"pattern": "*cell_boundaries.csv*",     "required": False, "name": "cell_boundaries_csv",
@@ -62,8 +64,12 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "CSV 格式细胞核边界"},
         {"pattern": "*cell_feature_matrix.h5*",  "required": False, "name": "expr_matrix",
          "desc": "h5 表达矩阵 (scanpy read_10x_h5)"},
+        {"pattern": "*cell_feature_matrix.zarr.zip*", "required": False, "name": "expr_matrix_zarr",
+         "desc": "Zarr 格式表达矩阵"},
         {"pattern": "*cells.csv*",          "required": False, "name": "cell_metadata",
          "desc": "细胞元数据"},
+        {"pattern": "*cells.zarr.zip*",     "required": False, "name": "cell_metadata_zarr",
+         "desc": "Zarr 格式细胞元数据"},
         {"pattern": "*gene_panel.json*",     "required": False, "name": "gene_panel",
          "desc": "基因 panel 信息"},
     ],
@@ -343,8 +349,11 @@ def _detect_platform_from_files(data_dir: Path) -> str | None:
     # 用 " in f" 而非精确匹配，因为 GEO 数据常为 GSMxxxx_transcripts.csv.gz
     # MERFISH 的 detected_transcripts 已在前面优先匹配，不会误判
     xenium_indicators = {"transcripts.csv", "transcripts.parquet",
+                         "transcripts.zarr.zip",
                          "cell_feature_matrix.h5",
-                         "cell_boundaries.parquet", "nucleus_boundaries.parquet"}
+                         "cell_feature_matrix.zarr.zip",
+                         "cell_boundaries.parquet", "nucleus_boundaries.parquet",
+                         "cells.zarr.zip"}
     for f in files_lower:
         for indicator in xenium_indicators:
             if indicator in f:
@@ -377,25 +386,32 @@ def _resolve_required_alternatives(report: TouchReport) -> None:
     """处理必备文件的替代关系。
 
     已知替代关系:
-    - Xenium: transcripts.csv* 和 transcripts_parquet 可以互相替代
+    - Xenium: transcripts.csv* 和 transcripts.parquet/zarr.zip 可以互相替代
     """
     # 找到必备 transcripts 的索引
     tx_idx = next((i for i, f in enumerate(report.files)
                    if f.required and f.name == "transcripts"), None)
-    tx_parq_idx = next((i for i, f in enumerate(report.files)
-                        if f.name == "transcripts_parquet"), None)
+    if tx_idx is None:
+        return
 
-    if tx_idx is not None and tx_parq_idx is not None:
-        tx = report.files[tx_idx]
-        tx_parq = report.files[tx_parq_idx]
-        # 如果 CSV 没找到但 parquet 找到了，视为满足
-        if not tx.found and tx_parq.found:
-            tx.found = True
-            tx.path = tx_parq.path
-            tx.size_bytes = tx_parq.size_bytes
-            tx.is_parquet = True
-            if tx.name in report.missing_required:
-                report.missing_required.remove(tx.name)
+    tx = report.files[tx_idx]
+    if tx.found:
+        return
+
+    # 检查替代格式: parquet 或 zarr
+    for alt_name in ("transcripts_parquet", "transcripts_zarr"):
+        alt_idx = next((i for i, f in enumerate(report.files)
+                        if f.name == alt_name), None)
+        if alt_idx is not None:
+            alt = report.files[alt_idx]
+            if alt.found:
+                tx.found = True
+                tx.path = alt.path
+                tx.size_bytes = alt.size_bytes
+                tx.is_parquet = alt.is_parquet
+                if tx.name in report.missing_required:
+                    report.missing_required.remove(tx.name)
+                break
 
 
 # ── 规范化 ──────────────────────────────────────────────────────────
