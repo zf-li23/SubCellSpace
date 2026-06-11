@@ -50,8 +50,8 @@ MANIFEST: dict[str, list[dict]] = {
     "xenium": [
         {"pattern": "*transcripts.csv*",    "required": True,  "name": "transcripts",
          "desc": "转录本坐标 (x_location, y_location, feature_name, cell_id)"},
-        {"pattern": "*transcripts.parquet*","required": False, "name": "transcripts_parquet",
-         "desc": "Parquet 格式转录本（替代 CSV）"},
+        {"pattern": "*transcripts*parquet*", "required": False, "name": "transcripts_parquet",
+         "desc": "Parquet 格式转录本（替代 CSV，含 _regionN 变体）"},
         {"pattern": "*transcripts.zarr.zip*","required": False, "name": "transcripts_zarr",
          "desc": "Zarr 格式转录本（替代 CSV）"},
         {"pattern": "*cell_boundaries.parquet*",  "required": False, "name": "cell_boundaries",
@@ -353,13 +353,14 @@ def _detect_platform_from_files(data_dir: Path) -> str | None:
                          "cell_feature_matrix.h5",
                          "cell_feature_matrix.zarr.zip",
                          "cell_boundaries.parquet", "nucleus_boundaries.parquet",
-                         "cells.zarr.zip"}
+                         "cells.zarr.zip",
+                         "transcripts"}  # 兜底：文件名含 transcripts 即视为 Xenium
     for f in files_lower:
         for indicator in xenium_indicators:
             if indicator in f:
                 return "xenium"
 
-    # Generic: any .csv with spatial-looking name
+    # Generic: any .csv with spatial-looking name (排除已被 Xenium 兜底识别的)
     csv_files = [f for f in files_lower if f.endswith(".csv") or f.endswith(".csv.gz")]
     if csv_files:
         return "generic"
