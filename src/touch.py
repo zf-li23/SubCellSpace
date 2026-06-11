@@ -44,6 +44,8 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "预计算表达矩阵 (fov, cell_ID + 基因列)"},
         {"pattern": "*_metadata_file*",   "required": False, "name": "cell_metadata",
          "desc": "细胞级元数据 (cell_id + 注释列)"},
+        {"pattern": "*_cell_metadata.csv*", "required": False, "name": "cell_metadata_csv",
+         "desc": "CSV 格式细胞元数据（兼容 detected_transcripts 命名）"},
         {"pattern": "*_fov_position*",   "required": False, "name": "fov_positions",
          "desc": "FOV 空间布局"},
         {"pattern": "*detected_transcripts.csv*", "required": False, "name": "transcripts_detected",
@@ -411,7 +413,7 @@ def _resolve_required_alternatives(report: TouchReport) -> None:
         ("cell_boundaries",     ["cell_boundaries_csv"]),
         ("nucleus_boundaries",  ["nucleus_boundaries_csv"]),
         ("expr_matrix",         ["expr_matrix_zarr", "expr_matrix_mtx"]),
-        ("cell_metadata",       ["cell_metadata_parquet", "cell_metadata_zarr"]),
+        ("cell_metadata",       ["cell_metadata_parquet", "cell_metadata_zarr", "cell_metadata_csv"]),
     ]
 
     # transcripts_parquet 也是必须文件 transcripts.csv 的替代格式
