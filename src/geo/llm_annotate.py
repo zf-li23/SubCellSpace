@@ -46,7 +46,6 @@ Rules:
 Output ONLY valid JSON, no other text."""
 
 USER_PROMPT_TEMPLATE = """GSE: {gse}
-SeriesTitle: {seriestitle}
 Name: {name}
 Summary: {summary}
 Taxon: {taxon}
@@ -62,7 +61,6 @@ For each sample above, output tissue and disease_state in JSON format."""
 
 def call_llm(
     gse: str,
-    seriestitle: str,
     name: str,
     summary: str,
     taxon: str,
@@ -80,7 +78,6 @@ def call_llm(
 
     user_content = USER_PROMPT_TEMPLATE.format(
         gse=gse,
-        seriestitle=seriestitle[:300],
         name=name[:300],
         summary=summary[:2000],
         taxon=taxon,
@@ -203,7 +200,6 @@ def get_gse_metadata(csv_path: Path, gse: str) -> dict:
         for r in csv.DictReader(f):
             if r.get("GSE") == gse:
                 return {
-                    "seriestitle": r.get("seriestitle", ""),
                     "name": r.get("name", ""),
                     "summary": r.get("summary", ""),
                     "taxon": r.get("taxon", ""),
@@ -314,7 +310,6 @@ def annotate_all(
 
             llm_result = call_llm(
                 gse=gse,
-                seriestitle=metadata.get("seriestitle", ""),
                 name=metadata.get("name", ""),
                 summary=metadata.get("summary", ""),
                 taxon=metadata.get("taxon", ""),

@@ -18,8 +18,7 @@ from .api import get_gse_enrichment
 logger = logging.getLogger(__name__)
 
 # GEO 爬取新增的列（加在 status 之后）
-NEW_COLUMNS = ["title", "summary", "taxon", "pubmedids",
-               "pdat", "samplestaxa", "seriestitle"]
+NEW_COLUMNS = ["title", "summary", "taxon", "pubmedids", "pdat"]
 
 # 三平台 CSV 信息: (文件名, GSM列名, 数据目录)
 PLATFORM_CSVS: List[Tuple[str, str, str]] = [
