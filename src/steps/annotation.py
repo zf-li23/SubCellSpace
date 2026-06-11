@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import scanpy as sc
 
 from ..models import StepResult
@@ -72,6 +73,18 @@ def _anno_rank_marker(adata: sc.AnnData) -> str:
         cluster_to_label[cluster] = f"CT_{top_gene}"
 
     adata.obs["cell_type"] = adata.obs["cluster"].astype(str).map(cluster_to_label).fillna("CT_Unknown")
+
+    # ── Trim rank_genes_groups to avoid h5py header overflow ──────
+    # rank_genes_groups stores ALL genes × ALL clusters. With many genes,
+    # h5py's 64KB object header limit can be exceeded when writing to h5ad.
+    # Keep only top N genes per cluster — the rest are never used after
+    # cell_type labeling.
+    N_TOP = 50
+    rg = adata.uns.get("rank_genes_groups", {})
+    for key in ("names", "scores", "pvals", "pvals_adj", "logfoldchanges"):
+        if key in rg and hasattr(rg[key], "shape") and len(rg[key].shape) >= 1:
+            rg[key] = rg[key][:N_TOP]
+
     return "rank_marker"
 
 
