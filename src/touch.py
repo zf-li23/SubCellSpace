@@ -575,7 +575,9 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
         pattern = status.pattern
         candidates = sorted(data_dir.glob(pattern))
         csv_files = [c for c in candidates
-                     if not str(c).endswith(".gz") and not str(c).endswith(".parquet")]
+                     if not str(c).endswith(".gz")
+                     and not str(c).endswith(".parquet")
+                     and not str(c).endswith(".zip")]
         gz_files = [c for c in candidates if str(c).endswith(".gz")]
 
         # 规则 4: 同时有 .csv 和 .csv.gz → 删除 .csv
