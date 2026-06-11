@@ -82,6 +82,87 @@ def query_gsms(gse: str, user_agent: str = "SubCellSpace/1.0",
     return sorted(all_gsms)
 
 
+def get_gse_enrichment(gse: str, user_agent: str = "SubCellSpace/1.0",
+                        delay: float = 0.35) -> Optional[dict]:
+    """
+    获取 GSE 的完整元数据用于数据库 enrich。
+
+    返回:
+        {gse, title, seriestitle, summary, taxon,
+         pubmedids, pdat, samplestaxa,
+         gsm_titles: {GSM: title, ...}} 或 None
+    """
+    # Step 1: 搜索 GDS 条目
+    search_url = (
+        f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        f"?db=gds&term={gse}[ACCN]&retmax=10&retmode=json"
+    )
+    req = urllib.request.Request(search_url, headers={'User-Agent': user_agent})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as e:
+        raise RuntimeError(f"GEO search failed for {gse}: {e}") from e
+
+    ids = data.get('esearchresult', {}).get('idlist', [])
+    if not ids:
+        return None
+
+    time.sleep(delay)
+
+    # Step 2: esummary
+    summary_url = (
+        f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+        f"?db=gds&id={','.join(ids)}&retmode=json"
+    )
+    req2 = urllib.request.Request(summary_url, headers={'User-Agent': user_agent})
+    try:
+        with urllib.request.urlopen(req2, timeout=30) as resp2:
+            data2 = json.loads(resp2.read().decode())
+    except Exception as e:
+        raise RuntimeError(f"GEO summary failed for {gse}: {e}") from e
+
+    result = data2.get('result', {})
+
+    # 找到匹配当前 GSE 的条目
+    target = None
+    for gds_id in ids:
+        entry = result.get(gds_id, {})
+        acc = entry.get('accession', '')
+        gse_match = re.search(r'GSE\d+', acc)
+        if gse_match and gse_match.group() == gse:
+            target = entry
+            break
+    if not target:
+        return None
+
+    # GSM titles
+    gsm_titles = {}
+    for s in target.get('samples', []):
+        acc = s.get('accession', '')
+        title = s.get('title', '')
+        if acc.startswith('GSM'):
+            gsm_titles[acc] = title
+
+    # pubmedids: list → comma-separated
+    pubmed_ids = target.get('pubmedids', [])
+    if isinstance(pubmed_ids, list):
+        pubmed_str = ', '.join(str(p) for p in pubmed_ids)
+    else:
+        pubmed_str = str(pubmed_ids) if pubmed_ids else ''
+
+    return {
+        'gse': gse,
+        'title': gsm_titles,
+        'seriestitle': target.get('seriestitle', ''),
+        'summary': target.get('summary', '')[:500],
+        'taxon': target.get('taxon', ''),
+        'pubmedids': pubmed_str,
+        'pdat': target.get('pdat', ''),
+        'samplestaxa': target.get('samplestaxa', ''),
+    }
+
+
 def get_gse_info(gse: str, user_agent: str = "SubCellSpace/1.0"
                  ) -> Optional[dict]:
     """
