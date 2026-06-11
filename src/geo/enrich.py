@@ -98,10 +98,16 @@ def enrich_single_gse(gse: str, gsm_col: str,
 
 def merge_into_csv(csv_path: Path, gsm_col: str,
                    enrichment_map: Dict[str, dict]) -> int:
-    """将 enrichment 结果合并回 CSV。"""
+    """将 enrichment 结果合并回 CSV（安全写入 + 备份）。"""
+    # 备份
+    backup_path = csv_path.parent / f"{csv_path.stem}_copy{csv_path.suffix}"
+    if not backup_path.exists():
+        import shutil
+        shutil.copy2(csv_path, backup_path)
+
     updated = 0
     rows = []
-    
+
     with open(csv_path) as f:
         reader = csv.DictReader(f)
         fieldnames = list(reader.fieldnames or [])
@@ -109,11 +115,10 @@ def merge_into_csv(csv_path: Path, gsm_col: str,
             gse = r.get("GSE", "")
             gsm = r.get(gsm_col, "")
             gse_data = enrichment_map.get(gse)
-            
+
             if gse_data:
                 for col in NEW_COLUMNS:
                     if col == "title":
-                        # title 是 GSM 级别的，需要按 GSM 取
                         gsm_titles = gse_data.get("title", {})
                         r["title"] = gsm_titles.get(gsm, "")
                     else:
@@ -122,21 +127,36 @@ def merge_into_csv(csv_path: Path, gsm_col: str,
                             r[col] = val
                             if col not in fieldnames:
                                 fieldnames.append(col)
-            
+
             rows.append(r)
-    
+
     # 确保列序一致
     all_cols = list(fieldnames)
     for col in NEW_COLUMNS:
         if col not in all_cols:
             all_cols.append(col)
-    
-    with open(csv_path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=all_cols)
-        w.writeheader()
-        w.writerows(rows)
-    
-    return len(rows)
+
+    # 安全写入
+    tmp = csv_path.with_suffix(".csv.tmp")
+    try:
+        with open(tmp, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=all_cols)
+            w.writeheader()
+            w.writerows(rows)
+        with open(tmp) as f:
+            verify = sum(1 for _ in csv.DictReader(f))
+        if verify != len(rows):
+            raise ValueError(f"Verify failed: {verify} vs {len(rows)}")
+        tmp.replace(csv_path)
+        return len(rows)
+    except Exception as e:
+        logger.error(f"  Write failed: {e}")
+        if tmp.exists():
+            tmp.unlink()
+        # Restore from backup
+        shutil.copy2(backup_path, csv_path)
+        logger.info(f"  Restored {csv_path.name} from backup")
+        return 0
 
 
 def enrich_all(delay: float = 0.35,

@@ -22,6 +22,57 @@ logger = logging.getLogger(__name__)
 # ── 新增列 ─────────────────────────────────────────────────────
 NEW_COLUMNS = ["tissue", "disease_state"]
 
+
+# ── 备份/恢复 ───────────────────────────────────────────────────
+
+
+def backup_csv(csv_path: Path) -> Optional[Path]:
+    """创建 CSV 备份。备份路径为 {stem}_copy.{suffix}"""
+    backup_path = csv_path.parent / f"{csv_path.stem}_copy{csv_path.suffix}"
+    if backup_path.exists():
+        logger.info(f"  Backup exists: {backup_path.name}")
+        return backup_path
+    import shutil
+    shutil.copy2(csv_path, backup_path)
+    logger.info(f"  Backup created: {backup_path.name}")
+    return backup_path
+
+
+def restore_from_backup(csv_path: Path) -> bool:
+    """从备份恢复 CSV。"""
+    backup_path = csv_path.parent / f"{csv_path.stem}_copy{csv_path.suffix}"
+    if not backup_path.exists():
+        logger.error(f"  No backup found at {backup_path}")
+        return False
+    import shutil
+    shutil.copy2(backup_path, csv_path)
+    logger.info(f"  Restored {csv_path.name} from backup")
+    return True
+
+
+def safe_write_csv(csv_path: Path, fieldnames: list, rows: list) -> bool:
+    """安全写入 CSV：先写临时文件，成功后再替换原文件。"""
+    import tempfile
+    tmp = csv_path.with_suffix(".csv.tmp")
+    try:
+        with open(tmp, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames)
+            w.writeheader()
+            w.writerows(rows)
+        # Verify: read back and check
+        with open(tmp) as f:
+            reader = csv.DictReader(f)
+            count = sum(1 for _ in reader)
+        if count != len(rows):
+            raise ValueError(f"Write verification failed: {count} vs {len(rows)} rows")
+        tmp.replace(csv_path)
+        return True
+    except Exception as e:
+        logger.error(f"  Write failed: {e}")
+        if tmp.exists():
+            tmp.unlink()
+        return False
+
 # ── Prompt 模板 ─────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are a biomedical metadata curator. Your task is to infer the tissue type and disease state for each sample (GSM) in a GEO dataset (GSE), based on the dataset's title, summary, and individual sample titles.
@@ -219,7 +270,9 @@ def get_annotated_gses(csv_path: Path, gsm_col: str) -> set:
 
 def merge_results(csv_path: Path, gsm_col: str,
                   results: Dict[str, Dict[str, dict]]) -> int:
-    """将 LLM 标注结果合并回 CSV。"""
+    """将 LLM 标注结果合并回 CSV（安全写入 + 备份）。"""
+    backup_csv(csv_path)
+
     rows = []
     updated = 0
     with open(csv_path) as f:
@@ -232,16 +285,20 @@ def merge_results(csv_path: Path, gsm_col: str,
             gsm_data = gse_data.get(gsm, {})
             if gsm_data:
                 for col in NEW_COLUMNS:
+                    if col not in fieldnames:
+                        fieldnames.append(col)
                     val = gsm_data.get(col, "")
                     if val:
                         r[col] = val
                         updated += 1
             rows.append(r)
 
-    with open(csv_path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        w.writerows(rows)
+    if safe_write_csv(csv_path, fieldnames, rows):
+        logger.info(f"  Saved {len(rows)} rows → {csv_path.name}")
+    else:
+        logger.error(f"  Write failed! Attempting restore...")
+        restore_from_backup(csv_path)
+        return 0
 
     return updated
 
