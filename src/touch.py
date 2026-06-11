@@ -68,8 +68,12 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "Zarr 格式表达矩阵"},
         {"pattern": "*cells.csv*",          "required": False, "name": "cell_metadata",
          "desc": "细胞元数据"},
+        {"pattern": "*cells.parquet*",     "required": False, "name": "cell_metadata_parquet",
+         "desc": "Parquet 格式细胞元数据"},
         {"pattern": "*cells.zarr.zip*",     "required": False, "name": "cell_metadata_zarr",
          "desc": "Zarr 格式细胞元数据"},
+        {"pattern": "*matrix.mtx*",         "required": False, "name": "expr_matrix_mtx",
+         "desc": "MTX 格式表达矩阵 (10x 格式)"},
         {"pattern": "*gene_panel.json*",     "required": False, "name": "gene_panel",
          "desc": "基因 panel 信息"},
     ],
@@ -403,9 +407,15 @@ def _resolve_required_alternatives(report: TouchReport) -> None:
         ("transcripts_parquet", ["transcripts_zarr"]),
         ("cell_boundaries",     ["cell_boundaries_csv"]),
         ("nucleus_boundaries",  ["nucleus_boundaries_csv"]),
-        ("expr_matrix",         ["expr_matrix_zarr"]),
-        ("cell_metadata",       ["cell_metadata_zarr"]),
+        ("expr_matrix",         ["expr_matrix_zarr", "expr_matrix_mtx"]),
+        ("cell_metadata",       ["cell_metadata_parquet", "cell_metadata_zarr"]),
     ]
+
+    # transcripts_parquet 也是必须文件 transcripts.csv 的替代格式
+    # 它的存在不应该算作"可选文件"，因为跟 csv 是同一信息
+    for i, f in enumerate(report.files):
+        if f.name == "transcripts_parquet" and not f.required:
+            f.is_alternative = True
 
     # 标记所有替代格式（仅标记从属格式，主格式保持正常）
     all_alt_names = set()
@@ -416,6 +426,25 @@ def _resolve_required_alternatives(report: TouchReport) -> None:
     for i, f in enumerate(report.files):
         if f.name in all_alt_names and not f.required:
             f.is_alternative = True
+
+    # 如果主格式没找到但替代格式存在，回填到主条目
+    for primary, alts in alt_groups:
+        primary_idx = next((i for i, f in enumerate(report.files)
+                            if f.name == primary), None)
+        if primary_idx is None:
+            continue
+        primary_f = report.files[primary_idx]
+        if primary_f.found:
+            continue
+        for alt_name in alts:
+            alt_idx = next((i for i, f in enumerate(report.files)
+                            if f.name == alt_name), None)
+            if alt_idx is not None and report.files[alt_idx].found:
+                alt = report.files[alt_idx]
+                primary_f.found = True
+                primary_f.path = alt.path
+                primary_f.size_bytes = alt.size_bytes
+                break
 
     # transcripts 系列的替代关系（csv ↔ parquet ↔ zarr，必须满足其一）
     tx_idx = next((i for i, f in enumerate(report.files)

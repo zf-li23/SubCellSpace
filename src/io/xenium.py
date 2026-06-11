@@ -218,13 +218,16 @@ class XeniumIngestor(BaseIngestor):
         return gpd.GeoDataFrame(records, crs=None)
 
     def _load_expression_matrix(self, data_dir: Path) -> pd.DataFrame | None:
-        path = _find_in_dir(data_dir, "cell_feature_matrix.h5", "cell_feature_matrix.zarr.zip")
+        path = _find_in_dir(data_dir, "cell_feature_matrix.h5", "cell_feature_matrix.zarr.zip",
+                            "matrix.mtx.gz", "matrix.mtx")
         if path is None:
             return None
         logger.info("[%s] Loading expression matrix from %s …", self.platform, path.name)
         try:
             if ".zarr.zip" in path.name:
                 return self._read_zarr_matrix(path)
+            if "matrix.mtx" in path.name:
+                return self._read_mtx_matrix(data_dir)
             import scanpy as sc
             adata = sc.read_10x_h5(path)
             return pd.DataFrame(
@@ -233,6 +236,24 @@ class XeniumIngestor(BaseIngestor):
             ).astype("float32")
         except Exception as exc:
             logger.warning("[%s] Failed to load expression matrix: %s", self.platform, exc)
+            return None
+
+    @staticmethod
+    def _read_mtx_matrix(data_dir: Path) -> pd.DataFrame | None:
+        """读取 10x MTX 格式表达矩阵 (barcodes.tsv + features.tsv + matrix.mtx)。"""
+        import scanpy as sc
+        # Find the directory containing the mtx files
+        mtx_file = _find_in_dir(data_dir, "matrix.mtx.gz", "matrix.mtx")
+        if mtx_file is None:
+            return None
+        mtx_dir = mtx_file.parent
+        try:
+            adata = sc.read_10x_mtx(mtx_dir)
+            return pd.DataFrame(
+                adata.X.toarray() if hasattr(adata.X, "toarray") else adata.X,
+                index=adata.obs_names, columns=adata.var_names,
+            ).astype("float32")
+        except Exception:
             return None
 
     @staticmethod
