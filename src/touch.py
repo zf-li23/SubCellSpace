@@ -60,7 +60,7 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "细胞核边界"},
         {"pattern": "*nucleus_boundaries.csv*",  "required": False, "name": "nucleus_boundaries_csv",
          "desc": "CSV 格式细胞核边界"},
-        {"pattern": "*cell_feature_matrix.h5",   "required": False, "name": "expr_matrix",
+        {"pattern": "*cell_feature_matrix.h5*",  "required": False, "name": "expr_matrix",
          "desc": "h5 表达矩阵 (scanpy read_10x_h5)"},
         {"pattern": "*cells.csv*",          "required": False, "name": "cell_metadata",
          "desc": "细胞元数据"},
@@ -277,6 +277,19 @@ def _check_file(data_dir: Path, entry: dict) -> FileStatus:
     redundant = has_both
 
     if candidates:
+        # 排除损坏的符号链接
+        valid = []
+        for c in candidates:
+            try:
+                if c.exists() or c.is_symlink():
+                    # 符号链接指向不存在的目标也被视为无效
+                    if c.is_symlink() and not c.exists():
+                        continue
+                valid.append(c)
+            except OSError:
+                continue
+        candidates = valid
+
         # Prefer .parquet > .csv.gz > .csv
         for c in candidates:
             if best is None:
@@ -288,7 +301,8 @@ def _check_file(data_dir: Path, entry: dict) -> FileStatus:
                 best = c
                 break
 
-        size = best.stat().st_size
+        if best:
+            size = best.stat().st_size
         is_gz = str(best).endswith(".gz")
         is_parquet = str(best).endswith(".parquet")
 
