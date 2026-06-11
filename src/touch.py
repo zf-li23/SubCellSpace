@@ -46,6 +46,8 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "细胞级元数据 (cell_id + 注释列)"},
         {"pattern": "*_fov_position*",   "required": False, "name": "fov_positions",
          "desc": "FOV 空间布局"},
+        {"pattern": "*detected_transcripts.csv*", "required": False, "name": "transcripts_detected",
+         "desc": "detected_transcripts 格式（兼容 MERFISH 命名的 CosMx 数据）"},
     ],
     "xenium": [
         {"pattern": "*transcripts.csv*",    "required": True,  "name": "transcripts",
@@ -343,13 +345,14 @@ def _detect_platform_from_files(data_dir: Path) -> str | None:
     """
     files_lower = {f.name.lower() for f in data_dir.iterdir() if f.is_file()}
 
-    # MERFISH: detected_transcripts (独特关键词，不会被其他平台误匹配)
-    if any("detected_transcripts" in f for f in files_lower):
-        return "merfish"
-
-    # CosMx: *tx_file.csv*
+    # CosMx: *tx_file.csv* 或含 "CosMx" 关键词的 detected_transcripts
     if any("tx_file" in f for f in files_lower):
         return "cosmx"
+    if any("detected_transcripts" in f for f in files_lower):
+        # 如果文件名含 "CosMx"，优先归为 CosMx 而非 MERFISH
+        if any("cosmx" in f for f in files_lower):
+            return "cosmx"
+        return "merfish"
 
     # Xenium: 特征文件名（支持 GSM 前缀）
     # 用 " in f" 而非精确匹配，因为 GEO 数据常为 GSMxxxx_transcripts.csv.gz
@@ -452,7 +455,7 @@ def _resolve_required_alternatives(report: TouchReport) -> None:
     if tx_idx is not None:
         tx = report.files[tx_idx]
         if not tx.found:
-            for alt_name in ("transcripts_parquet", "transcripts_zarr"):
+            for alt_name in ("transcripts_parquet", "transcripts_zarr", "transcripts_detected"):
                 alt_idx = next((i for i, f in enumerate(report.files)
                                 if f.name == alt_name), None)
                 if alt_idx is not None:
