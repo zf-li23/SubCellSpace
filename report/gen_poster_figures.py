@@ -404,6 +404,34 @@ def fig5_violins():
     print('  ✅ fig5_violins')
 
 # ═════════════════════════════════════════════════════════════════
+# FIG 6: GSE263791 阿尔茨海默小鼠脑示例 — a-d 子图
+# ═════════════════════════════════════════════════════════════════
+
+def fig6_example_output():
+    img_files = [
+        (OUT / 'subcellspace_plot (0).png', '(a) UMAP'),
+        (OUT / 'subcellspace_plot (1).png', '(b) FOV Layout'),
+        (OUT / 'subcellspace_plot (2).png', '(c) Spatial — Clusters'),
+        (OUT / 'subcellspace_plot (3).png', '(d) Spatial — Annotation'),
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+    for ax, (path, label) in zip(axes.flat, img_files):
+        img = plt.imread(path)
+        ax.imshow(img)
+        ax.text(0.02, 0.97, label, transform=ax.transAxes,
+                fontsize=18, fontweight='bold', color='white',
+                va='top', ha='left',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#333',
+                          edgecolor='none', alpha=0.7))
+        ax.axis('off')
+
+    fig.tight_layout(pad=1.5)
+    fig.savefig(OUT / 'fig6_example_output.png', dpi=300)
+    plt.close(fig)
+    print('  ✅ fig6_example_output')
+
+# ═════════════════════════════════════════════════════════════════
 # 运行
 # ═════════════════════════════════════════════════════════════════
 
@@ -414,4 +442,5 @@ if __name__ == '__main__':
     fig3_file_coverage()
     fig4_tissue_dist()
     fig5_violins()
+    fig6_example_output()
     print(f'\nAll saved to {OUT}/')
