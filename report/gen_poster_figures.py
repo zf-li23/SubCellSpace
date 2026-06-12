@@ -57,9 +57,11 @@ def flt(v):
 # ═════════════════════════════════════════════════════════════════
 
 def fig1_platform_pipeline():
-    fig, ax = plt.subplots(figsize=(15.5, 5))
-    ax.set_xlim(0, 15.5); ax.set_ylim(0, 5)
+    fig, ax = plt.subplots(figsize=(15.5, 8.8))
+    ax.set_xlim(0, 15.5); ax.set_ylim(0, 10)
     ax.axis('off')
+
+    # ═══════════════════════ 上段: 平台搭建 Pipeline ═══════════════════════
 
     # ── 三个大阶段（Acquisition → 步骤3, Processing → 步骤5, 右侧收窄）──
     phases = [
@@ -68,14 +70,14 @@ def fig1_platform_pipeline():
         (11.2, 15.5, 'Output & Analysis', '#eafaf1', '#27ae60'),
     ]
     for x0, x1, label, bg, edge in phases:
-        rect = plt.Rectangle((x0, 0.15), x1-x0, 4.7,
+        rect = plt.Rectangle((x0, 5.15), x1-x0, 4.5,
                              facecolor=bg, edgecolor=edge, linewidth=2, alpha=0.5, zorder=0)
         ax.add_patch(rect)
-        ax.text((x0+x1)/2, 4.6, label, ha='center', va='top', fontsize=14,
+        ax.text((x0+x1)/2, 9.4, label, ha='center', va='top', fontsize=14,
                 fontweight='bold', color=edge, style='italic')
 
     # ── 7 个步骤 ──
-    steps = [
+    steps_upper = [
         ('1', 'GEO\nDownload', 'NCBI GEO\n→ Cluster', '#2980b9'),
         ('2', 'GEO\nMetadata', 'E-utilities\nGSM Expansion', '#3498db'),
         ('3', 'LLM\nAnnotation', 'DeepSeek API\nTissue / Disease', '#5dade2'),
@@ -85,25 +87,60 @@ def fig1_platform_pipeline():
         ('7', 'HTML\nReport', 'Publication\nFigures + PPTX', '#1abc9c'),
     ]
 
-    for i, (num, title, desc, color) in enumerate(steps):
+    for i, (num, title, desc, color) in enumerate(steps_upper):
         x = i * 2.1 + 0.3
-        rect = plt.Rectangle((x, 0.7), 1.8, 2.8, facecolor=color, alpha=0.10,
+        rect = plt.Rectangle((x, 5.7), 1.8, 2.6, facecolor=color, alpha=0.10,
                              edgecolor=color, linewidth=2.5, zorder=2, joinstyle='round',
                              linestyle='-')
         ax.add_patch(rect)
         # 圆角编号
-        ax.text(x + 0.9, 3.1, num, ha='center', va='center', fontsize=16,
+        ax.text(x + 0.9, 7.9, num, ha='center', va='center', fontsize=16,
                 fontweight='bold', color='white',
                 bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
                           linewidth=1.5, pad=0.2))
-        ax.text(x + 0.9, 2.2, title, ha='center', va='center', fontsize=12,
+        ax.text(x + 0.9, 7.05, title, ha='center', va='center', fontsize=12,
                 fontweight='bold', color=color)
-        ax.text(x + 0.9, 1.15, desc, ha='center', va='center', fontsize=8.5,
+        ax.text(x + 0.9, 6.15, desc, ha='center', va='center', fontsize=8.5,
                 color='#555')
         # 箭头
-        if i < len(steps) - 1:
-            ax.annotate('', xy=(x + 2.35, 2.15), xytext=(x + 1.75, 2.15),
+        if i < len(steps_upper) - 1:
+            ax.annotate('', xy=(x + 2.35, 7.0), xytext=(x + 1.75, 7.0),
                         arrowprops=dict(arrowstyle='->', color='#999', lw=2.5))
+
+    # ═══════════════════════ 下段: 6 步分析 Pipeline ═══════════════════════
+
+    # ── 分隔标题 ──
+    ax.text(7.75, 4.65, 'Analysis Pipeline — scverse-native 6-step workflow',
+            ha='center', va='center', fontsize=13, color='#555', style='italic',
+            fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='#f5f5f5',
+                      edgecolor='#ccc', linewidth=1))
+
+    steps_lower = [
+        ('1', 'Denoise', 'basic / sparc', '#3498db'),
+        ('2', 'Patchify', 'grid / hex', '#2ecc71'),
+        ('3', 'Segment', 'fov_cell_id\n/ cellpose', '#e67e22'),
+        ('4', 'Domain', 'spatial_leiden\n/ kmeans', '#f39c12'),
+        ('5', 'Annotate', 'celltypist\n/ scrin', '#9b59b6'),
+        ('6', 'Spatial', "Moran's I\n/ Geary's C", '#1abc9c'),
+    ]
+
+    for i, (num, title, desc, color) in enumerate(steps_lower):
+        x = i * 2.1 + 0.3
+        rect = plt.Rectangle((x, 0.5), 1.8, 2.5, facecolor=color, alpha=0.12,
+                             edgecolor=color, linewidth=2.5, zorder=2)
+        ax.add_patch(rect)
+        ax.text(x + 0.9, 2.2, title, ha='center', va='center', fontsize=13,
+                fontweight='bold', color=color)
+        ax.text(x + 0.9, 1.3, desc, ha='center', va='center', fontsize=9,
+                color='#555')
+        ax.text(x + 0.9, 3.05, str(i+1), ha='center', va='center', fontsize=16,
+                fontweight='bold', color=color,
+                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color,
+                          linewidth=2.5, pad=0.25))
+        if i < len(steps_lower) - 1:
+            ax.annotate('', xy=(x + 2.35, 1.75), xytext=(x + 1.75, 1.75),
+                        arrowprops=dict(arrowstyle='->', color='#aaa', lw=2.5))
 
     fig.savefig(OUT / 'fig1_platform_pipeline.png', dpi=300)
     plt.close(fig)
@@ -367,7 +404,6 @@ if __name__ == '__main__':
     print('Generating poster-optimized figures...')
     fig1_platform_pipeline()
     fig2_platform_counts()
-    fig3_three_modes()
     fig4_file_coverage()
     fig5_tissue_dist()
     fig6_violins()
