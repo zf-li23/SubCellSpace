@@ -61,17 +61,17 @@ def fig1_platform_pipeline():
     ax.set_xlim(0, 15.5); ax.set_ylim(0, 5)
     ax.axis('off')
 
-    # ── 三个大阶段（Acquisition → 步骤3右侧, Processing → 步骤5右侧）──
+    # ── 三个大阶段（Acquisition → 步骤3, Processing → 步骤5, 右侧收窄）──
     phases = [
-        (0, 7.2, 'Data Acquisition', '#e8f4f8', '#2980b9'),
-        (7.2, 11.4, 'Data Processing', '#fef9e7', '#f39c12'),
-        (11.4, 15.5, 'Output & Analysis', '#eafaf1', '#27ae60'),
+        (0, 6.6, 'Data Acquisition', '#e8f4f8', '#2980b9'),
+        (6.6, 11.2, 'Data Processing', '#fef9e7', '#f39c12'),
+        (11.2, 15.5, 'Output & Analysis', '#eafaf1', '#27ae60'),
     ]
     for x0, x1, label, bg, edge in phases:
         rect = plt.Rectangle((x0, 0.15), x1-x0, 4.7,
                              facecolor=bg, edgecolor=edge, linewidth=2, alpha=0.5, zorder=0)
         ax.add_patch(rect)
-        ax.text((x0+x1)/2, 4.85, label, ha='center', va='top', fontsize=14,
+        ax.text((x0+x1)/2, 4.6, label, ha='center', va='top', fontsize=14,
                 fontweight='bold', color=edge, style='italic')
 
     # ── 7 个步骤 ──
@@ -151,96 +151,41 @@ def fig2_platform_counts():
 # ═════════════════════════════════════════════════════════════════
 
 def fig3_three_modes():
-    fig, ax = plt.subplots(figsize=(12, 8.5))
-    ax.set_xlim(0, 12); ax.set_ylim(0, 8.5)
+    # Pipeline Mode 单独展示（回到最初水平管道图风格）
+    fig, ax = plt.subplots(figsize=(12, 3.5))
+    ax.set_xlim(0, 12); ax.set_ylim(0, 3.5)
     ax.axis('off')
 
-    modes = [
-        {
-            'title': 'Pipeline Mode',
-            'subtitle': 'scverse-native 6-step analysis',
-            'color': '#3498db',
-            'y0': 5.8,
-            'steps': [
-                ('1', 'Denoise', 'basic / sparc'),
-                ('2', 'Patchify', 'grid / hex'),
-                ('3', 'Segment', 'fov_cell_id\n/ cellpose'),
-                ('4', 'Domain', 'spatial_leiden\n/ kmeans'),
-                ('5', 'Annotate', 'celltypist\n/ scrin'),
-                ('6', 'Spatial', "Moran's I\n/ Geary's C"),
-            ]
-        },
-        {
-            'title': 'Touch Mode',
-            'subtitle': 'File integrity & normalization',
-            'color': '#e67e22',
-            'y0': 3.0,
-            'steps': [
-                ('1', 'Scan', 'manifest compare'),
-                ('2', 'Report', 'required / optional'),
-                ('3', 'Normalize', 'GSM prefix rename'),
-                ('4', 'Export', 'CSV summary'),
-            ]
-        },
-        {
-            'title': 'Stats Mode',
-            'subtitle': 'Zero-I/O streaming statistics',
-            'color': '#27ae60',
-            'y0': 0.2,
-            'steps': [
-                ('1', 'Stream', 'read header / count'),
-                ('2', 'Aggregate', 'tx + cell + gene'),
-                ('3', 'Threshold', '50k cell safety'),
-                ('4', 'Export', 'CSV → GEO merge'),
-            ]
-        },
+    steps = [
+        ('1', 'Denoise', 'basic / sparc', '#3498db'),
+        ('2', 'Patchify', 'grid / hex', '#2ecc71'),
+        ('3', 'Segment', 'fov_cell_id\n/ cellpose', '#e67e22'),
+        ('4', 'Domain', 'spatial_leiden\n/ kmeans', '#f39c12'),
+        ('5', 'Annotate', 'celltypist\n/ scrin', '#9b59b6'),
+        ('6', 'Spatial', "Moran's I\n/ Geary's C", '#1abc9c'),
     ]
 
-    for mode in modes:
-        y0 = mode['y0']
-        color = mode['color']
-        steps = mode['steps']
-        n = len(steps)
-
-        # ── 模式标题（左侧竖排区域）──
-        ax.text(0.5, y0 + 1.6, mode['title'], ha='center', va='center', fontsize=15,
-                fontweight='bold', color=color)
-        ax.text(0.5, y0 + 1.0, mode['subtitle'], ha='center', va='center',
-                fontsize=9, color='#777', style='italic')
-
-        # 模式标识色条
-        rect = plt.Rectangle((0.15, y0 - 0.1), 0.7, 2.6,
-                             facecolor=color, alpha=0.15,
-                             edgecolor=color, linewidth=2, zorder=2)
+    for i, (num, title, desc, color) in enumerate(steps):
+        x = i * 1.85 + 0.35
+        rect = plt.Rectangle((x, 0.5), 1.55, 2.3, facecolor=color, alpha=0.12,
+                             edgecolor=color, linewidth=2.5, zorder=2)
         ax.add_patch(rect)
+        ax.text(x + 0.775, 2.1, title, ha='center', va='center', fontsize=13,
+                fontweight='bold', color=color)
+        ax.text(x + 0.775, 1.15, desc, ha='center', va='center', fontsize=9,
+                color='#555')
+        ax.text(x + 0.775, 2.85, str(i+1), ha='center', va='center', fontsize=16,
+                fontweight='bold', color=color,
+                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color,
+                          linewidth=2.5, pad=0.25))
+        if i < len(steps) - 1:
+            ax.annotate('', xy=(x + 1.9, 1.65), xytext=(x + 1.5, 1.65),
+                        arrowprops=dict(arrowstyle='->', color='#aaa', lw=2.5))
 
-        # ── 步骤方块（横向）──
-        for i, (num, title, desc) in enumerate(steps):
-            x = i * 1.7 + 1.3
-            rect = plt.Rectangle((x, y0 + 0.05), 1.5, 0.75,
-                                 facecolor=color, alpha=0.10,
-                                 edgecolor=color, linewidth=2, zorder=2)
-            ax.add_patch(rect)
-            # 编号圆圈
-            ax.text(x + 0.25, y0 + 0.42, num, ha='center', va='center', fontsize=11,
-                    fontweight='bold', color='white',
-                    bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
-                              linewidth=1.5, pad=0.15))
-            ax.text(x + 0.8, y0 + 0.55, title, ha='left', va='center', fontsize=12,
-                    fontweight='bold', color=color)
-            ax.text(x + 0.8, y0 + 0.2, desc, ha='left', va='center', fontsize=8.5,
-                    color='#555')
-            # 箭头
-            if i < n - 1:
-                ax.annotate('', xy=(x + 1.7, y0 + 0.42),
-                            xytext=(x + 1.45, y0 + 0.42),
-                            arrowprops=dict(arrowstyle='->', color='#aaa', lw=2))
-
-        # ── 行间分隔线 ──
-        if mode != modes[-1]:
-            next_y0 = modes[modes.index(mode) + 1]['y0']
-            ax.axhline(y=next_y0 + 2.9, xmin=0.03, xmax=0.97,
-                       color='#ddd', linewidth=1.5, linestyle='--')
+    # ── 顶部模式标题 ──
+    ax.text(6, 3.25, 'Pipeline — scverse-native 6-step analysis',
+            ha='center', va='top', fontsize=12, color='#555', style='italic',
+            fontweight='bold')
 
     fig.savefig(OUT / 'fig3_three_modes.png', dpi=300)
     plt.close(fig)
