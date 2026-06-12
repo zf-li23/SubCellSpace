@@ -109,13 +109,13 @@ def add_img(slide, l, t, w, name, caption=''):
            caption, size=Pt(17), color=GRAY)
 
 # ═══════════════════════════════════════════════════════════════
-# 图片显示宽度 (cm) — 缩小以适配 120cm 高度
-W1 = 50      # fig1
-W2 = 26      # fig2
-W3 = 26      # fig3
-W4 = 30      # fig4
-W5 = 30      # fig5
-W6 = 18      # fig6
+# 图片显示宽度 (cm)
+W1 = 40      # fig1 — 左侧，右侧配文字
+W2 = 22      # fig2 — 数据库 grid
+W3 = 22      # fig3
+W4 = 22      # fig4
+W5 = 22      # fig5
+W6 = 32      # fig6 — 放大一倍
 
 def build():
     prs = Presentation(); prs.slide_width = W; prs.slide_height = H
@@ -133,125 +133,127 @@ def build():
        'github.com/zf-li23/SubCellSpace  |  Data: GEO (269 GSEs) + Public Repositories',
        size=Pt(18), color=RGBColor(0x95,0xA5,0xA6), align=PP_ALIGN.CENTER)
 
+    # ════════════════ ROW 1: Pipeline — 左图右文 ═══════════
     y = Cm(10.0)
-
-    # ════════════════ ROW 1: Pipeline ═══════════════════════
     sec_hdr(sl, M, y, Cm(83), '1  Platform Construction & Analysis Pipeline', SEC_C['Platform'])
     y += Cm(2.5)
+
+    # FIG1 左侧 40cm
     add_img(sl, M, y, Cm(W1), 'fig1_platform_pipeline.png',
-            'Fig 1. End-to-end pipeline: platform construction (top) + scverse-native analysis (bottom)')
-    y += dh(Cm(W1), 1) + Cm(0.3)
-    tb(sl, M, y, Cm(83), Cm(2.5),
-       'Three phases drive 7 platform-building steps (Acquisition → Processing → Output). '
-       'The unified 7-step analysis pipeline (Denoise → Patchify → Segment → Domain → '
-       'Annotate → Spatial → Subcellular) is shared across CosMx, Xenium, and MERFISH.',
-       size=Pt(19), color=DARK)
-    y += Cm(3.2)
+            'Fig 1. End-to-end pipeline: 7-step platform construction + analysis')
+    fig1_h = dh(Cm(W1), 1)
 
-    # ════════════════ ROW 2: Database + Coverage ═══════════
-    sec_hdr(sl, CX_L, y, C2_W, '2  Database Composition', SEC_C['Database'])
-    sec_hdr(sl, CX_R, y, C2_W, '3  File Completeness', SEC_C['Coverage'])
+    # 文字右侧 40cm（与图片等高）
+    tx_l = M + Cm(W1) + Cm(1.5)
+    tx_w = Cm(83) - Cm(W1) - Cm(1.5)  # ~41.5cm
+    overview_text = (
+        'SubCellSpace is a unified subcellular spatial transcriptomics platform '
+        'supporting CosMx, Xenium, and MERFISH with a single 6-step analysis pipeline.\n\n'
+        'Database: 2,410+ GEO entries across 269 GSE series, supplemented by 998 '
+        'non-GEO public datasets. All data uniformly processed through the same pipeline.\n\n'
+        'Pipeline (top): 7-step platform construction — GEO Download → Metadata Curation '
+        '(E-utilities GSM expansion) → LLM Annotation (DeepSeek tissue/disease classification) '
+        '→ Touch Integrity Check (automated file normalization) → Stats Streaming (zero-I/O counts) '
+        '→ Frontend Browser (React + TypeScript) → HTML Report.\n\n'
+        'Analysis (bottom): Denoise → Patchify → Segment (fov_cell_id / cellpose) → '
+        'Domain Detection (spatial_leiden) → Clustering (Leiden) → Annotation (celltypist + SCRIN) '
+        '→ Spatial Autocorrelation (Moran\'s I / Geary\'s C). Optional Subcellular module via SCRIN.'
+    )
+    tb(sl, tx_l, y, tx_w, fig1_h, overview_text, size=Pt(19), color=DARK)
+
+    y += fig1_h + Cm(0.5)
+
+    # ════════════════ ROW 2: Database Overview ══════════════
+    sec_hdr(sl, M, y, Cm(83), '2–5  Database Overview: Composition, Completeness, Biology & Quality',
+            SEC_C['Database'])
     y += Cm(2.5)
 
-    # Left: FIG2
-    add_img(sl, CX_L, y, Cm(W2), 'fig2_platform_counts.png',
+    # 2-column grid: Left(FIG2+FIG4) | Right(FIG3+FIG5)
+    grid_w = Cm(38)        # each column width
+    gap_y = Cm(0.8)        # between stacked images
+    gap_x = Cm(83) - 2*grid_w  # between left and right columns ≈ 7cm
+
+    # Left column
+    add_img(sl, M, y, grid_w, 'fig2_platform_counts.png',
             'Fig 2. Dataset counts by platform & status')
-    tx2_y = y + dh(Cm(W2), 2) + Cm(1.0)
-    tb(sl, CX_L, tx2_y, C2_W, Cm(5.5),
-       '2,410+ GEO entries across 3 platforms (1,019 ready). '
-       'Xenium: 1,525 entries (717 ready), CosMx: 476 (186 ready), '
-       'MERFISH: 130 (116 ready). Plus 998 non-GEO public datasets. '
-       '269 unique GSE series curated via NCBI E-utilities.',
-       size=Pt(19), color=DARK)
-
-    # Right: FIG3
-    add_img(sl, CX_R, y, Cm(W3), 'fig3_file_coverage.png',
-            'Fig 3. Optional file coverage by platform')
-    tx3_y = y + dh(Cm(W3), 3) + Cm(1.0)
-    tb(sl, CX_R, tx3_y, C2_W, Cm(5.5),
-       'CosMx: expression (96%), metadata (99%), FOV positions (100%). '
-       'Xenium: cell boundaries (74%), nucleus boundaries (60%), gene panels (31%). '
-       'MERFISH: expression (97%), metadata (98%). Touch module auto-normalizes '
-       'all file types including naming inconsistencies.',
-       size=Pt(19), color=DARK)
-
-    y = max(tx2_y + Cm(5.5), tx3_y + Cm(5.5)) + Cm(0.5)
-
-    # ════════════════ ROW 3: Biology + Quality ═══════════════
-    sec_hdr(sl, CX_L, y, C2_W, '4  Biological Coverage', SEC_C['Biology'])
-    sec_hdr(sl, CX_R, y, C2_W, '5  Data Quality Metrics', SEC_C['Quality'])
-    y += Cm(2.5)
-
-    # Left: FIG4
-    add_img(sl, CX_L, y, Cm(W4), 'fig4_tissue_dist.png',
+    y2_left = y + dh(grid_w, 2) + gap_y
+    add_img(sl, M, y2_left, grid_w, 'fig4_tissue_dist.png',
             'Fig 4. Top 10 tissues & disease states')
-    tx4_y = y + dh(Cm(W4), 4) + Cm(1.0)
-    tb(sl, CX_L, tx4_y, C2_W, Cm(6.0),
-       '50+ tissue types, 30+ disease conditions. Brain, breast, lung, lymph node '
-       'most represented. Normal, various cancers, Alzheimer\'s, Parkinson\'s. '
-       'Both H. sapiens and M. musculus. Multi-region sampling for brain and tumor.',
-       size=Pt(19), color=DARK)
 
-    # Right: FIG5
-    add_img(sl, CX_R, y, Cm(W5), 'fig5_violins.png',
+    # Right column
+    rx = M + grid_w + gap_x
+    add_img(sl, rx, y, grid_w, 'fig3_file_coverage.png',
+            'Fig 3. Optional file coverage by platform')
+    y3_right = y + dh(grid_w, 3) + gap_y
+    add_img(sl, rx, y3_right, grid_w, 'fig5_violins.png',
             'Fig 5. Cross-platform quality (log₁₀ scale)')
-    tx5_y = y + dh(Cm(W5), 5) + Cm(1.0)
-    tb(sl, CX_R, tx5_y, C2_W, Cm(6.0),
-       'Xenium: highest transcripts/dataset (median 181K), 6,522-gene panels. '
-       'MERFISH: most cells/experiment (median 18K, max 550K). '
-       'CosMx: consistent 960-gene panels, highest per-cell transcripts (35,825). '
-       'Platform-specific strengths inform experimental design.',
-       size=Pt(19), color=DARK)
 
-    y = max(tx4_y + Cm(6.0), tx5_y + Cm(6.0)) + Cm(0.5)
+    # Text snippet at bottom of shorter column
+    left_bot = y + dh(grid_w, 2) + gap_y + dh(grid_w, 4) + Cm(1.5)
+    right_bot = y + dh(grid_w, 3) + gap_y + dh(grid_w, 5) + Cm(1.5)
+    db_text_y = max(left_bot, right_bot)
 
-    # ════════════════ ROW 4: Case + Methods ══════════════════
-    sec_hdr(sl, CX_L, y, C2_W, '6  Case Study: Alzheimer\'s Mouse Brain', SEC_C['Case'])
-    sec_hdr(sl, CX_R, y, C2_W, '7  Methods & Implementation', SEC_C['Methods'])
+    db_summary = (
+        '2,410+ GEO entries · 269 GSEs · 50+ tissues · 30+ disease states · '
+        'CosMx: 476 (186 ready) · Xenium: 1,525 (717 ready) · MERFISH: 130 (116 ready) · '
+        'File availability: expression matrices >95%, cell metadata >98%, '
+        'Xenium unique: cell/nucleus boundaries + gene panels. '
+        'Quality: Xenium highest transcripts, MERFISH most cells, CosMx most consistent.'
+    )
+    tb(sl, M, db_text_y, Cm(83), Cm(2.5), db_summary, size=Pt(18), color=DARK)
+
+    y = db_text_y + Cm(3.0)
+
+    # ════════════════ ROW 3: Case Study + Methods ═══════════
+    sec_hdr(sl, M, y, Cm(83), '6  Case Study: Alzheimer\'s Disease Mouse Brain  |  7  Methods & Implementation',
+            SEC_C['Case'])
     y += Cm(2.5)
 
-    # Left: FIG6
-    add_img(sl, CX_L, y, Cm(W6), 'fig6_example_output.png',
-            'Fig 6. GSE263791 — 5xFAD mouse hippocampus (821 cells, 960 genes)')
-    tx6_y = y + dh(Cm(W6), 6) + Cm(1.0)
-    tb(sl, CX_L, tx6_y, C2_W, Cm(5.0),
-       '(a) Spatial transcript counts: regional hippocampal differences. '
-       '(b) UMAP by transcript count: continuous expression gradients. '
-       '(c) Leiden clustering: 8 cell populations with spatial organization. '
-       '(d) UMAP by cluster: neuronal & glial subtypes in Alzheimer\'s model.',
-       size=Pt(19), color=DARK)
+    # FIG6 左侧 32cm（放大一倍）
+    add_img(sl, M, y, Cm(W6), 'fig6_example_output.png',
+            'Fig 6. GSE263791 — 5xFAD mouse hippocampus (821 cells, 41 FOVs, 960 genes)')
+    fig6_h = dh(Cm(W6), 6)
 
-    # Right: Methods
+    # Methods 右侧
+    mx = M + Cm(W6) + Cm(1.5)
+    mw = Cm(83) - Cm(W6) - Cm(1.5)  # ~48.5cm
+
     methods_lines = [
         'Data Acquisition:',
         '  • NCBI GEO E-utilities: 269 GSEs, 4,478 GSM records',
         '  • Public repos: Nanostring, Vizgen, 10x Genomics, Zenodo',
         '',
-        'Metadata:',
+        'Metadata Enrichment:',
         '  • GSM expansion via esummary (tissue, disease, PMIDs)',
         '  • LLM annotation: DeepSeek for tissue/disease classification',
         '  • Touch: automated file integrity & normalization',
-        '  • Stats: zero-I/O streaming counts',
+        '  • Stats: zero-I/O streaming (header-only) transcript, cell, gene counts',
         '',
         'Analysis (scverse-native):',
-        '  • Denoising: basic / SPARC',
-        '  • Segmentation: fov_cell_id / cellpose',
-        '  • Clustering: Leiden + spatial domain detection',
-        '  • Annotation: celltypist + SCRIN subcellular',
-        '  • Spatial: Moran\'s I / Geary\'s C',
+        '  • Denoising: basic / SPARC  |  Segmentation: fov_cell_id / cellpose',
+        '  • Domain: spatial_leiden / k-means  |  Clustering: Leiden / Louvain',
+        '  • Annotation: celltypist (scRNA-seq reference) + SCRIN subcellular',
+        '  • Spatial: Moran\'s I / Geary\'s C autocorrelation',
         '',
-        'Frontend & Reporting:',
-        '  • React + TypeScript static browser (no backend)',
+        'Infrastructure:',
+        '  • React + TypeScript static frontend (no API server)',
         '  • HTML report with publication-quality figures',
-        '  • Slurm HPC: job arrays, 10 concurrent tasks',
+        '  • Slurm HPC job arrays (10 concurrent tasks)',
     ]
-    text_block(sl, CX_R, y, C2_W, Cm(16.0), methods_lines, size=Pt(17), color=DARK)
+    text_block(sl, mx, y, mw, fig6_h, methods_lines, size=Pt(17), color=DARK)
+
+    # Case study text below FIG6
+    y += fig6_h + Cm(1.0)
+    tb(sl, M, y, Cm(83), Cm(3.5),
+       '5xFAD Alzheimer\'s mouse model (GSE263791). (a) Spatial transcript counts: regional differences '
+       'in hippocampus, higher expression in dentate gyrus. (b) UMAP by transcript count: continuous '
+       'gradients. (c) Leiden clustering: 8 cell populations with distinct spatial patterns. '
+       '(d) UMAP cluster validation: neuronal subtypes & glial populations relevant to AD pathology. '
+       'Microglia-astrocyte cross-talk in amyloid plaque niches revealed by spatial context.',
+       size=Pt(19), color=DARK)
+    y += Cm(4.0)
 
     # ── Footer ──
-    y = max(tx6_y + Cm(5.0) + Cm(0.5), y + Cm(16.0) + Cm(0.5))
-    if y < Cm(112):
-        y = Cm(112)
-    # Ensure footer fits within 120cm
     if y + Cm(2.0) > H:
         y = H - Cm(2.0)
 
