@@ -30,35 +30,35 @@ def rect(sl,l,t,w,h,c=None):
 def rrect(sl,l,t,w,h,c):
     s=sl.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,l,t,w,h)
     s.fill.solid(); s.fill.fore_color.rgb=c; s.line.fill.background(); return s
-def tb(sl,l,t,w,h,txt,sz=Pt(20),c=DARK,b=False,a=PP_ALIGN.LEFT):
+def tb(sl,l,t,w,h,txt,sz=Pt(28),c=DARK,b=False,a=PP_ALIGN.LEFT):
     bx=sl.shapes.add_textbox(l,t,w,h); bx.text_frame.word_wrap=True
     p=bx.text_frame.paragraphs[0]; p.text=txt; p.font.size=sz
     p.font.color.rgb=c; p.font.bold=b; p.font.name='Calibri'; p.alignment=a
-def tblock(sl,l,t,w,h,lines,sz=Pt(20),c=DARK):
+def tblock(sl,l,t,w,h,lines,sz=Pt(28),c=DARK):
     bx=sl.shapes.add_textbox(l,t,w,h); bx.text_frame.word_wrap=True
     for i,ln in enumerate(lines):
         p=bx.text_frame.paragraphs[0] if i==0 else bx.text_frame.add_paragraph()
         p.text=ln; p.font.size=sz; p.font.color.rgb=c; p.font.name='Calibri'; p.space_after=Pt(2)
 def hdr(sl,l,t,w,txt,c=BLUE):
     b=rrect(sl,l,t,w,Cm(2.0),c); b.text_frame.text=txt
-    p=b.text_frame.paragraphs[0]; p.font.size=Pt(34); p.font.color.rgb=WHITE
+    p=b.text_frame.paragraphs[0]; p.font.size=Pt(44); p.font.color.rgb=WHITE
     p.font.bold=True; p.font.name='Calibri'; p.alignment=PP_ALIGN.CENTER
     b.text_frame.vertical_anchor=MSO_ANCHOR.MIDDLE
 def aimg(sl,l,t,w,name,cap=''):
     p=FIG/name
     if p.exists(): sl.shapes.add_picture(str(p),l,t,w,dh(w,int(name[3])))
-    if cap: tb(sl,l,t+dh(w,int(name[3]))+Cm(0.15),w,Cm(0.8),cap,sz=Pt(16),c=GRAY)
+    if cap: tb(sl,l,t+dh(w,int(name[3]))+Cm(0.15),w,Cm(0.8),cap,sz=Pt(24),c=GRAY)
 
 def build():
     prs=Presentation(); prs.slide_width=W; prs.slide_height=H; sl=ns(prs)
     # ── TITLE ──
-    rect(sl,0,0,W,Cm(9.5),DARK)
-    tb(sl,M,Cm(1.8),Cm(83),Cm(3.5),'SubCellSpace: A Unified Platform for\nSubcellular Spatial Transcriptomics',sz=Pt(52),c=WHITE,b=True,a=PP_ALIGN.CENTER)
-    tb(sl,M,Cm(5.8),Cm(83),Cm(1.5),'Zhefu Li  ·  Tsinghua University · Jun 2026',sz=Pt(26),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
-    tb(sl,M,Cm(7.5),Cm(83),Cm(1.2),'github.com/zf-li23/SubCellSpace  |  Data: GEO (269 GSEs) + Public Repositories',sz=Pt(18),c=RGBColor(0x95,0xA5,0xA6),a=PP_ALIGN.CENTER)
+    rect(sl,0,0,W,Cm(10.0),DARK)
+    tb(sl,M,Cm(1.5),Cm(83),Cm(4.5),'SubCellSpace: A Unified Platform for Subcellular Spatial Transcriptomics',sz=Pt(64),c=WHITE,b=True,a=PP_ALIGN.CENTER)
+    tb(sl,M,Cm(5.8),Cm(83),Cm(1.5),'Zhefu Li  ·  Tsinghua University · Jun 2026',sz=Pt(32),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
+    tb(sl,M,Cm(7.5),Cm(83),Cm(1.2),'github.com/zf-li23/SubCellSpace  |  Data: GEO (269 GSEs) + Public Repositories',sz=Pt(28),c=RGBColor(0x95,0xA5,0xA6),a=PP_ALIGN.CENTER)
 
     # ════════════ ROW 1: Pipeline (FIG1 放大) ══════════════
-    y=Cm(10.0)
+    y=Cm(10.5)
     hdr(sl,M,y,Cm(83),'1  Platform Construction & Analysis Pipeline'); y+=Cm(2.5)
     W1=50                               # 放大到 50cm
     f1_h=dh(Cm(W1),1)                   # ~29.4cm
@@ -71,7 +71,7 @@ def build():
        'Analysis: Denoise -> Patchify -> Segment -> Domain Detection -> '
        'Leiden Clustering -> celltypist/SCRIN Annotation -> '
        f'Spatial Autocorrelation (Moran\'s I / Geary\'s C).',
-       sz=Pt(19),c=DARK)
+       sz=Pt(28),c=DARK)
     aimg(sl,M+tx_w+Cm(1.0),y,Cm(W1),'fig1_platform_pipeline.png','Fig 1. End-to-end pipeline')
     y+=f1_h+Cm(2.0)
 
@@ -95,7 +95,7 @@ def build():
        'CosMx: expression 96%, metadata 99%, FOV positions 100%. '
        'Xenium: cell boundaries 74%, nucleus boundaries 60%, gene panels 31%. '
        'MERFISH: expression 97%, metadata 98%. Touch module auto-normalizes all.',
-       sz=Pt(17),c=DARK)
+       sz=Pt(28),c=DARK)
 
     y+=Cm(h23)+Cm(0.8)
 
@@ -111,7 +111,7 @@ def build():
         'Both H. sapiens and M. musculus.',
         '','Xenium: highest transcript counts (181K median).',
         'MERFISH: most cells (18K median, max 550K).',
-        'CosMx: 960-gene panels, 35,825 per-cell tx median.'],sz=Pt(17),c=DARK)
+        'CosMx: 960-gene panels, 35,825 per-cell tx median.'],sz=Pt(28),c=DARK)
     fx=M+tx2_w+GAP
     aimg(sl,fx,y,w4,'fig4_tissue_dist.png','Fig 4. Tissues & diseases')
     aimg(sl,fx+w4+GAP,y,w5,'fig5_violins.png','Fig 5. Quality metrics')
@@ -142,7 +142,7 @@ def build():
        '(b) UMAP by transcript count. (c) Leiden: 8 cell populations. '
        '(d) UMAP cluster validation. Microglia-astrocyte cross-talk '
        'in amyloid plaque niches revealed by spatial context.',
-       sz=Pt(18),c=DARK)
+       sz=Pt(28),c=DARK)
 
     # ── Right: Conclusion ──
     tblock(sl,HR,y,Cm(37),f6_h,[
@@ -164,7 +164,7 @@ def build():
         '• Spatial multi-omics data support',
         '• Cloud-deployed pipeline (Docker/Singularity)',
         '• Community dataset registry with DOI',
-    ],sz=Pt(18),c=DARK)
+    ],sz=Pt(28),c=DARK)
 
     y+=f6_h+Cm(6.5)
 
@@ -176,7 +176,7 @@ def build():
        'Data: GEO (NCBI)  ·  Code: github.com/zf-li23/SubCellSpace (MIT)  ·  '
        'Tools: scanpy, squidpy, spatialdata, SCRIN, CellTypist  ·  '
        'Poster: Tsinghua University SLS Undergraduate Research',
-       sz=Pt(16),c=WHITE,a=PP_ALIGN.CENTER)
+       sz=Pt(24),c=WHITE,a=PP_ALIGN.CENTER)
 
     prs.save(str(OUT/'SubCellSpace_Poster.pptx'))
     print('  ✅ Saved')
