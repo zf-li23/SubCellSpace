@@ -1,5 +1,6 @@
+// @ts-nocheck — 已弃用（纯静态浏览器无后端 API）
 import React, { useState, useEffect, useMemo } from 'react'
-import type { DatasetRow } from '../types/datasets'
+import type { GeoRow } from '../types/datasets'
 
 const API = '/api/db'
 const PAGE_SIZES = [25, 50, 100, 0]
@@ -14,7 +15,7 @@ const COL_LABELS: Record<string, string> = {
   status: '状态', local_path: '本地路径', file_name: '文件名',
 }
 
-function emptyRow(): DatasetRow {
+function emptyRow(): GeoRow {
   return {
     id: '', project_id: '', platform: 'CosMx', name: '',
     project_url: null, download_url: null,
@@ -31,23 +32,23 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return r.json()
 }
 
-function getCellValue(row: DatasetRow, colName: string): string {
+function getCellValue(row: GeoRow, colName: string): string {
   const val = (row as Record<string, unknown>)[colName]
   if (val === null || val === undefined) return '—'
   return String(val)
 }
 
 export default function DataEditor() {
-  const [rows, setRows] = useState<DatasetRow[]>([])
+  const [rows, setRows] = useState<GeoRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editValues, setEditValues] = useState<Partial<DatasetRow>>({})
+  const [editValues, setEditValues] = useState<Partial<GeoRow>>({})
   const [addingNew, setAddingNew] = useState(false)
-  const [newRow, setNewRow] = useState<DatasetRow>(emptyRow())
+  const [newRow, setNewRow] = useState<GeoRow>(emptyRow())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   // Filters & sort
@@ -68,7 +69,7 @@ export default function DataEditor() {
 
   const loadRows = async () => {
     setLoading(true)
-    try { setRows(await fetchJSON<DatasetRow[]>(`${API}/datasets`)); setError(null) }
+    try { setRows(await fetchJSON<GeoRow[]>(`${API}/datasets`)); setError(null) }
     catch (e) { setError(String(e)) }
     finally { setLoading(false) }
   }
@@ -78,7 +79,7 @@ export default function DataEditor() {
   const flash = (msg: string) => { setMessage(msg); setTimeout(() => setMessage(null), 2500) }
 
   // ── Edit actions ─────────────────────────────────────────────────
-  const startEdit = (row: DatasetRow) => { setEditingId(row.id); setEditValues({ ...row }) }
+  const startEdit = (row: GeoRow) => { setEditingId(row.id!); setEditValues({ ...row }) }
   const cancelEdit = () => { setEditingId(null); setEditValues({}) }
   const saveEdit = async () => {
     if (editingId == null) return

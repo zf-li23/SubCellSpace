@@ -1,53 +1,58 @@
-// ── Dataset Browser Types ────────────────────────────────────────────
-// Mirrors the structure of frontend/public/datasets.json
+// ── GEO 数据浏览器类型 ──────────────────────────────────────────
+// 对应 export_frontend_json.py 的输出格式
 
 export interface ColumnMeta {
   name: string
   type: string
-  nullable: boolean
   category: string
   label_zh: string
-  label_en: string
-  description_zh: string
-  description_en: string
   priority: boolean
 }
 
 export interface CategoryMeta {
   key: string
   label_zh: string
-  label_en: string
   columns: string[]
 }
 
-export interface DatasetRow {
-  id: string
-  project_id: string
-  platform: string
-  name: string
-  project_url: string | null
-  download_url: string | null
-  publication_doi: string | null
-  data_source: string
-  species: string
-  tissue: string
+export interface GeoRow {
+  GSE: string | null
+  sample_name: string | null
+  platform: string | null
+  status: string | null
+
+  name: string | null
+  tissue: string | null
   disease_state: string | null
-  spatial_resolution_um: number | null
+  species: string | null
+
+  n_transcripts: number | null
+  n_cells: number | null
+  n_genes: number | null
+  n_fovs: number | null
   gene_panel_size: number | null
-  estimated_cell_count: number | null
-  data_size_bytes: number | null
-  data_size_display: string | null
-  status: string
-  local_path: string | null
-  file_name: string | null
+  median_transcripts: number | null
+  median_genes: number | null
+
+  data_size: string | null
+  available_files: string | null
+
+  pdat: string | null
+  pubmedids: string | null
+  taxon: string | null
+  title: string | null
+  summary: string | null
+  file_names: string | null
+
+  [key: string]: unknown  // 允许未来新增列
 }
 
-export interface DatasetsJSON {
+export interface GeoJSON {
   meta: {
     total_rows: number
     columns: ColumnMeta[]
     categories: CategoryMeta[]
     priority_columns: string[]
   }
-  rows: DatasetRow[]
+  rows: GeoRow[]
 }

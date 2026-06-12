@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import type { DatasetsJSON, DatasetRow, ColumnMeta } from '../types/datasets'
+import type { GeoJSON, GeoRow, ColumnMeta } from '../types/datasets'
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -11,7 +11,7 @@ function fmtNum(n: number | null | undefined): string {
   return String(n)
 }
 
-function getCellValue(row: DatasetRow, colName: string): string {
+function getCellValue(row: GeoRow, colName: string): string {
   const val = (row as Record<string, unknown>)[colName]
   if (val === null || val === undefined) return '—'
   return String(val)
@@ -21,37 +21,40 @@ function statusBadge(status: string): string {
   switch (status) { case 'ready': return '🟢'; case 'pending': return '🟡'; case 'error': return '🔴'; default: return '⚪' }
 }
 
-function UrlLink({ url }: { url: string | null }) {
-  if (!url) return <span className="url-link disabled">—</span>
-  let display = url
-  try { const u = new URL(url); display = u.hostname + u.pathname; if (display.length > 40) display = display.slice(0, 37) + '...' } catch {}
-  return <a href={url} target="_blank" rel="noopener noreferrer" className="url-link" title={url}>{display}</a>
-}
+const PAGE_SIZES = [25, 50, 100, 0]
 
-const PAGE_SIZES = [25, 50, 100, 0] // 0 = All
+const PLATFORMS = [
+  { key: 'cosmx',  label: 'CosMx',  file: '/cosmx.json' },
+  { key: 'xenium', label: 'Xenium', file: '/xenium.json' },
+  { key: 'merfish',label: 'MERFISH',file: '/merfish.json' },
+]
 
 // ── Row Detail ───────────────────────────────────────────────────────
 
-function RowDetail({ row, columns, onClose }: { row: DatasetRow; columns: ColumnMeta[]; onClose: () => void }) {
-  const filteredCols = columns
+function RowDetail({ row, columns, onClose }: { row: GeoRow; columns: ColumnMeta[]; onClose: () => void }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-detail" onClick={e => e.stopPropagation()} style={{ maxWidth: 750 }}>
         <button className="modal-close" onClick={onClose}>✕</button>
         <h2>{row.name}</h2>
         <p style={{ color: 'var(--color-text-secondary,#666)', fontSize: 13, marginBottom: 16 }}>
-          ID: {row.id} &nbsp;|&nbsp; Project: {row.project_id}
+          {row.GSE}/{row.sample_name}
         </p>
         <div className="detail-grid">
-          {filteredCols.map(col => {
+          {columns.map(col => {
             const val = getCellValue(row, col.name)
-            const isLink = (col.name === 'project_url' || col.name === 'download_url') && val !== '—'
+            const isGseLink = col.name === 'GSE' && val !== '—'
+            const isGsmLink = col.name === 'sample_name' && val !== '—'
+            let href = ''
+            if (isGseLink) href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
+            if (isGsmLink) href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
             return (
               <div key={col.name} className="detail-item">
                 <span className="detail-label">{col.label_zh}</span>
                 <span className="detail-value">
-                  {isLink ? <a href={val} target="_blank" rel="noopener noreferrer" className="url-link">{val.length > 50 ? val.slice(0, 47) + '...' : val}</a>
-                    : col.name === 'local_path' ? <code style={{ fontSize: 11 }}>{val}</code> : val}
+                  {isGseLink || isGsmLink
+                    ? <a href={href} target="_blank" rel="noopener noreferrer" className="url-link">{val}</a>
+                    : val.length > 120 ? <span title={val}>{val.slice(0, 117)}...</span> : val}
                 </span>
               </div>
             )
@@ -87,33 +90,37 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
 // ── Main ─────────────────────────────────────────────────────────────
 
 export default function DataBrowser() {
-  const [data, setData] = useState<DatasetsJSON | null>(null)
+  const [data, setData] = useState<GeoJSON | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [platform, setPlatform] = useState('cosmx')
   const [search, setSearch] = useState('')
-  const [filterPlatform, setFilterPlatform] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
-  const [hideRawFragment, setHideRawFragment] = useState(true)
-  const [sortKey, setSortKey] = useState('id')
+  const [sortKey, setSortKey] = useState('GSE')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [showAllColumns, setShowAllColumns] = useState(false)
-  const [expandedRow, setExpandedRow] = useState<DatasetRow | null>(null)
+  const [expandedRow, setExpandedRow] = useState<GeoRow | null>(null)
   const [pageSize, setPageSize] = useState(25)
   const [page, setPage] = useState(1)
 
+  // 加载平台数据
   useEffect(() => {
-    fetch('/datasets.json').then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-      .then((j: DatasetsJSON) => { setData(j); setLoading(false) })
+    setLoading(true)
+    setError(null)
+    const pf = PLATFORMS.find(p => p.key === platform)
+    if (!pf) return
+    fetch(pf.file)
+      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+      .then((j: GeoJSON) => { setData(j); setLoading(false) })
       .catch(e => { setError(e.message ?? String(e)); setLoading(false) })
-  }, [])
+  }, [platform])
 
   const columns = data?.meta.columns ?? []
   const categories = data?.meta.categories ?? []
   const priorityCols = data?.meta.priority_columns ?? []
 
   const visibleColumns = useMemo(() => {
-    let cols = showAllColumns ? columns : columns.filter(c => priorityCols.includes(c.name))
-    return cols
+    return showAllColumns ? columns : columns.filter(c => priorityCols.includes(c.name))
   }, [columns, priorityCols, showAllColumns])
 
   const visibleCategories = useMemo(() => {
@@ -121,13 +128,16 @@ export default function DataBrowser() {
     return categories.map(cat => ({ ...cat, visibleCols: cat.columns.filter(n => names.has(n)) })).filter(c => c.visibleCols.length > 0)
   }, [categories, visibleColumns])
 
-  const platforms = useMemo(() => [...new Set(data?.rows.map(r => r.platform) ?? [])].sort(), [data])
   const filteredRows = useMemo(() => {
     if (!data) return []
     let rows = data.rows
-    if (hideRawFragment) rows = rows.filter(r => !r.id.startsWith('R'))
-    if (search) { const q = search.toLowerCase(); rows = rows.filter(r => columns.some(c => { const v = getCellValue(r, c.name); return v !== '—' && v.toLowerCase().includes(q) })) }
-    if (filterPlatform !== 'all') rows = rows.filter(r => r.platform === filterPlatform)
+    if (search) {
+      const q = search.toLowerCase()
+      rows = rows.filter(r => columns.some(c => {
+        const v = getCellValue(r, c.name)
+        return v !== '—' && v.toLowerCase().includes(q)
+      }))
+    }
     if (filterStatus !== 'all') rows = rows.filter(r => r.status === filterStatus)
     return [...rows].sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
@@ -136,7 +146,7 @@ export default function DataBrowser() {
       if (!isNaN(na) && !isNaN(nb) && va !== '—' && vb !== '—') return dir * (na - nb)
       return dir * va.localeCompare(vb)
     })
-  }, [data, search, filterPlatform, filterStatus, hideRawFragment, sortKey, sortDir, columns])
+  }, [data, search, filterStatus, sortKey, sortDir, columns])
 
   const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filteredRows.length / pageSize))
   const safePage = Math.min(page, totalPages)
@@ -147,31 +157,45 @@ export default function DataBrowser() {
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  if (loading) return <div className="container"><div className="empty-state">Loading database...</div></div>
-  if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed: {error}<br/><small>Run <code>subcellspace db export</code> to regenerate</small></div></div>
+  if (loading) return <div className="container"><div className="empty-state">Loading {platform} database...</div></div>
+  if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed: {error}<br/><small>Run <code>python3 scripts/export_frontend_json.py</code> to regenerate</small></div></div>
 
-  const hasFilters = search || filterPlatform !== 'all' || filterStatus !== 'all'
-  const rawCount = data ? data.rows.filter(r => r.id.startsWith('R')).length : 0
+  const hasFilters = search || filterStatus !== 'all'
 
   return (
     <div className="container">
       <section className="section-header">
         <h2>📊 Data Browser</h2>
-        <span className="eyebrow">{filteredRows.length} of {data?.meta.total_rows ?? 0} datasets{hideRawFragment && rawCount > 0 ? ` (${rawCount} Raw_Fragment hidden)` : ''}</span>
+        <span className="eyebrow">{filteredRows.length} of {data?.meta.total_rows ?? 0} datasets</span>
       </section>
 
-      {/* Filters */}
-      <div className="card filter-card" style={{ marginBottom: 12, padding: '10px 18px' }}>
-        <div className="filter-row" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+      {/* Platform Tabs */}
+      <div className="card filter-card" style={{ marginBottom: 12, padding: '8px 18px' }}>
+        <div className="filter-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {PLATFORMS.map(p => (
+            <button key={p.key}
+              onClick={() => { setPlatform(p.key); setPage(1); setSearch('') }}
+              style={{
+                padding: '6px 16px', borderRadius: 8, border: '1px solid rgba(22,50,63,0.15)',
+                background: platform === p.key ? 'var(--accent,#2a7de1)' : 'transparent',
+                color: platform === p.key ? '#fff' : 'inherit',
+                cursor: 'pointer', fontWeight: platform === p.key ? 600 : 400, fontSize: 14
+              }}>
+              {p.label}
+            </button>
+          ))}
+          <span style={{ width: 1 }} />
           <div className="filter-item"><span>🔍</span><input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search..." style={{ padding: '5px 10px', borderRadius: 10, border: '1px solid rgba(22,50,63,0.15)', fontSize: 13, width: 180 }} /></div>
-          <div className="filter-item"><span>Platform</span><select value={filterPlatform} onChange={e => { setFilterPlatform(e.target.value); setPage(1) }}>{['all', ...platforms].map(p => <option key={p} value={p}>{p === 'all' ? 'All' : p}</option>)}</select></div>
-          <div className="filter-item"><span>Status</span><select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}><option value="all">All</option><option value="ready">🟢 Ready</option><option value="pending">🟡 Pending</option><option value="error">🔴 Error</option></select></div>
-          {hasFilters && <button className="filter-reset" onClick={() => { setSearch(''); setFilterPlatform('all'); setFilterStatus('all'); setPage(1) }}>Clear</button>}
+          <div className="filter-item"><span>Status</span>
+            <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
+              <option value="all">All</option>
+              <option value="ready">🟢 Ready</option>
+              <option value="pending">🟡 Pending</option>
+              <option value="error">🔴 Error</option>
+            </select>
+          </div>
+          {hasFilters && <button className="filter-reset" onClick={() => { setSearch(''); setFilterStatus('all'); setPage(1) }}>Clear</button>}
           <span style={{ flex: 1 }} />
-          <label style={{ fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: hideRawFragment ? '#c8553d' : undefined }}>
-            <input type="checkbox" checked={hideRawFragment} onChange={e => { setHideRawFragment(e.target.checked); setPage(1) }} />
-            Hide Raw_Fragment
-          </label>
           <label style={{ fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
             <input type="checkbox" checked={showAllColumns} onChange={e => setShowAllColumns(e.target.checked)} />
             All cols
@@ -192,27 +216,34 @@ export default function DataBrowser() {
                 </tr>
                 <tr>
                   {visibleColumns.map(col => (
-                    <th key={col.name} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => toggleSort(col.name)} title={col.description_zh}>
+                    <th key={col.name} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => toggleSort(col.name)}>
                       {col.label_zh}{sortKey === col.name ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map(row => (
-                  <tr key={row.id} onClick={() => setExpandedRow(row)} style={{ cursor: 'pointer' }}>
-                    {visibleColumns.map(col => {
-                      if (col.name === 'status') return <td key={col.name}><span>{statusBadge(row.status)} {row.status}</span></td>
-                      if (col.name === 'project_url') return <td key={col.name}><UrlLink url={row.project_url} /></td>
-                      if (col.name === 'download_url') return <td key={col.name}><UrlLink url={row.download_url} /></td>
-                      if (col.name === 'estimated_cell_count') return <td key={col.name} style={{ textAlign: 'right' }}>{fmtNum(row.estimated_cell_count)}</td>
-                      if (col.name === 'name') {
-                        return <td key={col.name} className="run-key-cell" title={row.name}>{row.name}{row.id.startsWith('M') ? <span className="badge badge-merged">M</span> : row.id.startsWith('R') ? <span className="badge badge-fragment">F</span> : null}</td>
-                      }
-                      return <td key={col.name}>{getCellValue(row, col.name)}</td>
-                    })}
-                  </tr>
-                ))}
+                {pageRows.map((row, idx) => {
+                  const key = `${row.GSE}-${row.sample_name}-${idx}`
+                  return (
+                    <tr key={key} onClick={() => setExpandedRow(row)} style={{ cursor: 'pointer' }}>
+                      {visibleColumns.map(col => {
+                        const val = getCellValue(row, col.name)
+                        if (col.name === 'status') return <td key={col.name}><span>{statusBadge(row.status ?? '')} {row.status}</span></td>
+                        if (col.name === 'GSE') {
+                          const href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
+                          return <td key={col.name}><a href={href} target="_blank" rel="noopener noreferrer" className="url-link" onClick={e => e.stopPropagation()}>{val}</a></td>
+                        }
+                        if (col.name === 'sample_name') {
+                          const href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
+                          return <td key={col.name}><a href={href} target="_blank" rel="noopener noreferrer" className="url-link" onClick={e => e.stopPropagation()}>{val}</a></td>
+                        }
+                        if (col.type === 'number' && val !== '—') return <td key={col.name} style={{ textAlign: 'right' }}>{fmtNum(Number(val))}</td>
+                        return <td key={col.name}>{val}</td>
+                      })}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
