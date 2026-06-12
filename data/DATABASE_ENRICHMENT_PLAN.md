@@ -126,7 +126,7 @@ tissue, disease_state,                    ← LLM 标注 ✅
 n_transcripts, n_cells, n_genes,          ← 统计模式 ✅
 n_fovs, gene_panel_size,
 median_transcripts, median_genes,
-available_files, file_names, data_size    ← 文件信息（后续）
+available_files, file_names, data_size    ← 文件信息 ✅
 ```
 
 ## 4. 脚本结构
