@@ -94,14 +94,15 @@ def fig1_platform_counts():
 # ═════════════════════════════════════════════════════════════════
 
 def fig2_file_coverage():
-    # 统一文件类别，跨平台映射
+    # 跨平台统一文件类别（Cell/Nucleus Boundary 拆开）
     categories = [
-        ('polygons',      ['polygons'],                        'Polygons'),
-        ('expr_matrix',   ['expr_matrix'],                     'Expr Matrix'),
-        ('cell_metadata', ['cell_metadata'],                    'Cell Metadata'),
-        ('fov_positions', ['fov_positions'],                   'FOV Positions'),
-        ('boundaries',    ['cell_boundaries', 'nucleus_boundaries'], 'Boundaries'),
-        ('gene_panel',    ['gene_panel'],                      'Gene Panel'),
+        ('polygons',           ['polygons'],                        'Polygons'),
+        ('expr_matrix',        ['expr_matrix'],                     'Expr Matrix'),
+        ('cell_metadata',      ['cell_metadata'],                   'Cell Metadata'),
+        ('fov_positions',      ['fov_positions'],                   'FOV Positions'),
+        ('cell_boundaries',    ['cell_boundaries'],                 'Cell\nBoundary'),
+        ('nucleus_boundaries', ['nucleus_boundaries'],              'Nucleus\nBoundary'),
+        ('gene_panel',         ['gene_panel'],                      'Gene Panel'),
     ]
     platforms = ['CosMx', 'Xenium', 'MERFISH']
 
@@ -124,7 +125,7 @@ def fig2_file_coverage():
 
     cats = [c[2] for c in categories]
 
-    fig, ax = plt.subplots(figsize=(10, 4.5))
+    fig, ax = plt.subplots(figsize=(11, 4.5))
     cmap = plt.cm.Greens
     im = ax.imshow(data, cmap=cmap, aspect='auto', vmin=0, vmax=100)
 
@@ -139,7 +140,7 @@ def fig2_file_coverage():
                         fontsize=16, fontweight='bold', color=txt_color)
 
     ax.set_xticks(range(len(cats)))
-    ax.set_xticklabels(cats, fontsize=13, ha='center')
+    ax.set_xticklabels(cats, fontsize=10, ha='center')
     ax.set_yticks(range(len(platforms)))
     ax.set_yticklabels(platforms, fontsize=16, fontweight='bold')
     ax.tick_params(axis='y', length=0)
