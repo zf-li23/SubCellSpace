@@ -84,6 +84,8 @@ MANIFEST: dict[str, list[dict]] = {
     "merfish": [
         {"pattern": "*_detected_transcripts.csv*", "required": True,  "name": "transcripts",
          "desc": "转录本坐标 (global_x, global_y, gene, barcode_id)"},
+        {"pattern": "*_detected_transcripts_slide*_region*.csv*", "required": False, "name": "transcripts_region",
+         "desc": "Region 分片检测转录本 (slide/region 子文件)"},
         {"pattern": "*_cell_by_gene.csv*",  "required": False, "name": "expr_matrix",
          "desc": "细胞×基因表达矩阵"},
         {"pattern": "*_cell_metadata.csv*", "required": False, "name": "cell_metadata",
