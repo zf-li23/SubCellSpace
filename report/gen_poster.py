@@ -1,13 +1,15 @@
 """
-SubCellSpace 科研海报生成器
-=============================
-生成 90×120cm（A0 竖版）Poster PPTX。
+SubCellSpace 科研海报生成器 v2
+===============================
+90×120cm A0 竖版，充分利用整面篇幅。
+图片按原始宽高比放置，不拉伸。
 使用: conda run -n zf-li23 python report/gen_poster.py
 """
 
 from pathlib import Path
+import matplotlib.image as mpimg
 from pptx import Presentation
-from pptx.util import Inches, Pt, Cm, Emu
+from pptx.util import Pt, Cm
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
@@ -19,103 +21,77 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 # ── 配色 ────────────────────────────────────────────────────
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-BLACK = RGBColor(0x00, 0x00, 0x00)
 DARK = RGBColor(0x2C, 0x3E, 0x50)
 GRAY = RGBColor(0x7F, 0x8C, 0x8D)
-LIGHT_BG = RGBColor(0xF8, 0xF9, 0xFA)
-ACCENT_BLUE = RGBColor(0x29, 0x80, 0xB9)
-ACCENT_GREEN = RGBColor(0x27, 0xAE, 0x60)
-ACCENT_ORANGE = RGBColor(0xE6, 0x7E, 0x22)
-ACCENT_PURPLE = RGBColor(0x8E, 0x44, 0xAD)
 
-SECTION_COLORS = {
-    'Pipeline': RGBColor(0x29, 0x80, 0xB9),
-    'Data': RGBColor(0x27, 0xAE, 0x60),
+SEC_C = {
+    'Platform': RGBColor(0x29, 0x80, 0xB9),
+    'Database': RGBColor(0x27, 0xAE, 0x60),
     'Coverage': RGBColor(0xE6, 0x7E, 0x22),
-    'Biology': RGBColor(0x8E, 0x44, 0xAD),
-    'Quality': RGBColor(0xE7, 0x4C, 0x3C),
-    'Case': RGBColor(0x1A, 0xBC, 0x9C),
-    'Conclusion': RGBColor(0x2C, 0x3E, 0x50),
+    'Biology':  RGBColor(0x8E, 0x44, 0xAD),
+    'Quality':  RGBColor(0xE7, 0x4C, 0x3C),
+    'Case':     RGBColor(0x1A, 0xBC, 0x9C),
+    'Methods':  RGBColor(0x34, 0x49, 0x5E),
 }
 
-# ── 几何参数: A0 竖版 90×120cm ─────────────────────────────
-W = Cm(90)   # 35.43"
-H = Cm(120)  # 47.24"
-MARGIN = Cm(3.5)
-COL_GAP = Cm(2.0)
-COL_W = (Cm(90) - 2 * MARGIN - 2 * COL_GAP) / 3  # ~26.3 cm ≈ 10.35"
+# ── 几何: A0 90×120cm ─────────────────────────────────────
+W = Cm(90)
+H = Cm(120)
+M = Cm(3.5)
+GAP = Cm(1.8)
+C2_W = (Cm(90) - 2*M - GAP) / 2   # ~41.45 cm
+CX_L = M
+CX_R = M + C2_W + GAP
 
-# 三列 x 起始
-C1 = MARGIN
-C2 = C1 + COL_W + COL_GAP
-C3 = C2 + COL_W + COL_GAP
+# ── 预读图片宽高比 ────────────────────────────────────────
+ASP = {}
+for i in range(1, 7):
+    pat = list(FIG.glob(f'fig{i}_*'))
+    if pat:
+        img = mpimg.imread(str(pat[0]))
+        ASP[i] = img.shape[1] / img.shape[0]
 
-# 行 y 起始
-TITLE_TOP = Cm(1.5)
-TITLE_H = Cm(5.5)
-ROW1_TOP = Cm(8.0)
-ROW1_H = Cm(24.0)
-ROW2_TOP = ROW1_TOP + ROW1_H + Cm(1.5)
-ROW2_H = Cm(22.0)
-BOT_TOP = ROW2_TOP + ROW2_H + Cm(1.0)
-BOT_H = Cm(4.0)
+def dh(w_emu, fig_num):
+    """Height in EMU = width_emu / aspect_ratio (w/h)."""
+    return int(w_emu / ASP[fig_num])
 
+# ── PPTX 工具 ─────────────────────────────────────────────
+def new_slide(prs):
+    return prs.slides.add_slide(prs.slide_layouts[6])
 
-def init_presentation():
-    prs = Presentation()
-    prs.slide_width = W
-    prs.slide_height = H
-    slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank layout
-    return prs, slide
+def rect(slide, l, t, w, h, fill=None, line=None, lw=None):
+    s = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, l, t, w, h)
+    s.fill.solid(); s.fill.fore_color.rgb = fill or WHITE
+    if line: s.line.color.rgb = line; s.line.width = lw
+    else: s.line.fill.background()
+    return s
 
+def rrect(slide, l, t, w, h, color):
+    s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, l, t, w, h)
+    s.fill.solid(); s.fill.fore_color.rgb = color; s.line.fill.background()
+    return s
 
-def add_bg(slide, color=LIGHT_BG):
-    bg = slide.background
-    fill = bg.fill
-    fill.solid()
-    fill.fore_color.rgb = color
+def tb(slide, l, t, w, h, text, size=Pt(20), color=DARK, bold=False, align=PP_ALIGN.LEFT):
+    box = slide.shapes.add_textbox(l, t, w, h)
+    box.text_frame.word_wrap = True
+    p = box.text_frame.paragraphs[0]
+    p.text = text; p.font.size = size; p.font.color.rgb = color
+    p.font.bold = bold; p.font.name = 'Calibri'; p.alignment = align
+    return box
 
+def text_block(slide, l, t, w, h, lines, size=Pt(20), color=DARK):
+    box = slide.shapes.add_textbox(l, t, w, h)
+    tf = box.text_frame; tf.word_wrap = True
+    for i, line in enumerate(lines):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.text = line; p.font.size = size; p.font.color.rgb = color
+        p.font.name = 'Calibri'; p.space_after = Pt(3)
+    return box
 
-def add_rect(slide, left, top, width, height, fill_color=None, line_color=None, line_width=Pt(0)):
-    shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = fill_color or WHITE
-    if line_color:
-        shape.line.color.rgb = line_color
-        shape.line.width = line_width
-    else:
-        shape.line.fill.background()
-    return shape
-
-
-def add_rounded_rect(slide, left, top, width, height, fill_color):
-    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height)
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = fill_color
-    shape.line.fill.background()
-    return shape
-
-
-def add_textbox(slide, left, top, width, height, text, font_size=Pt(24),
-                color=DARK, bold=False, alignment=PP_ALIGN.LEFT, font_name='Calibri'):
-    txBox = slide.shapes.add_textbox(left, top, width, height)
-    tf = txBox.text_frame
-    tf.word_wrap = True
-    p = tf.paragraphs[0]
-    p.text = text
-    p.font.size = font_size
-    p.font.color.rgb = color
-    p.font.bold = bold
-    p.font.name = font_name
-    p.alignment = alignment
-    return txBox
-
-
-def add_section_header(slide, left, top, width, text, color):
-    """添加带彩色圆角矩形背景的 section 标题"""
-    bar = add_rounded_rect(slide, left, top, width, Cm(1.8), color)
+def sec_hdr(slide, l, t, w, text, color):
+    bar = rrect(slide, l, t, w, Cm(2.0), color)
     bar.text_frame.text = text
-    bar.text_frame.paragraphs[0].font.size = Pt(36)
+    bar.text_frame.paragraphs[0].font.size = Pt(34)
     bar.text_frame.paragraphs[0].font.color.rgb = WHITE
     bar.text_frame.paragraphs[0].font.bold = True
     bar.text_frame.paragraphs[0].font.name = 'Calibri'
@@ -123,175 +99,173 @@ def add_section_header(slide, left, top, width, text, color):
     bar.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
     return bar
 
-
-def add_figure(slide, left, top, width, height, img_path, caption=''):
-    """添加图片 + 可选图注"""
-    if img_path.exists():
-        slide.shapes.add_picture(str(img_path), left, top, width, height)
+def add_img(slide, l, t, w, name, caption=''):
+    p = FIG / name
+    if p.exists():
+        n = int(name[3])
+        slide.shapes.add_picture(str(p), l, t, w, dh(w, n))
     if caption:
-        add_textbox(slide, left, top + height + Cm(0.2), width, Cm(1.0),
-                    caption, font_size=Pt(18), color=GRAY, bold=False)
-
-
-def add_vertical_divider(slide, x, top, height):
-    """列间竖线"""
-    add_rect(slide, x, top, Pt(2), height, fill_color=RGBColor(0xDD, 0xDD, 0xDD))
-
-
-def add_text_block(slide, left, top, width, height, lines, font_size=Pt(20)):
-    """多行文本块"""
-    txBox = slide.shapes.add_textbox(left, top, width, height)
-    tf = txBox.text_frame
-    tf.word_wrap = True
-    for i, line in enumerate(lines):
-        if i == 0:
-            p = tf.paragraphs[0]
-        else:
-            p = tf.add_paragraph()
-        p.text = line
-        p.font.size = font_size
-        p.font.color.rgb = DARK
-        p.font.name = 'Calibri'
-        p.space_after = Pt(6)
-    return txBox
-
+        tb(slide, l, t + dh(w, int(name[3])) + Cm(0.2), w, Cm(0.9),
+           caption, size=Pt(17), color=GRAY)
 
 # ═══════════════════════════════════════════════════════════════
-# 主函数
-# ═══════════════════════════════════════════════════════════════
+# 图片显示宽度 (cm) — 缩小以适配 120cm 高度
+W1 = 50      # fig1
+W2 = 26      # fig2
+W3 = 26      # fig3
+W4 = 30      # fig4
+W5 = 30      # fig5
+W6 = 18      # fig6
 
-def build_poster():
-    prs, slide = init_presentation()
-    add_bg(slide, WHITE)
+def build():
+    prs = Presentation(); prs.slide_width = W; prs.slide_height = H
+    sl = new_slide(prs)
 
-    # ══════════════════════ TITLE BAR ═════════════════════════
-    # 标题栏底色
-    add_rect(slide, 0, 0, W, TITLE_TOP + TITLE_H + Cm(0.5),
-             fill_color=RGBColor(0x2C, 0x3E, 0x50))
+    # ════════════════ TITLE (0-9.5cm) ═══════════════════════
+    rect(sl, 0, 0, W, Cm(9.5), fill=DARK)
+    tb(sl, M, Cm(1.8), Cm(83), Cm(3.5),
+       'SubCellSpace: A Unified Platform for\nSubcellular Spatial Transcriptomics',
+       size=Pt(52), color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    tb(sl, M, Cm(5.8), Cm(83), Cm(1.5),
+       'Zhefu Li  ·  Tsinghua University, School of Life Sciences  ·  Jun 2026',
+       size=Pt(26), color=RGBColor(0xBD,0xC3,0xC7), align=PP_ALIGN.CENTER)
+    tb(sl, M, Cm(7.5), Cm(83), Cm(1.2),
+       'github.com/zf-li23/SubCellSpace  |  Data: GEO (269 GSEs) + Public Repositories',
+       size=Pt(18), color=RGBColor(0x95,0xA5,0xA6), align=PP_ALIGN.CENTER)
 
-    add_textbox(slide, C1, TITLE_TOP + Cm(0.3), Cm(80), Cm(2.5),
-                'SubCellSpace: A Unified Subcellular Spatial\nTranscriptomics Platform',
-                font_size=Pt(54), color=WHITE, bold=True, alignment=PP_ALIGN.CENTER)
+    y = Cm(10.0)
 
-    add_textbox(slide, C1, TITLE_TOP + Cm(3.0), Cm(80), Cm(1.5),
-                'Zhefu Li¹  ·  Tsinghua University  ·  Jun 2026',
-                font_size=Pt(26), color=RGBColor(0xBD, 0xC3, 0xC7),
-                alignment=PP_ALIGN.CENTER)
+    # ════════════════ ROW 1: Pipeline ═══════════════════════
+    sec_hdr(sl, M, y, Cm(83), '1  Platform Construction & Analysis Pipeline', SEC_C['Platform'])
+    y += Cm(2.5)
+    add_img(sl, M, y, Cm(W1), 'fig1_platform_pipeline.png',
+            'Fig 1. End-to-end pipeline: platform construction (top) + scverse-native analysis (bottom)')
+    y += dh(Cm(W1), 1) + Cm(0.3)
+    tb(sl, M, y, Cm(83), Cm(2.5),
+       'Three phases drive 7 platform-building steps (Acquisition → Processing → Output). '
+       'The unified 7-step analysis pipeline (Denoise → Patchify → Segment → Domain → '
+       'Annotate → Spatial → Subcellular) is shared across CosMx, Xenium, and MERFISH.',
+       size=Pt(19), color=DARK)
+    y += Cm(3.2)
 
-    # ══════════════════════ ROW 1 ═════════════════════════════
-    div_top = ROW1_TOP - Cm(0.8)
-    div_h = ROW1_H + ROW2_H + BOT_H + Cm(4.0)
+    # ════════════════ ROW 2: Database + Coverage ═══════════
+    sec_hdr(sl, CX_L, y, C2_W, '2  Database Composition', SEC_C['Database'])
+    sec_hdr(sl, CX_R, y, C2_W, '3  File Completeness', SEC_C['Coverage'])
+    y += Cm(2.5)
 
-    # 列间竖线
-    add_vertical_divider(slide, C2 - COL_GAP/2 + Cm(0.1), div_top, div_h)
-    add_vertical_divider(slide, C3 - COL_GAP/2 + Cm(0.1), div_top, div_h)
+    # Left: FIG2
+    add_img(sl, CX_L, y, Cm(W2), 'fig2_platform_counts.png',
+            'Fig 2. Dataset counts by platform & status')
+    tx2_y = y + dh(Cm(W2), 2) + Cm(1.0)
+    tb(sl, CX_L, tx2_y, C2_W, Cm(5.5),
+       '2,410+ GEO entries across 3 platforms (1,019 ready). '
+       'Xenium: 1,525 entries (717 ready), CosMx: 476 (186 ready), '
+       'MERFISH: 130 (116 ready). Plus 998 non-GEO public datasets. '
+       '269 unique GSE series curated via NCBI E-utilities.',
+       size=Pt(19), color=DARK)
 
-    # ─── Col 1: Pipeline ───
-    add_section_header(slide, C1, ROW1_TOP, COL_W, 'Pipeline Overview',
-                       SECTION_COLORS['Pipeline'])
-    add_figure(slide, C1, ROW1_TOP + Cm(2.5), COL_W, Cm(13.5),
-               FIG / 'fig1_platform_pipeline.png',
-               'Fig 1. Platform construction & analysis pipeline')
-    add_text_block(slide, C1, ROW1_TOP + Cm(17.0), COL_W, Cm(5.0),
-                   ['• 7-step pipeline from GEO download to HTML report',
-                    '• Three phases: Acquisition, Processing, Output',
-                    '• Bottom: 7-step scverse-native analysis workflow',
-                    '• Single config drives CosMx / Xenium / MERFISH'],
-                   font_size=Pt(20))
+    # Right: FIG3
+    add_img(sl, CX_R, y, Cm(W3), 'fig3_file_coverage.png',
+            'Fig 3. Optional file coverage by platform')
+    tx3_y = y + dh(Cm(W3), 3) + Cm(1.0)
+    tb(sl, CX_R, tx3_y, C2_W, Cm(5.5),
+       'CosMx: expression (96%), metadata (99%), FOV positions (100%). '
+       'Xenium: cell boundaries (74%), nucleus boundaries (60%), gene panels (31%). '
+       'MERFISH: expression (97%), metadata (98%). Touch module auto-normalizes '
+       'all file types including naming inconsistencies.',
+       size=Pt(19), color=DARK)
 
-    # ─── Col 2: Data Overview ───
-    add_section_header(slide, C2, ROW1_TOP, COL_W, 'Database Overview',
-                       SECTION_COLORS['Data'])
-    add_figure(slide, C2, ROW1_TOP + Cm(2.5), COL_W, Cm(9.0),
-               FIG / 'fig2_platform_counts.png',
-               'Fig 2. Dataset counts by platform')
-    add_text_block(slide, C2, ROW1_TOP + Cm(12.5), COL_W, Cm(3.0),
-                   ['• 2,410+ GEO datasets across 3 platforms',
-                    '• 1,019 ready for immediate analysis',
-                    '• 269 unique GSE series curated'],
-                   font_size=Pt(20))
+    y = max(tx2_y + Cm(5.5), tx3_y + Cm(5.5)) + Cm(0.5)
 
-    add_figure(slide, C2, ROW1_TOP + Cm(16.0), COL_W, Cm(7.0),
-               FIG / 'fig3_file_coverage.png',
-               'Fig 3. Optional file coverage by platform')
+    # ════════════════ ROW 3: Biology + Quality ═══════════════
+    sec_hdr(sl, CX_L, y, C2_W, '4  Biological Coverage', SEC_C['Biology'])
+    sec_hdr(sl, CX_R, y, C2_W, '5  Data Quality Metrics', SEC_C['Quality'])
+    y += Cm(2.5)
 
-    # ─── Col 3: Biological Coverage ───
-    add_section_header(slide, C3, ROW1_TOP, COL_W, 'Biological Coverage',
-                       SECTION_COLORS['Biology'])
-    add_figure(slide, C3, ROW1_TOP + Cm(2.5), COL_W, Cm(12.0),
-               FIG / 'fig4_tissue_dist.png',
-               'Fig 4. Top 10 tissues & disease states')
-    add_text_block(slide, C3, ROW1_TOP + Cm(15.5), COL_W, Cm(6.5),
-                   ['• Brain, breast, lung — most studied tissues',
-                    '• Normal, cancer, Alzheimer\'s — top disease states',
-                    '• Homo sapiens & Mus musculus datasets',
-                    '• Multi-region sampling for brain & tumor'],
-                   font_size=Pt(20))
+    # Left: FIG4
+    add_img(sl, CX_L, y, Cm(W4), 'fig4_tissue_dist.png',
+            'Fig 4. Top 10 tissues & disease states')
+    tx4_y = y + dh(Cm(W4), 4) + Cm(1.0)
+    tb(sl, CX_L, tx4_y, C2_W, Cm(6.0),
+       '50+ tissue types, 30+ disease conditions. Brain, breast, lung, lymph node '
+       'most represented. Normal, various cancers, Alzheimer\'s, Parkinson\'s. '
+       'Both H. sapiens and M. musculus. Multi-region sampling for brain and tumor.',
+       size=Pt(19), color=DARK)
 
-    # ══════════════════════ ROW 2 ═════════════════════════════
-    # ─── Col 1: Quality ───
-    add_section_header(slide, C1, ROW2_TOP, COL_W, 'Data Quality',
-                       SECTION_COLORS['Quality'])
-    add_figure(slide, C1, ROW2_TOP + Cm(2.5), COL_W, Cm(10.0),
-               FIG / 'fig5_violins.png',
-               'Fig 5. Cross-platform quality metrics')
-    add_text_block(slide, C1, ROW2_TOP + Cm(13.5), COL_W, Cm(6.0),
-                   ['• Xenium: highest median transcripts (6,093)',
-                    '• MERFISH: largest cell counts (550K max)',
-                    '• CosMx: most consistent gene panel sizes',
-                    '• All platforms > 1,000 median genes per cell'],
-                   font_size=Pt(20))
+    # Right: FIG5
+    add_img(sl, CX_R, y, Cm(W5), 'fig5_violins.png',
+            'Fig 5. Cross-platform quality (log₁₀ scale)')
+    tx5_y = y + dh(Cm(W5), 5) + Cm(1.0)
+    tb(sl, CX_R, tx5_y, C2_W, Cm(6.0),
+       'Xenium: highest transcripts/dataset (median 181K), 6,522-gene panels. '
+       'MERFISH: most cells/experiment (median 18K, max 550K). '
+       'CosMx: consistent 960-gene panels, highest per-cell transcripts (35,825). '
+       'Platform-specific strengths inform experimental design.',
+       size=Pt(19), color=DARK)
 
-    # ─── Col 2: Case Study ───
-    add_section_header(slide, C2, ROW2_TOP, COL_W, 'Case Study',
-                       SECTION_COLORS['Case'])
-    add_figure(slide, C2, ROW2_TOP + Cm(2.5), COL_W, Cm(13.0),
-               FIG / 'fig6_example_output.png',
-               'Fig 6. Alzheimer\'s disease mouse brain (GSE263791)')
-    add_text_block(slide, C2, ROW2_TOP + Cm(16.5), COL_W, Cm(4.0),
-                   ['(a) Spatial — tx counts  (b) UMAP — tx counts',
-                    '(c) Spatial — clusters   (d) UMAP — clusters',
-                    '821 cells · 41 FOVs · 960-gene panel'],
-                   font_size=Pt(20))
+    y = max(tx4_y + Cm(6.0), tx5_y + Cm(6.0)) + Cm(0.5)
 
-    # ─── Col 3: Key Stats ───
-    add_section_header(slide, C3, ROW2_TOP, COL_W, 'Methods & Tools',
-                       SECTION_COLORS['Conclusion'])
+    # ════════════════ ROW 4: Case + Methods ══════════════════
+    sec_hdr(sl, CX_L, y, C2_W, '6  Case Study: Alzheimer\'s Mouse Brain', SEC_C['Case'])
+    sec_hdr(sl, CX_R, y, C2_W, '7  Methods & Implementation', SEC_C['Methods'])
+    y += Cm(2.5)
 
-    # Methods box
-    methods_text = [
-        'Core Pipeline',
-        '• CosMx / Xenium / MERFISH ingesters',
-        '• scverse-native (scanpy + squidpy)',
-        '• Denoising: basic, sparc',
-        '• Segmentation: fov_cell_id, cellpose',
-        '• Annotation: celltypist, SCRIN',
+    # Left: FIG6
+    add_img(sl, CX_L, y, Cm(W6), 'fig6_example_output.png',
+            'Fig 6. GSE263791 — 5xFAD mouse hippocampus (821 cells, 960 genes)')
+    tx6_y = y + dh(Cm(W6), 6) + Cm(1.0)
+    tb(sl, CX_L, tx6_y, C2_W, Cm(5.0),
+       '(a) Spatial transcript counts: regional hippocampal differences. '
+       '(b) UMAP by transcript count: continuous expression gradients. '
+       '(c) Leiden clustering: 8 cell populations with spatial organization. '
+       '(d) UMAP by cluster: neuronal & glial subtypes in Alzheimer\'s model.',
+       size=Pt(19), color=DARK)
+
+    # Right: Methods
+    methods_lines = [
+        'Data Acquisition:',
+        '  • NCBI GEO E-utilities: 269 GSEs, 4,478 GSM records',
+        '  • Public repos: Nanostring, Vizgen, 10x Genomics, Zenodo',
         '',
-        'Data Infrastructure',
-        '• GEO: 269 GSEs via NCBI E-utilities',
-        '• Metadata: DeepSeek LLM enrichment',
-        '• Touch: file integrity scanning',
-        '• Stats: zero-I/O streaming counts',
+        'Metadata:',
+        '  • GSM expansion via esummary (tissue, disease, PMIDs)',
+        '  • LLM annotation: DeepSeek for tissue/disease classification',
+        '  • Touch: automated file integrity & normalization',
+        '  • Stats: zero-I/O streaming counts',
+        '',
+        'Analysis (scverse-native):',
+        '  • Denoising: basic / SPARC',
+        '  • Segmentation: fov_cell_id / cellpose',
+        '  • Clustering: Leiden + spatial domain detection',
+        '  • Annotation: celltypist + SCRIN subcellular',
+        '  • Spatial: Moran\'s I / Geary\'s C',
+        '',
+        'Frontend & Reporting:',
+        '  • React + TypeScript static browser (no backend)',
+        '  • HTML report with publication-quality figures',
+        '  • Slurm HPC: job arrays, 10 concurrent tasks',
     ]
-    add_text_block(slide, C3, ROW2_TOP + Cm(2.5), COL_W, Cm(12.0),
-                   methods_text, font_size=Pt(18))
+    text_block(sl, CX_R, y, C2_W, Cm(16.0), methods_lines, size=Pt(17), color=DARK)
 
-    # ══════════════════════ BOTTOM ════════════════════════════
-    add_rect(slide, 0, BOT_TOP, W, BOT_H + Cm(1.0),
-             fill_color=RGBColor(0x2C, 0x3E, 0x50))
-    add_textbox(slide, C1, BOT_TOP + Cm(0.5), Cm(80), Cm(3.0),
-                'Data: GEO & Nanostring/Vizgen/10x Genomics  ·  '
-                'Code: github.com/zf-li23/SubCellSpace  ·  '
-                'Poster: Tsinghua University SLS',
-                font_size=Pt(22), color=WHITE, alignment=PP_ALIGN.CENTER)
+    # ── Footer ──
+    y = max(tx6_y + Cm(5.0) + Cm(0.5), y + Cm(16.0) + Cm(0.5))
+    if y < Cm(112):
+        y = Cm(112)
+    # Ensure footer fits within 120cm
+    if y + Cm(2.0) > H:
+        y = H - Cm(2.0)
 
-    # ── 保存 ──
-    out_path = OUT / 'SubCellSpace_Poster.pptx'
-    prs.save(str(out_path))
-    print(f'  ✅ Poster saved: {out_path}')
-    print(f'     Size: 90×120 cm (A0 portrait)')
-    print(f'     Open in PowerPoint and export to PDF for printing.')
+    rect(sl, 0, y, W, H - y, fill=DARK)
+    tb(sl, M, y + Cm(0.4), Cm(83), Cm(1.2),
+       'Data: GEO (NCBI)  ·  Code: github.com/zf-li23/SubCellSpace (MIT)  ·  '
+       'Tools: scanpy, squidpy, spatialdata, SCRIN, CellTypist  ·  '
+       'Poster: Tsinghua University SLS Undergraduate Research',
+       size=Pt(16), color=WHITE, align=PP_ALIGN.CENTER)
 
+    # ── Save ──
+    path = OUT / 'SubCellSpace_Poster.pptx'
+    prs.save(str(path))
+    print(f'  ✅ Saved: {path}')
 
 if __name__ == '__main__':
-    build_poster()
+    build()
