@@ -121,13 +121,17 @@ class StatsResult:
 # ── 核心统计 ────────────────────────────────────────────────────
 
 
-def stat_data_dir(data_dir: Path, platform: Optional[str] = None) -> StatsResult:
+def stat_data_dir(data_dir: Path, platform: Optional[str] = None,
+                  max_cells_for_per_cell_stats: int = 50000) -> StatsResult:
     """
     对数据目录执行流式统计。
 
     参数:
         data_dir: GSM 数据目录
         platform: 平台名（不指定则自动检测）
+        max_cells_for_per_cell_stats: 超过此细胞数时跳过逐 cell 基因集合追踪
+                                      （避免 O(细胞数×基因数) 内存消耗）。
+                                      设为 0 表示始终跳过，None 表示始终追踪。
 
     返回:
         StatsResult 包含各项指标
@@ -186,6 +190,7 @@ def stat_data_dir(data_dir: Path, platform: Optional[str] = None) -> StatsResult
 
     cell_counts = Counter()        # cell_id → transcript_count
     cell_genes: Dict[str, set] = {}  # cell_id → set of genes (for median_genes)
+    _skip_cell_genes = False       # 超过内存阈值时关闭逐 cell 基因追踪
 
     try:
         with _open_csv(tx_file) as f:
@@ -227,10 +232,17 @@ def stat_data_dir(data_dir: Path, platform: Optional[str] = None) -> StatsResult
                 if fov_col_idx is not None and len(row) > fov_col_idx:
                     fovs.add(row[fov_col_idx].strip())
 
-                # Track per-cell genes (for median_genes)
-                if cell_id not in cell_genes:
-                    cell_genes[cell_id] = set()
-                cell_genes[cell_id].add(gene)
+                # 逐 cell 基因追踪（超过阈值后停止以节省内存）
+                if not _skip_cell_genes:
+                    # 首次超过阈值：清空并关闭
+                    if (max_cells_for_per_cell_stats is not None
+                            and len(cells) > max_cells_for_per_cell_stats):
+                        cell_genes.clear()
+                        _skip_cell_genes = True
+                    else:
+                        if cell_id not in cell_genes:
+                            cell_genes[cell_id] = set()
+                        cell_genes[cell_id].add(gene)
 
             result.n_cells = len(cells)
             result.n_genes = len(genes)
@@ -249,9 +261,12 @@ def stat_data_dir(data_dir: Path, platform: Optional[str] = None) -> StatsResult
         counts.sort()
         result.median_transcripts = statistics.median(counts)
 
-        gene_counts = [len(gs) for gs in cell_genes.values()]
-        gene_counts.sort()
-        result.median_genes = statistics.median(gene_counts)
+        if cell_genes and not _skip_cell_genes:
+            gene_counts = [len(gs) for gs in cell_genes.values()]
+            gene_counts.sort()
+            result.median_genes = statistics.median(gene_counts)
+        else:
+            result.median_genes = None
 
     return result
 
@@ -260,10 +275,12 @@ def stat_data_dir(data_dir: Path, platform: Optional[str] = None) -> StatsResult
 
 
 def stats_single_dir(data_dir: str, platform: Optional[str] = None,
-                     json_output: bool = False) -> StatsResult:
+                     json_output: bool = False,
+                     max_cells_for_per_cell_stats: int = 50000) -> StatsResult:
     """对单个目录执行统计并输出。"""
     path = Path(data_dir)
-    result = stat_data_dir(path, platform=platform)
+    result = stat_data_dir(path, platform=platform,
+                           max_cells_for_per_cell_stats=max_cells_for_per_cell_stats)
 
     if json_output:
         print(json.dumps(result.to_dict(), indent=2))

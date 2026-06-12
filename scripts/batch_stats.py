@@ -5,12 +5,19 @@
 结果保存到独立的输出 CSV（如 outputs/stats_results/stats_cosmx.csv），
 不修改原始 GEO CSV。
 
+支持分片并行（--chunk / --total-chunks），可将数据集均分到多个 worker。
+
 用法:
     python3 scripts/batch_stats.py                                # 所有平台
     python3 scripts/batch_stats.py --cosmx-only                    # 只跑 CosMx
     python3 scripts/batch_stats.py --xenium-only --dry-run         # 只预览
     python3 scripts/batch_stats.py --max-datasets 5                # 只跑前 5 个
     python3 scripts/batch_stats.py --output-dir outputs/stats_results
+
+    分片并行（3 个终端各跑一片）:
+        python3 scripts/batch_stats.py --cosmx --chunk 0 --total-chunks 3
+        python3 scripts/batch_stats.py --cosmx --chunk 1 --total-chunks 3
+        python3 scripts/batch_stats.py --cosmx --chunk 2 --total-chunks 3
 """
 
 import argparse, csv, logging, os, sys
@@ -80,14 +87,25 @@ def _save_checkpoint(output_path: Path, rows: list, fieldnames: list) -> None:
 
 
 def run_batch(platform: str, output_dir: Path, dry_run: bool = False,
-              max_datasets: Optional[int] = None) -> None:
-    """对给定平台的所有 ready 数据集执行流式统计。"""
+              max_datasets: Optional[int] = None,
+              chunk: int = 0, total_chunks: int = 1) -> None:
+    """对给定平台的所有 ready 数据集执行流式统计。
+
+    参数:
+        chunk: 当前分片编号（0-based），仅处理 hash 匹配此分片的数据
+        total_chunks: 总分片数（1 = 不分片）
+    """
     csv_path = GEO_CSVS.get(platform)
     if not csv_path or not csv_path.exists():
         logger.error(f"GEO CSV not found: {csv_path}")
         return
 
-    output_path = output_dir / f"stats_{platform}.csv"
+    # 分片输出文件名
+    if total_chunks > 1:
+        output_fname = f"stats_{platform}.{chunk}.csv"
+    else:
+        output_fname = f"stats_{platform}.csv"
+    output_path = output_dir / output_fname
     existing = {} if dry_run else _load_existing_results(output_path)
 
     # ── 读取 GEO CSV ──
@@ -95,7 +113,7 @@ def run_batch(platform: str, output_dir: Path, dry_run: bool = False,
         reader = csv.DictReader(f)
         all_rows = list(reader)
 
-    # 筛选 ready 且未处理的条目
+    # 筛选 ready 且未处理的条目，应用分片
     sample_col = "sample_name" if platform == "cosmx" else "GSM"
     todo = []
     for row in all_rows:
@@ -104,8 +122,15 @@ def run_batch(platform: str, output_dir: Path, dry_run: bool = False,
         gse = row.get("GSE", "").strip()
         sample = row.get(sample_col, "").strip()
         key = (gse, sample)
+
+        # 分片过滤：hash(gse+sample) % total_chunks == chunk
+        if total_chunks > 1:
+            slot = hash(gse + sample) % total_chunks
+            if slot != chunk:
+                continue
+
         if key in existing:
-            continue  # 增量 resume：跳过已处理的
+            continue  # 增量 resume
         todo.append((gse, sample))
 
     if not todo:
@@ -115,7 +140,7 @@ def run_batch(platform: str, output_dir: Path, dry_run: bool = False,
     if max_datasets:
         todo = todo[:max_datasets]
 
-    logger.info(f"  [{platform}] {len(todo)} new datasets to process" +
+    logger.info(f"  [{platform}] chunk {chunk}/{total_chunks}: {len(todo)} new datasets" +
                 (" (DRY RUN)" if dry_run else ""))
 
     # ── 逐条统计 ──
@@ -215,7 +240,18 @@ def main() -> None:
                         help="Max datasets to process (for testing)")
     parser.add_argument("--output-dir", type=str, default="outputs/stats_results",
                         help="Output directory for result CSVs (default: outputs/stats_results)")
+    parser.add_argument("--chunk", type=int, default=0,
+                        help="Chunk index (0-based), used with --total-chunks")
+    parser.add_argument("--total-chunks", type=int, default=1,
+                        help="Total number of chunks for parallel processing (default: 1)")
     args = parser.parse_args()
+
+    if args.total_chunks < 1:
+        print("--total-chunks must be >= 1")
+        sys.exit(1)
+    if args.chunk < 0 or args.chunk >= args.total_chunks:
+        print(f"--chunk {args.chunk} out of range [0, {args.total_chunks})")
+        sys.exit(1)
 
     output_dir = Path(args.output_dir)
 
@@ -230,7 +266,9 @@ def main() -> None:
         platforms = ["cosmx", "xenium", "merfish"]
 
     for plat in platforms:
-        run_batch(plat, output_dir, dry_run=args.dry_run, max_datasets=args.max_datasets)
+        run_batch(plat, output_dir, dry_run=args.dry_run,
+                  max_datasets=args.max_datasets,
+                  chunk=args.chunk, total_chunks=args.total_chunks)
 
 
 if __name__ == "__main__":
