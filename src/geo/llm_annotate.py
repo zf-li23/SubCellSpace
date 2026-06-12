@@ -163,8 +163,22 @@ def call_llm(
             content = data["choices"][0]["message"]["content"]
 
             parsed = json.loads(content)
+            logger.debug(f"  LLM response keys: {list(parsed.keys())[:5]}")
 
             # Validate: each GSM in input should have an output
+            import re
+            gsm_to_key = {}
+            for key in sample_titles:
+                m = re.match(r'(GSM)(\d+)-(\1)(\d+)', key)
+                if m:
+                    prefix = m.group(1)
+                    start = int(m.group(2))
+                    end = int(m.group(4))
+                    for num in range(start, end + 1):
+                        gsm_to_key[f"{prefix}{num}"] = key
+                else:
+                    gsm_to_key[key] = key
+
             result = {}
             for gsm in sample_titles:
                 if gsm in parsed:
@@ -174,8 +188,18 @@ def call_llm(
                         "disease_state": str(entry.get("disease_state", "")),
                     }
                 else:
-                    logger.warning(f"  {gse}/{gsm}: missing from LLM output")
-                    result[gsm] = {"tissue": "", "disease_state": ""}
+                    found = False
+                    for llm_gsm, entry in parsed.items():
+                        if gsm_to_key.get(llm_gsm) == gsm:
+                            result[gsm] = {
+                                "tissue": str(entry.get("tissue", "")),
+                                "disease_state": str(entry.get("disease_state", "")),
+                            }
+                            found = True
+                            break
+                    if not found:
+                        logger.warning(f"  {gse}/{gsm}: missing from LLM output")
+                        result[gsm] = {"tissue": "", "disease_state": ""}
 
             return result
 
@@ -259,13 +283,19 @@ def get_gse_metadata(csv_path: Path, gse: str) -> dict:
 
 
 def get_annotated_gses(csv_path: Path, gsm_col: str) -> set:
-    """获取已经标注过的 GSE 集合（跳过续跑）。"""
-    annotated = set()
+    """获取所有行都已标注的 GSE 集合（跳过续跑）。"""
+    gse_status = {}
     with open(csv_path) as f:
         for r in csv.DictReader(f):
-            if r.get("tissue", "").strip() or r.get("disease_state", "").strip():
-                annotated.add(r.get("GSE", ""))
-    return annotated
+            gse = r.get("GSE", "")
+            has_data = bool(r.get("tissue", "").strip() or r.get("disease_state", "").strip())
+            if gse not in gse_status:
+                gse_status[gse] = {"total": 0, "done": 0}
+            gse_status[gse]["total"] += 1
+            if has_data:
+                gse_status[gse]["done"] += 1
+    # 只返回所有行都已标注的 GSE
+    return {gse for gse, s in gse_status.items() if s["done"] == s["total"] and s["total"] > 0}
 
 
 def merge_results(csv_path: Path, gsm_col: str,

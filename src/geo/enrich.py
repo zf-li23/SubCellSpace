@@ -96,6 +96,25 @@ def enrich_single_gse(gse: str, gsm_col: str,
     return data
 
 
+def _lookup_gsm_title(gsm_key: str, gsm_titles: Dict[str, str]) -> str:
+    """查找 GSM title，支持范围写法（GSMxxx-GSMyyy）。"""
+    if gsm_key in gsm_titles:
+        return gsm_titles[gsm_key]
+    # 尝试范围展开
+    import re
+    m = re.match(r'(GSM)(\d+)-(\1)(\d+)', gsm_key)
+    if m:
+        prefix = m.group(1)
+        start = int(m.group(2))
+        end = int(m.group(4))
+        # 取范围内的第一个有 title 的 GSM
+        for num in range(start, end + 1):
+            candidate = f"{prefix}{num}"
+            if candidate in gsm_titles:
+                return gsm_titles[candidate]
+    return ""
+
+
 def merge_into_csv(csv_path: Path, gsm_col: str,
                    enrichment_map: Dict[str, dict]) -> int:
     """将 enrichment 结果合并回 CSV（安全写入 + 备份）。"""
@@ -120,7 +139,7 @@ def merge_into_csv(csv_path: Path, gsm_col: str,
                 for col in NEW_COLUMNS:
                     if col == "title":
                         gsm_titles = gse_data.get("title", {})
-                        r["title"] = gsm_titles.get(gsm, "")
+                        r["title"] = _lookup_gsm_title(gsm, gsm_titles)
                     else:
                         val = gse_data.get(col, "")
                         if val:
