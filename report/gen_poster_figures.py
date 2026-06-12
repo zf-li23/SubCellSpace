@@ -94,44 +94,54 @@ def fig1_platform_counts():
 # ═════════════════════════════════════════════════════════════════
 
 def fig2_file_coverage():
-    opt_files = {
-        'CosMx': ['polygons','expr_matrix','cell_metadata','fov_positions'],
-        'Xenium': ['cell_boundaries','nucleus_boundaries','cell_metadata','expr_matrix','gene_panel'],
-        'MERFISH': ['expr_matrix','cell_metadata'],
-    }
+    # 统一文件类别，跨平台映射
+    categories = [
+        ('polygons',      ['polygons'],                        'Polygons'),
+        ('expr_matrix',   ['expr_matrix'],                     'Expr Matrix'),
+        ('cell_metadata', ['cell_metadata'],                    'Cell Metadata'),
+        ('fov_positions', ['fov_positions'],                   'FOV Positions'),
+        ('boundaries',    ['cell_boundaries', 'nucleus_boundaries'], 'Boundaries'),
+        ('gene_panel',    ['gene_panel'],                      'Gene Panel'),
+    ]
     platforms = ['CosMx', 'Xenium', 'MERFISH']
-    max_cols = max(len(v) for v in opt_files.values())
-    padded, labels = [], []
 
+    # 构建数据矩阵: platforms × categories
+    data = []
     for p in platforms:
         ready = [r for r in all_data[p] if r.get('status','').strip()=='ready']
         n = max(len(ready), 1)
-        row = [sum(1 for r in ready if fname in r.get('available_files',''))/n*100
-               for fname in opt_files[p]]
-        row += [np.nan] * (max_cols - len(row))
-        padded.append(row)
-        labels.append(p)
+        row = []
+        for cat_key, cat_names, cat_label in categories:
+            cnt = 0
+            for r in ready:
+                avail = r.get('available_files','')
+                for name in cat_names:
+                    if name in avail:
+                        cnt += 1
+                        break
+            row.append(cnt / n * 100)
+        data.append(row)
+
+    cats = [c[2] for c in categories]
 
     fig, ax = plt.subplots(figsize=(10, 4.5))
     cmap = plt.cm.Greens
-    cmap.set_bad('#f0f0f0')
-    im = ax.imshow(padded, cmap=cmap, aspect='auto', vmin=0, vmax=100)
+    im = ax.imshow(data, cmap=cmap, aspect='auto', vmin=0, vmax=100)
 
     for i in range(len(platforms)):
-        for j in range(max_cols):
-            v = padded[i][j]
-            if not np.isnan(v):
+        for j in range(len(cats)):
+            v = data[i][j]
+            txt_color = 'white' if v > 50 else '#2c3e50'
+            if v == 0:
+                ax.text(j, i, '—', ha='center', va='center', fontsize=16, color='#bbb')
+            else:
                 ax.text(j, i, f'{v:.0f}%', ha='center', va='center',
-                        fontsize=16, fontweight='bold',
-                        color='white' if v > 50 else '#2c3e50')
+                        fontsize=16, fontweight='bold', color=txt_color)
 
-    all_labels = ['polygons','expr_matrix','cell_metadata','fov_positions',
-                  'cell_boundaries','nucleus_boundaries','gene_panel']
-    ax.set_xticks(range(len(all_labels)))
-    ax.set_xticklabels([l.replace('_','\n').title() for l in all_labels],
-                       fontsize=11, ha='center')
+    ax.set_xticks(range(len(cats)))
+    ax.set_xticklabels(cats, fontsize=13, ha='center')
     ax.set_yticks(range(len(platforms)))
-    ax.set_yticklabels(labels, fontsize=16, fontweight='bold')
+    ax.set_yticklabels(platforms, fontsize=16, fontweight='bold')
     ax.tick_params(axis='y', length=0)
 
     cbar = plt.colorbar(im, ax=ax, shrink=0.6, pad=0.02)
