@@ -26,9 +26,9 @@ ACCENT_BLUE = RGBColor(0x34, 0x98, 0xDB)
 ACCENT_GREEN = RGBColor(0x27, 0xAE, 0x60)
 
 prs = Presentation()
-# A1 竖版: 594 x 841 mm → 转换成 EMU (1mm = 36000 EMU)
-SLIDE_W = Cm(59.4)
-SLIDE_H = Cm(84.1)
+# 120 x 90 cm 横版 (宽120cm, 高90cm)
+SLIDE_W = Cm(120)
+SLIDE_H = Cm(90)
 prs.slide_width = SLIDE_W
 prs.slide_height = SLIDE_H
 
@@ -72,92 +72,98 @@ def add_image(path, left, top, width, height=None):
 
 # ── 标题栏 ───────────────────────────────────────────────────────────
 
-title_bar = add_rect(Cm(1), Cm(1), Cm(57.4), Cm(4.5), fill_color=DARK_BLUE)
-add_textbox(Cm(2), Cm(1.3), Cm(55), Cm(2.5),
-            'SubCellSpace: A Unified Database for Subcellular Spatial Transcriptomics',
-            fontsize=28, bold=True, color=WHITE, alignment=PP_ALIGN.CENTER)
+title_bar = add_rect(Cm(2), Cm(1.5), Cm(116), Cm(7), fill_color=DARK_BLUE)
+add_textbox(Cm(4), Cm(2.0), Cm(112), Cm(3.5),
+            'SubCellSpace: A Unified Database for\nSubcellular Spatial Transcriptomics',
+            fontsize=36, bold=True, color=WHITE, alignment=PP_ALIGN.CENTER)
 
-add_textbox(Cm(2), Cm(3.5), Cm(55), Cm(1.5),
+add_textbox(Cm(4), Cm(5.5), Cm(112), Cm(1.5),
             'F. Li  ·  School of Life Sciences, Tsinghua University  ·  2026',
-            fontsize=12, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
+            fontsize=14, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
 
-# ── 左栏: 背景 + 管道 ───────────────────────────────────────────────
+# ── 三列布局 ─────────────────────────────────────────────────────────
+# 120cm 宽: Col1(2~39), Col2(41~78), Col3(80~117)
+# 每列有效宽度 37cm
+C1X = Cm(2)
+C2X = Cm(41)
+C3X = Cm(80)
+CW = Cm(37)
+Y1 = Cm(9.5)   # 第一行内容起始 y
+Y2 = Cm(52)    # 第二行内容起始 y
+BH = Cm(38)    # 第一行块高度
 
-col_x = Cm(1.5)
-col_w = Cm(27)
-y_start = Cm(6.5)
-
-# Background box
-add_rect(col_x, y_start, col_w, Cm(5.5), fill_color=WHITE)
-add_textbox(col_x + Cm(1), y_start + Cm(0.3), col_w - Cm(2), Cm(0.8),
-            'Background', fontsize=16, bold=True, color=DARK_BLUE)
-add_textbox(col_x + Cm(1), y_start + Cm(1.3), col_w - Cm(2), Cm(4.0),
+# ── 左栏上: 背景 ────────────────────────────────────────────────────
+add_rect(C1X, Y1, CW, Cm(9), fill_color=WHITE)
+add_textbox(C1X + Cm(1), Y1 + Cm(0.3), CW - Cm(2), Cm(1),
+            'Background', fontsize=20, bold=True, color=DARK_BLUE)
+add_textbox(C1X + Cm(1), Y1 + Cm(1.5), CW - Cm(2), Cm(7),
             'Spatial transcriptomics enables gene expression profiling within\n'
             'native tissue context. SubCellSpace builds a comprehensive,\n'
-            'scverse-native database from three major platforms:\n'
+            'scverse-native database from three major platforms:\n\n'
             '  • NanoString CosMx — High-plex in situ RNA detection\n'
-            '  • 10x Genomics Xenium — Subcellular + multi-modal imaging\n'
-            '  • Vizgen MERFISH — Multiplexed FISH with ultra-high plexity',
-            fontsize=9, color=DARK_TEXT)
+            '  • 10x Genomics Xenium — Subcellular + multimodal imaging\n'
+            '  • Vizgen MERFISH — Multiplexed FISH, ultra-high plexity\n\n'
+            'All data processed through a unified 6-step pipeline with\n'
+            '21 standardized metadata columns per entry.',
+            fontsize=12, color=DARK_TEXT)
 
-# Pipeline figure
-add_rect(col_x, y_start + Cm(6.0), col_w, Cm(8.5), fill_color=WHITE)
-add_textbox(col_x + Cm(1), y_start + Cm(6.3), col_w - Cm(2), Cm(0.8),
-            'Data Processing Pipeline', fontsize=16, bold=True, color=DARK_BLUE)
-add_image(FIGS_DIR / 'fig5_pipeline.png', col_x + Cm(0.5), y_start + Cm(7.5),
-          col_w - Cm(1), Cm(6.5))
+# ── 左栏下: 管道图 ──────────────────────────────────────────────────
+add_rect(C1X, Y2, CW, Cm(34), fill_color=WHITE)
+add_textbox(C1X + Cm(1), Y2 + Cm(0.3), CW - Cm(2), Cm(1),
+            'Data Processing Pipeline', fontsize=20, bold=True, color=DARK_BLUE)
+add_image(FIGS_DIR / 'fig5_pipeline.png', C1X + Cm(0.5), Y2 + Cm(2.0),
+          CW - Cm(1), Cm(14))
 
-# ── 中间 & 右栏: 数据库概览 ─────────────────────────────────────────
+# 数据库规模文字总结
+add_rect(C1X + Cm(0.5), Y2 + Cm(16.5), CW - Cm(1), Cm(16), fill_color=RGBColor(0xE8, 0xF8, 0xF0))
+add_textbox(C1X + Cm(1.5), Y2 + Cm(17.0), CW - Cm(2), Cm(15),
+            'Database Summary\n\n'
+            'Total datasets indexed:      2,131\n'
+            'Ready for analysis:            1,019\n'
+            'Pending download:             1,055\n'
+            'Platform breakdown:\n'
+            '  CosMx   476  (186 ready)\n'
+            '  Xenium  1,525 (717 ready)\n'
+            '  MERFISH 130   (116 ready)\n\n'
+            'Each entry: 21 columns (GEO metadata,\n'
+            'LLM annotation, file info, statistics)',
+            fontsize=12, color=DARK_TEXT)
 
-mid_x = Cm(30)
-mid_w = Cm(28)
-y_start2 = Cm(6.5)
+# ── 中栏上: 数据库概览 ──────────────────────────────────────────────
+add_rect(C2X, Y1, CW, BH, fill_color=WHITE)
+add_textbox(C2X + Cm(1), Y1 + Cm(0.3), CW - Cm(2), Cm(1),
+            'Database Scale & Data Enrichment', fontsize=20, bold=True, color=DARK_BLUE)
+add_image(FIGS_DIR / 'fig1_overview.png', C2X + Cm(0.3), Y1 + Cm(1.8),
+          CW - Cm(0.6), Cm(35))
 
-# Overview figure
-add_rect(mid_x, y_start2, mid_w, Cm(13), fill_color=WHITE)
-add_textbox(mid_x + Cm(1), y_start2 + Cm(0.3), mid_w - Cm(2), Cm(0.8),
-            'Database Scale & Enrichment', fontsize=16, bold=True, color=DARK_BLUE)
-add_image(FIGS_DIR / 'fig1_overview.png', mid_x + Cm(0.3), y_start2 + Cm(1.5),
-          mid_w - Cm(0.6), Cm(11))
+# ── 中栏下: 可选文件 ────────────────────────────────────────────────
+add_rect(C2X, Y2, CW, Cm(34), fill_color=WHITE)
+add_textbox(C2X + Cm(1), Y2 + Cm(0.3), CW - Cm(2), Cm(1),
+            'Companion File Availability', fontsize=20, bold=True, color=DARK_BLUE)
+add_image(FIGS_DIR / 'fig2_optional_files.png', C2X + Cm(0.3), Y2 + Cm(1.8),
+          CW - Cm(0.6), Cm(31))
 
-# Stats summary
-add_rect(mid_x, y_start2 + Cm(13.5), mid_w, Cm(3.5), fill_color=RGBColor(0xE8, 0xF8, 0xF0))
-add_textbox(mid_x + Cm(1), y_start2 + Cm(14.0), mid_w - Cm(2), Cm(2.5),
-            'Database Summary\n'
-            'Total datasets: 2,131  |  Ready: 1,019\n'
-            'CosMx: 476  |  Xenium: 1,525  |  MERFISH: 130\n'
-            '21 data columns per entry: GEO metadata + LLM annotation\n'
-            '+ file integrity (touch) + streaming statistics',
-            fontsize=10, color=DARK_TEXT)
+# ── 右栏上: 生物覆盖 ────────────────────────────────────────────────
+add_rect(C3X, Y1, CW, BH, fill_color=WHITE)
+add_textbox(C3X + Cm(1), Y1 + Cm(0.3), CW - Cm(2), Cm(1),
+            'Biological Coverage', fontsize=20, bold=True, color=DARK_BLUE)
+add_image(FIGS_DIR / 'fig3_tissue_disease.png', C3X + Cm(0.3), Y1 + Cm(1.8),
+          CW - Cm(0.6), Cm(35))
 
-# Optional files
-add_rect(mid_x, y_start2 + Cm(17.5), mid_w, Cm(8.5), fill_color=WHITE)
-add_textbox(mid_x + Cm(1), y_start2 + Cm(17.8), mid_w - Cm(2), Cm(0.8),
-            'Companion File Availability', fontsize=16, bold=True, color=DARK_BLUE)
-add_image(FIGS_DIR / 'fig2_optional_files.png', mid_x + Cm(0.3), y_start2 + Cm(19.0),
-          mid_w - Cm(0.6), Cm(6.5))
-
-# Biological coverage
-add_rect(col_x, y_start + Cm(15.0), col_w, Cm(10.5), fill_color=WHITE)
-add_textbox(col_x + Cm(1), y_start + Cm(15.3), col_w - Cm(2), Cm(0.8),
-            'Biological Coverage', fontsize=16, bold=True, color=DARK_BLUE)
-add_image(FIGS_DIR / 'fig3_tissue_disease.png', col_x + Cm(0.3), y_start + Cm(16.5),
-          col_w - Cm(0.6), Cm(8.5))
-
-# CosMx stats
-add_rect(col_x, y_start + Cm(26.0), col_w, Cm(10.5), fill_color=WHITE)
-add_textbox(col_x + Cm(1), y_start + Cm(26.3), col_w - Cm(2), Cm(0.8),
-            'Dataset Statistics (CosMx)', fontsize=16, bold=True, color=DARK_BLUE)
-add_image(FIGS_DIR / 'fig4_stats_summary.png', col_x + Cm(0.3), y_start + Cm(27.5),
-          col_w - Cm(0.6), Cm(8.5))
+# ── 右栏下: CosMx 统计 ──────────────────────────────────────────────
+add_rect(C3X, Y2, CW, Cm(34), fill_color=WHITE)
+add_textbox(C3X + Cm(1), Y2 + Cm(0.3), CW - Cm(2), Cm(1),
+            'Dataset Statistics (CosMx)', fontsize=20, bold=True, color=DARK_BLUE)
+add_image(FIGS_DIR / 'fig4_stats_summary.png', C3X + Cm(0.3), Y2 + Cm(1.8),
+          CW - Cm(0.6), Cm(31))
 
 # ── 底部技术栈 ───────────────────────────────────────────────────────
 
-bottom_bar = add_rect(Cm(1), Cm(80.5), Cm(57.4), Cm(2.5), fill_color=DARK_BLUE)
-add_textbox(Cm(2), Cm(81.0), Cm(55), Cm(1.5),
+bottom_bar = add_rect(Cm(2), Cm(87), Cm(116), Cm(2.5), fill_color=DARK_BLUE)
+add_textbox(Cm(4), Cm(87.5), Cm(112), Cm(1.5),
             'Tech Stack: Python · scanpy · squidpy · spatialdata · React · TypeScript · Slurm\n'
-            'Data: NCBI GEO · DeepSeek LLM · 10x Genomics · NanoString/Bruker · Vizgen',
-            fontsize=10, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
+            'Data Sources: NCBI GEO · DeepSeek LLM · 10x Genomics · NanoString/Bruker · Vizgen',
+            fontsize=11, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
 
 
 # ── 保存 ─────────────────────────────────────────────────────────────
