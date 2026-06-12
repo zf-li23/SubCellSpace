@@ -63,11 +63,11 @@ def fig1_platform_pipeline():
 
     # ═══════════════════════ 上段: 平台搭建 Pipeline ═══════════════════════
 
-    # ── 三个大阶段（Acquisition → 步骤3, Processing → 步骤5, 右侧收窄）──
+    # ── 三个大阶段（Processing 左边界稍移，右边界左移一个箭头）──
     phases = [
-        (0, 6.6, 'Data Acquisition', '#e8f4f8', '#2980b9'),
-        (6.6, 11.2, 'Data Processing', '#fef9e7', '#f39c12'),
-        (11.2, 15.5, 'Output & Analysis', '#eafaf1', '#27ae60'),
+        (0, 6.3, 'Data Acquisition', '#e8f4f8', '#2980b9'),
+        (6.3, 10.6, 'Data Processing', '#fef9e7', '#f39c12'),
+        (10.6, 14.9, 'Output & Analysis', '#eafaf1', '#27ae60'),
     ]
     for x0, x1, label, bg, edge in phases:
         rect = plt.Rectangle((x0, 5.15), x1-x0, 4.5,
@@ -107,11 +107,11 @@ def fig1_platform_pipeline():
             ax.annotate('', xy=(x + 2.35, 7.0), xytext=(x + 1.75, 7.0),
                         arrowprops=dict(arrowstyle='->', color='#999', lw=2.5))
 
-    # ═══════════════════════ 下段: 6 步分析 Pipeline ═══════════════════════
+    # ═══════════════════════ 下段: 6 步分析 Pipeline（整体放大）═══════════════
 
     # ── 分隔标题 ──
-    ax.text(7.75, 4.65, 'Analysis Pipeline — scverse-native 6-step workflow',
-            ha='center', va='center', fontsize=13, color='#555', style='italic',
+    ax.text(7.75, 4.55, 'Analysis Pipeline — scverse-native 6-step workflow',
+            ha='center', va='center', fontsize=14, color='#555', style='italic',
             fontweight='bold',
             bbox=dict(boxstyle='round,pad=0.4', facecolor='#f5f5f5',
                       edgecolor='#ccc', linewidth=1))
@@ -127,19 +127,19 @@ def fig1_platform_pipeline():
 
     for i, (num, title, desc, color) in enumerate(steps_lower):
         x = i * 2.1 + 0.3
-        rect = plt.Rectangle((x, 0.5), 1.8, 2.5, facecolor=color, alpha=0.12,
+        rect = plt.Rectangle((x, 0.3), 1.8, 3.0, facecolor=color, alpha=0.12,
                              edgecolor=color, linewidth=2.5, zorder=2)
         ax.add_patch(rect)
-        ax.text(x + 0.9, 2.2, title, ha='center', va='center', fontsize=13,
+        ax.text(x + 0.9, 2.6, title, ha='center', va='center', fontsize=14,
                 fontweight='bold', color=color)
-        ax.text(x + 0.9, 1.3, desc, ha='center', va='center', fontsize=9,
+        ax.text(x + 0.9, 1.5, desc, ha='center', va='center', fontsize=10,
                 color='#555')
-        ax.text(x + 0.9, 3.05, str(i+1), ha='center', va='center', fontsize=16,
+        ax.text(x + 0.9, 3.55, str(i+1), ha='center', va='center', fontsize=17,
                 fontweight='bold', color=color,
                 bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color,
-                          linewidth=2.5, pad=0.25))
+                          linewidth=2.5, pad=0.28))
         if i < len(steps_lower) - 1:
-            ax.annotate('', xy=(x + 2.35, 1.75), xytext=(x + 1.75, 1.75),
+            ax.annotate('', xy=(x + 2.35, 1.8), xytext=(x + 1.75, 1.8),
                         arrowprops=dict(arrowstyle='->', color='#aaa', lw=2.5))
 
     fig.savefig(OUT / 'fig1_platform_pipeline.png', dpi=300)
@@ -229,10 +229,10 @@ def fig3_three_modes():
     print('  ✅ fig3_three_modes')
 
 # ═════════════════════════════════════════════════════════════════
-# FIG 4: 可选文件热图 — 海报用
+# FIG 3: 可选文件热图 — 海报用
 # ═════════════════════════════════════════════════════════════════
 
-def fig4_file_coverage():
+def fig3_file_coverage():
     # 跨平台统一文件类别（Cell/Nucleus Boundary 拆开）
     categories = [
         ('polygons',           ['polygons'],                        'Polygons'),
@@ -288,15 +288,15 @@ def fig4_file_coverage():
     cbar.set_label('Coverage (%)', fontsize=12)
     cbar.ax.tick_params(labelsize=10)
     fig.tight_layout()
-    fig.savefig(OUT / 'fig4_file_coverage.png')
+    fig.savefig(OUT / 'fig3_file_coverage.png')
     plt.close(fig)
-    print('  ✅ fig4_file_coverage')
+    print('  ✅ fig3_file_coverage')
 
 # ═════════════════════════════════════════════════════════════════
-# FIG 5: 组织 + 疾病分布 Top 10 — 海报用
+# FIG 4: 组织 + 疾病分布 Top 10 — 海报用
 # ═════════════════════════════════════════════════════════════════
 
-def fig5_tissue_dist():
+def fig4_tissue_dist():
     all_rows = cosmx + xenium + merfish
     ready = [r for r in all_rows if r.get('status','').strip()=='ready']
 
@@ -339,15 +339,15 @@ def fig5_tissue_dist():
         for s in ['top','right']: ax.spines[s].set_visible(False)
 
     fig.tight_layout()
-    fig.savefig(OUT / 'fig5_tissue_dist.png')
+    fig.savefig(OUT / 'fig4_tissue_dist.png')
     plt.close(fig)
-    print('  ✅ fig5_tissue_dist')
+    print('  ✅ fig4_tissue_dist')
 
 # ═════════════════════════════════════════════════════════════════
-# FIG 6: 跨平台小提琴图 — 海报用
+# FIG 5: 跨平台小提琴图 — 海报用
 # ═════════════════════════════════════════════════════════════════
 
-def fig6_violins():
+def fig5_violins():
     import pandas as pd
     fields = [
         ('n_transcripts', 'Transcripts per Dataset', True),
@@ -392,9 +392,9 @@ def fig6_violins():
         ax.tick_params(axis='y', labelsize=12)
 
     fig.tight_layout()
-    fig.savefig(OUT / 'fig6_violins.png')
+    fig.savefig(OUT / 'fig5_violins.png')
     plt.close(fig)
-    print('  ✅ fig6_violins')
+    print('  ✅ fig5_violins')
 
 # ═════════════════════════════════════════════════════════════════
 # 运行
@@ -404,7 +404,7 @@ if __name__ == '__main__':
     print('Generating poster-optimized figures...')
     fig1_platform_pipeline()
     fig2_platform_counts()
-    fig4_file_coverage()
-    fig5_tissue_dist()
-    fig6_violins()
+    fig3_file_coverage()
+    fig4_tissue_dist()
+    fig5_violins()
     print(f'\nAll saved to {OUT}/')
