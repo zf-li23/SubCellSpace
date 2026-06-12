@@ -62,34 +62,65 @@
 
 ---
 
-### 第三步：Touch 文件信息回填
+### 第三步：快速管道运行收集指标 ✅ 当前步骤
+
+**目标**：对 ready 数据集跑一次最小化 ingestion（跳过所有分析步骤），获取关键数值指标。
+
+| 列名 | 来源 | 说明 |
+|:-----|:------|:------|
+| `n_transcripts` | ingestion summary | 转录本总数（QC 后）|
+| `n_cells` | ingestion summary | 细胞数 |
+| `n_genes` | ingestion summary | 基因数 |
+| `n_fovs` | ingestion summary | FOV 数 |
+| `gene_panel_size` | ingestion | 基因 panel 大小 |
+| `median_transcripts` | ingestion | 每细胞中位转录本 |
+| `median_genes` | ingestion | 每细胞中位基因 |
+| `pipeline_status` | 运行结果 | "success" / "failed" |
+
+**命令**：
+```bash
+subcellspace run <input> \
+  --denoise-backend none \
+  --segmentation-backend none \
+  --clustering-backend none \
+  --annotation-backend none \
+  --spatial-analysis-backend none \
+  --subcellular-analysis-backend none \
+  --domain-backend none \
+  --min-transcripts 10 --min-genes 5 \
+  --skip-container --no-export
+```
+
+**脚本**：`scripts/batch_run_quick.py` — 批量读取 CSV → 逐数据集运行 → 解析 report.json → 回填。
+
+---
+
+### 第四步：Touch 信息 + 管道参数（后续）
+
+**目标**：从已有的 touch normalize 报告补充文件信息，从路径公式补充管道参数。
 
 | 列名 | 来源 |
 |:-----|:------|
 | `detected_platform` | touch normalize 报告 |
 | `file_count` | touch normalize 报告 |
-| `optional_files` | touch normalize 报告 |
 | `data_size` | `du -sh` |
-
-### 第四步：管道参数填充
-
-| 列名 | 来源 |
-|:-----|:------|
 | `local_path` | 路径公式 `/data3/.../{GSE}/{GSM}` |
 | `seg_backend` | 平台推断 |
-| `pipeline_status` | 管道运行后回填 |
+
+**脚本**：`scripts/enrich_from_touch.py` + `scripts/enrich_pipeline_params.py`
 
 ---
 
 ## 3. 最终目标列序
 
 ```
-GSE, name, sample_name/GSM, status,       ← 已有 (4列)
-title, summary, taxon, pubmedids,         ← GEO 爬取
-pdat, samplestaxa, seriestitle,           ← GEO 爬取
-tissue, disease_state,                    ← LLM 标注
-detected_platform, file_count, data_size, ← Touch 回填
-local_path, seg_backend, pipeline_status  ← 管道参数
+GSE, name, sample_name/GSM, status,       ← 原始 (4列)
+pdat, pubmedids, taxon, summary, title,   ← GEO 爬取 ✅
+tissue, disease_state,                    ← LLM 标注 ✅
+n_transcripts, n_cells, n_genes,          ← 管道运行 ← 当前
+n_fovs, gene_panel_size, pipeline_status,
+detected_platform, file_count, data_size, ← Touch 信息（后续）
+local_path, seg_backend                   ← 管道参数（后续）
 ```
 
 ## 4. 脚本结构
@@ -97,7 +128,17 @@ local_path, seg_backend, pipeline_status  ← 管道参数
 ```
 src/geo/
 ├── __init__.py
-├── api.py              ← 已有 (query_gsms, get_gse_info)
+├── api.py              ← GEO 查询（已有）
+├── enrich.py           ← GEO 批量 enrich（已有）
+└── llm_annotate.py     ← LLM 标注（已有）
+
+scripts/
+├── geo_enrich.py       ← 第一步：GEO 爬取 ✅
+├── llm_annotate.py     ← 第二步：LLM 标注 ✅
+├── batch_run_quick.py  ← 第三步：快速管道运行 ← 待编写
+├── enrich_from_touch.py  ← 第四步：touch 信息 ← 后续
+└── enrich_pipeline_params.py  ← 第四步：管道参数 ← 后续
+```
 └── enrich.py           ← 新增：批量 enrich 主逻辑
 
 scripts/
