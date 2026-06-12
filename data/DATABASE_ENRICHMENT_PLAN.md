@@ -62,52 +62,58 @@
 
 ---
 
-### 第三步：快速管道运行收集指标 ✅ 当前步骤
+### 第三步：快速统计模式 ← 当前步骤
 
-**目标**：对 ready 数据集跑一次最小化 ingestion（跳过所有分析步骤），获取关键数值指标。
+**目标**：为 subcellspace 新增 `stats` 子命令，零 I/O 开销地统计关键数值指标。
 
-| 列名 | 来源 | 说明 |
-|:-----|:------|:------|
-| `n_transcripts` | ingestion summary | 转录本总数（QC 后）|
-| `n_cells` | ingestion summary | 细胞数 |
-| `n_genes` | ingestion summary | 基因数 |
-| `n_fovs` | ingestion summary | FOV 数 |
-| `gene_panel_size` | ingestion | 基因 panel 大小 |
-| `median_transcripts` | ingestion | 每细胞中位转录本 |
-| `median_genes` | ingestion | 每细胞中位基因 |
-| `pipeline_status` | 运行结果 | "success" / "failed" |
+不再跑完整的 ingestion（避免读 42GB CSV + 写 h5ad 的 I/O 开销），而是新增一个轻量统计模式：
 
-**命令**：
 ```bash
-subcellspace run <input> \
-  --denoise-backend none \
-  --segmentation-backend none \
-  --clustering-backend none \
-  --annotation-backend none \
-  --spatial-analysis-backend none \
-  --subcellular-analysis-backend none \
-  --domain-backend none \
-  --min-transcripts 10 --min-genes 5 \
-  --skip-container --no-export
+subcellspace stats /data3/.../GSMxxx/ --platform cosmx
 ```
 
-**脚本**：`scripts/batch_run_quick.py` — 批量读取 CSV → 逐数据集运行 → 解析 report.json → 回填。
+**原理**：只做流式文件扫描，不加载数据到内存：
+- `n_transcripts` → 对 `tx_file.csv` / `detected_transcripts.csv` 做 `wc -l`（去表头）
+- `n_cells` → 扫描 cell_id 列，统计唯一值数
+- `n_genes` → 扫描 gene 列，统计唯一值数
+- `n_fovs` → 扫描 fov 列，统计唯一值数（CosMx 特有）
+- `gene_panel_size` → 从 `gene_panel.json` 或扫描基因列
+- `median_transcripts` / `median_genes` → 逐 cell 计数，求中位数（流式，不加载全量）
+
+**新增列**（共 7 列）：
+
+| 列名 | 获取方式 | 说明 |
+|:-----|:---------|:------|
+| `n_transcripts` | 流式统计 | 转录本总数 |
+| `n_cells` | 流式统计 | 细胞数 |
+| `n_genes` | 流式统计 | 基因数 |
+| `n_fovs` | 流式统计 | FOV 数 |
+| `gene_panel_size` | 流式统计 | 基因 panel 大小 |
+| `median_transcripts` | 流式统计 | 每细胞中位转录本 |
+| `median_genes` | 流式统计 | 每细胞中位基因 |
+
+**实现**：
+- `src/stats.py` — 新的统计模块，按平台 CSV 格式解析
+- 注册为 subcellspace CLI 子命令 `subcellspace stats`
+- `scripts/batch_stats.py` — 批量执行入口，遍历 CSV 逐 GSM 统计
 
 ---
 
-### 第四步：Touch 信息 + 管道参数（后续）
+### 第四步：文件信息回填
 
-**目标**：从已有的 touch normalize 报告补充文件信息，从路径公式补充管道参数。
+**目标**：补充每个数据集的可选文件列表和文件大小，方便其他工具引用。
 
-| 列名 | 来源 |
-|:-----|:------|
-| `detected_platform` | touch normalize 报告 |
-| `file_count` | touch normalize 报告 |
-| `data_size` | `du -sh` |
-| `local_path` | 路径公式 `/data3/.../{GSE}/{GSM}` |
-| `seg_backend` | 平台推断 |
+| 列名 | 来源 | 说明 |
+|:-----|:------|:------|
+| `available_files` | touch 检测 | 可选文件列表（逗号分隔），如 `"polygons,expr_matrix,cell_metadata"` |
+| `file_names` | 目录扫描 | 关键文件名的 JSON，如 `{"tx_file":"GSMxxx_tx_file.csv.gz","polygons":"GSMxxx-polygons.csv.gz"}` |
+| `data_size` | `du -sh` | 目录总大小 |
 
-**脚本**：`scripts/enrich_from_touch.py` + `scripts/enrich_pipeline_params.py`
+**`available_files` 列设计**：用一列统一表示，不按平台分列。值为逗号分隔的可选文件名，查询时用 `FIND_IN_SET` 或程序内过滤。
+
+**`file_names` 列设计**：JSON 字符串，形如 `{"tx_file":"GSM7473682_HC_a_tx_file.csv.gz","polygons":"GSM7473682_HC_a-polygons.csv.gz"}`。其他工具（如文件浏览器）可以直接解析 JSON 获取完整路径。
+
+**不需要的列**：`detected_platform`（平台已知）、`seg_backend`（管道自动推断）、`local_path`（由 GSE+GSM 保证）
 
 ---
 
@@ -117,27 +123,28 @@ subcellspace run <input> \
 GSE, name, sample_name/GSM, status,       ← 原始 (4列)
 pdat, pubmedids, taxon, summary, title,   ← GEO 爬取 ✅
 tissue, disease_state,                    ← LLM 标注 ✅
-n_transcripts, n_cells, n_genes,          ← 管道运行 ← 当前
-n_fovs, gene_panel_size, pipeline_status,
-detected_platform, file_count, data_size, ← Touch 信息（后续）
-local_path, seg_backend                   ← 管道参数（后续）
+n_transcripts, n_cells, n_genes,          ← 统计模式 ← 当前
+n_fovs, gene_panel_size,
+median_transcripts, median_genes,
+available_files, file_names, data_size    ← 文件信息（后续）
 ```
 
 ## 4. 脚本结构
 
 ```
-src/geo/
-├── __init__.py
-├── api.py              ← GEO 查询（已有）
-├── enrich.py           ← GEO 批量 enrich（已有）
-└── llm_annotate.py     ← LLM 标注（已有）
+src/
+├── geo/
+│   ├── api.py            ← GEO 查询
+│   ├── enrich.py         ← GEO 批量 enrich
+│   └── llm_annotate.py   ← LLM 标注
+├── stats.py              ← 新增：流式统计模块
+└── pipeline_engine.py    ← 已有
 
 scripts/
-├── geo_enrich.py       ← 第一步：GEO 爬取 ✅
-├── llm_annotate.py     ← 第二步：LLM 标注 ✅
-├── batch_run_quick.py  ← 第三步：快速管道运行 ← 待编写
-├── enrich_from_touch.py  ← 第四步：touch 信息 ← 后续
-└── enrich_pipeline_params.py  ← 第四步：管道参数 ← 后续
+├── geo_enrich.py         ← 第一步 ✅
+├── llm_annotate.py       ← 第二步 ✅
+├── batch_stats.py        ← 第三步：批量统计 ← 待编写
+├── enrich_files.py       ← 第四步：文件信息 ← 后续
 ```
 └── enrich.py           ← 新增：批量 enrich 主逻辑
 
