@@ -88,6 +88,15 @@ def build_parser() -> argparse.ArgumentParser:
                             help="Path to pipeline YAML config (e.g. config/pipeline.prod.yaml). "
                                  "Overrides defaults; individual CLI flags still take precedence.")
 
+    # ── Stats (lightweight streaming statistics) ────────────────────
+    stats_parser = subparsers.add_parser("stats", help="Streaming statistics: count transcripts, cells, genes (no I/O load)")
+    stats_parser.add_argument("input_path", type=str,
+                              help="Path to data directory (e.g. /data3/.../GSMxxx/)")
+    stats_parser.add_argument("--platform", type=str, default=None,
+                              choices=["cosmx", "xenium", "merfish", "auto"],
+                              help="Platform (default: auto-detect)")
+    stats_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
     # ── Export frontend-friendly files ──────────────────────────────
     export_parser = subparsers.add_parser("export", help="Export .zarr → frontend-friendly static files")
     export_parser.add_argument("sdata_path", type=Path, help="Path to SpatialData .zarr")
@@ -639,6 +648,10 @@ def main() -> None:
         _cmd_touch(args)
         return
 
+    if args.command == "stats":
+        _cmd_stats(args)
+        return
+
 # ── Database command handlers ────────────────────────────────────────
 
 
@@ -840,6 +853,13 @@ def _cmd_touch_all(args: argparse.Namespace) -> None:
     print(f"  Scan complete: {len(results)} datasets")
     print(f"  ✅ OK: {ok_count} | ⚠️  No data: {fail_count} | ❌ Errors: {err_count}")
     print(f"  Full results: {summary_path.resolve()}")
+
+
+def _cmd_stats(args: argparse.Namespace) -> None:
+    """Handle ``subcellspace stats`` — lightweight streaming statistics."""
+    from .stats import stats_single_dir
+
+    stats_single_dir(args.input_path, platform=args.platform, json_output=args.json)
 
 
 def _cmd_db(args: argparse.Namespace) -> None:

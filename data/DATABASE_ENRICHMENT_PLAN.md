@@ -1,7 +1,7 @@
 # 数据库元数据填充计划
 
 > 创建日期：2026-06-12  
-> 状态：📋 规划阶段
+> 状态：✅ 统计模式完成，待运行批量统计
 
 ---
 
@@ -62,9 +62,9 @@
 
 ---
 
-### 第三步：快速统计模式 ← 当前步骤
+### 第三步：快速统计模式 ✅
 
-**目标**：为 subcellspace 新增 `stats` 子命令，零 I/O 开销地统计关键数值指标。
+**目标**：新增 `subcellspace stats` 子命令，零 I/O 开销地统计关键数值指标（已完成）。
 
 不再跑完整的 ingestion（避免读 42GB CSV + 写 h5ad 的 I/O 开销），而是新增一个轻量统计模式：
 
@@ -123,7 +123,7 @@ subcellspace stats /data3/.../GSMxxx/ --platform cosmx
 GSE, name, sample_name/GSM, status,       ← 原始 (4列)
 pdat, pubmedids, taxon, summary, title,   ← GEO 爬取 ✅
 tissue, disease_state,                    ← LLM 标注 ✅
-n_transcripts, n_cells, n_genes,          ← 统计模式 ← 当前
+n_transcripts, n_cells, n_genes,          ← 统计模式 ✅
 n_fovs, gene_panel_size,
 median_transcripts, median_genes,
 available_files, file_names, data_size    ← 文件信息（后续）
