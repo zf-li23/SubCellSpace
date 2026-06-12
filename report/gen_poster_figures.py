@@ -53,41 +53,89 @@ def flt(v):
     except: return None
 
 # ═════════════════════════════════════════════════════════════════
-# FIG 1: 三平台数据集数量 — 海报用（大字号柱状图）
+# FIG 1: 整体 SubCellSpace 平台搭建 Pipeline — 海报用
 # ═════════════════════════════════════════════════════════════════
 
-def fig1_platform_counts():
-    fig, ax = plt.subplots(figsize=(8, 5.5))
+def fig1_platform_pipeline():
+    fig, ax = plt.subplots(figsize=(16, 5))
+    ax.set_xlim(0, 16); ax.set_ylim(0, 5)
+    ax.axis('off')
+
+    # ── 三个大阶段 ──
+    phases = [
+        (0, 5.6, 'Data Acquisition', '#e8f4f8', '#2980b9'),
+        (5.6, 10.8, 'Data Processing', '#fef9e7', '#f39c12'),
+        (10.8, 16, 'Output & Analysis', '#eafaf1', '#27ae60'),
+    ]
+    for x0, x1, label, bg, edge in phases:
+        rect = plt.Rectangle((x0, 0.15), x1-x0, 4.7,
+                             facecolor=bg, edgecolor=edge, linewidth=2, alpha=0.5, zorder=0)
+        ax.add_patch(rect)
+        ax.text((x0+x1)/2, 4.85, label, ha='center', va='top', fontsize=14,
+                fontweight='bold', color=edge, style='italic')
+
+    # ── 7 个步骤 ──
+    steps = [
+        ('1', 'GEO\nDownload', 'NCBI GEO\n→ Cluster', '#2980b9'),
+        ('2', 'GEO\nMetadata', 'E-utilities\nGSM Expansion', '#3498db'),
+        ('3', 'LLM\nAnnotation', 'DeepSeek API\nTissue / Disease', '#5dade2'),
+        ('4', 'Touch\nIntegrity', 'File Scan\nNormalize', '#f39c12'),
+        ('5', 'Stats\nStreaming', 'Zero-I/O\nCounts → CSV', '#e67e22'),
+        ('6', 'Frontend\nBrowser', 'React Static\n3 Platform Tabs', '#27ae60'),
+        ('7', 'HTML\nReport', 'Publication\nFigures + PPTX', '#1abc9c'),
+    ]
+
+    for i, (num, title, desc, color) in enumerate(steps):
+        x = i * 2.1 + 0.4
+        rect = plt.Rectangle((x, 0.7), 1.8, 2.8, facecolor=color, alpha=0.10,
+                             edgecolor=color, linewidth=2.5, zorder=2, joinstyle='round',
+                             linestyle='-')
+        ax.add_patch(rect)
+        # 圆角编号
+        ax.text(x + 0.9, 3.1, num, ha='center', va='center', fontsize=16,
+                fontweight='bold', color='white',
+                bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
+                          linewidth=1.5, pad=0.2))
+        ax.text(x + 0.9, 2.2, title, ha='center', va='center', fontsize=12,
+                fontweight='bold', color=color)
+        ax.text(x + 0.9, 1.15, desc, ha='center', va='center', fontsize=8.5,
+                color='#555')
+        # 箭头
+        if i < len(steps) - 1:
+            ax.annotate('', xy=(x + 2.35, 2.15), xytext=(x + 1.75, 2.15),
+                        arrowprops=dict(arrowstyle='->', color='#999', lw=2.5))
+
+    # ── 底部数据集计数小条形 ──
+    ax_inset = fig.add_axes([0.32, 0.04, 0.40, 0.12])
     platforms = ['CosMx', 'Xenium', 'MERFISH']
-    x = np.arange(len(platforms))
+    x_vals = np.arange(len(platforms))
     width = 0.55
     bottom = np.zeros(3)
-
     for status, color in [('ready','#27ae60'),('pending','#f39c12'),('error','#e74c3c')]:
         vals = [sum(1 for r in all_data[p] if r.get('status','').strip()==status) for p in platforms]
-        bars = ax.bar(x, vals, width, bottom=bottom, color=color, edgecolor='white', linewidth=0.8)
+        bars = ax_inset.bar(x_vals, vals, width, bottom=bottom, color=color,
+                            edgecolor='white', linewidth=0.8)
         for bar, v in zip(bars, vals):
             if v > 0:
-                ax.text(bar.get_x()+bar.get_width()/2, bar.get_y()+v/2, str(v),
-                        ha='center', va='center', fontsize=13, fontweight='bold', color='white')
+                ax_inset.text(bar.get_x()+bar.get_width()/2, bar.get_y()+v/2, str(v),
+                              ha='center', va='center', fontsize=8, fontweight='bold', color='white')
         bottom += vals
-
     for i, p in enumerate(platforms):
         total = len(all_data[p])
-        ax.text(i, total + 40, f'{total:,}', ha='center', fontsize=18, fontweight='bold')
-        ax.text(i, total - 0.5, 'datasets', ha='center', fontsize=10, color='#555')
+        ax_inset.text(i, total + 30, f'{total:,}', ha='center', fontsize=10, fontweight='bold')
+    ax_inset.set_xticks(x_vals)
+    ax_inset.set_xticklabels(platforms, fontsize=10, fontweight='bold')
+    ax_inset.set_ylabel('Datasets', fontsize=9)
+    ax_inset.tick_params(axis='y', labelsize=8)
+    ax_inset.set_ylim(0, max(len(all_data[p]) for p in platforms) * 1.2)
+    ax_inset.legend(['Ready', 'Pending', 'Error'], fontsize=7, loc='upper right',
+                    framealpha=0.9, edgecolor='#ddd')
+    for spine in ['top','right']:
+        ax_inset.spines[spine].set_visible(False)
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(platforms, fontsize=18, fontweight='bold')
-    ax.set_ylabel('Number of Datasets', fontsize=14)
-    ax.tick_params(axis='y', labelsize=12)
-    ax.set_ylim(0, max(len(all_data[p]) for p in platforms) * 1.15)
-    ax.legend(['Ready', 'Pending', 'Error'], fontsize=12, loc='upper right',
-              framealpha=0.9, edgecolor='#ddd')
-    fig.tight_layout()
-    fig.savefig(OUT / 'fig1_platform_counts.png')
+    fig.savefig(OUT / 'fig1_platform_pipeline.png', dpi=300)
     plt.close(fig)
-    print('  ✅ fig1_platform_counts')
+    print('  ✅ fig1_platform_pipeline')
 
 # ═════════════════════════════════════════════════════════════════
 # FIG 2: 可选文件热图 — 海报用
@@ -185,16 +233,16 @@ def fig3_tissue_dist():
     ]:
         colors = color_fn()
         bars = ax.barh(range(len(items)), counts, color=colors, edgecolor='white', height=0.7)
+        x_max = max(counts)
         for bar, v in zip(bars, counts):
-            ax.text(bar.get_width() + max(counts)*0.015, bar.get_y() + bar.get_height()/2, str(v),
+            ax.text(bar.get_width() + x_max * 0.015, bar.get_y() + bar.get_height()/2, str(v),
                     va='center', fontsize=13, fontweight='bold')
 
         ax.set_yticks(range(len(items)))
         short = [t[:28] + '...' if len(t) > 28 else t for t in items]
         ax.set_yticklabels(short, fontsize=13)
-        ax.set_xlabel('Number of Datasets (log)', fontsize=14)
-        ax.set_xscale('log')
-        ax.set_xlim(0.5, max(counts) * 3)
+        ax.set_xlabel('Number of Datasets', fontsize=14)
+        ax.set_xlim(0, x_max * 1.25)
         ax.tick_params(axis='x', labelsize=11)
         ax.set_title(title, fontsize=16, fontweight='bold', pad=12)
         for s in ['top','right']: ax.spines[s].set_visible(False)
@@ -261,39 +309,93 @@ def fig4_violins():
 # FIG 5: Pipeline 流程图 — 海报用
 # ═════════════════════════════════════════════════════════════════
 
-def fig5_pipeline():
-    fig, ax = plt.subplots(figsize=(14, 3.2))
-    ax.set_xlim(0, 14); ax.set_ylim(0, 3.2)
+def fig5_three_modes():
+    fig, ax = plt.subplots(figsize=(16, 5.5))
+    ax.set_xlim(0, 16); ax.set_ylim(0, 5.5)
     ax.axis('off')
 
-    steps = [
-        ('1.\nDenoise', 'basic\nsparc', '#3498db'),
-        ('2.\nPatchify', 'grid\nhex', '#2ecc71'),
-        ('3.\nSegment', 'fov_cell_id\ncellpose', '#e67e22'),
-        ('4.\n Domain', 'spatial_leiden\nkmeans', '#f39c12'),
-        ('5.\nCluster', 'leiden\nlouvain', '#9b59b6'),
-        ('6.\nAnnotate', 'celltypist\nscrin', '#e74c3c'),
-        ('7.\nSpatial', "Moran's I\nGeary's C", '#1abc9c'),
+    modes = [
+        {
+            'title': 'Pipeline Mode',
+            'subtitle': 'scverse-native 6-step analysis',
+            'x0': 0.3,
+            'color': '#3498db',
+            'steps': [
+                ('1', 'Denoise', 'basic / sparc'),
+                ('2', 'Patchify', 'grid / hex'),
+                ('3', 'Segment', 'fov_cell_id / cellpose'),
+                ('4', 'Domain', 'spatial_leiden / kmeans'),
+                ('5', 'Annotate', 'celltypist / scrin'),
+                ('6', 'Spatial', "Moran's I / Geary's C"),
+            ]
+        },
+        {
+            'title': 'Touch Mode',
+            'subtitle': 'File integrity & normalization',
+            'x0': 5.9,
+            'color': '#e67e22',
+            'steps': [
+                ('1', 'Scan', 'manifest compare'),
+                ('2', 'Report', 'required / optional'),
+                ('3', 'Normalize', 'GSM prefix rename'),
+                ('4', 'Export', 'CSV summary'),
+            ]
+        },
+        {
+            'title': 'Stats Mode',
+            'subtitle': 'Zero-I/O streaming statistics',
+            'x0': 10.8,
+            'color': '#27ae60',
+            'steps': [
+                ('1', 'Stream', 'read header / count'),
+                ('2', 'Aggregate', 'tx + cell + gene'),
+                ('3', 'Threshold', '50k cell safety'),
+                ('4', 'Export', 'CSV → GEO merge'),
+            ]
+        },
     ]
-    for i, (title, desc, color) in enumerate(steps):
-        x = i * 1.85 + 0.3
-        rect = plt.Rectangle((x, 0.4), 1.6, 2.3, facecolor=color, alpha=0.12,
-                             edgecolor=color, linewidth=2.5, zorder=2)
-        ax.add_patch(rect)
-        ax.text(x + 0.8, 2.05, title, ha='center', va='center', fontsize=13,
-                fontweight='bold', color=color)
-        ax.text(x + 0.8, 1.1, desc, ha='center', va='center', fontsize=10, color='#555')
-        ax.text(x + 0.8, 2.75, str(i+1), ha='center', va='center', fontsize=16,
-                fontweight='bold', color=color,
-                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color, linewidth=2.5, pad=0.25))
-        if i < len(steps) - 1:
-            ax.annotate('', xy=(x + 1.9, 1.55), xytext=(x + 1.5, 1.55),
-                        arrowprops=dict(arrowstyle='->', color='#aaa', lw=2.5))
 
-    fig.tight_layout()
-    fig.savefig(OUT / 'fig5_pipeline.png', dpi=300)
+    for mode in modes:
+        x0 = mode['x0']
+        color = mode['color']
+        steps = mode['steps']
+        n = len(steps)
+
+        # ── 模式标题 ──
+        ax.text(x0 + 1.7, 4.8, mode['title'], ha='center', va='center', fontsize=16,
+                fontweight='bold', color=color)
+        ax.text(x0 + 1.7, 4.35, mode['subtitle'], ha='center', va='center',
+                fontsize=10, color='#777', style='italic')
+
+        # ── 步骤方块 ──
+        for i, (num, title, desc) in enumerate(steps):
+            y = 3.2 - i * 0.85
+            rect = plt.Rectangle((x0 + 0.1, y - 0.25), 3.2, 0.65,
+                                 facecolor=color, alpha=0.10,
+                                 edgecolor=color, linewidth=2, zorder=2)
+            ax.add_patch(rect)
+            # 编号圆圈
+            ax.text(x0 + 0.35, y, num, ha='center', va='center', fontsize=11,
+                    fontweight='bold', color='white',
+                    bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
+                              linewidth=1.5, pad=0.15))
+            ax.text(x0 + 0.85, y, title, ha='left', va='center', fontsize=12,
+                    fontweight='bold', color=color)
+            ax.text(x0 + 2.0, y, desc, ha='center', va='center', fontsize=9,
+                    color='#555')
+            # 箭头
+            if i < n - 1:
+                ax.annotate('', xy=(x0 + 1.8, y - 0.85 + 0.3),
+                            xytext=(x0 + 1.8, y - 0.2),
+                            arrowprops=dict(arrowstyle='->', color='#aaa', lw=2))
+
+    # ── 模式间分隔线 ──
+    for sep_x in [5.5, 10.4]:
+        ax.axvline(x=sep_x, ymin=0.05, ymax=0.85, color='#ddd', linewidth=1.5, linestyle='--')
+
+    fig.savefig(OUT / 'fig5_three_modes.png', dpi=300)
     plt.close(fig)
-    print('  ✅ fig5_pipeline')
+    print('  ✅ fig5_three_modes')
 
 # ═════════════════════════════════════════════════════════════════
 # 运行
@@ -301,9 +403,9 @@ def fig5_pipeline():
 
 if __name__ == '__main__':
     print('Generating poster-optimized figures...')
-    fig1_platform_counts()
+    fig1_platform_pipeline()
     fig2_file_coverage()
     fig3_tissue_dist()
     fig4_violins()
-    fig5_pipeline()
+    fig5_three_modes()
     print(f'\nAll saved to {OUT}/')
