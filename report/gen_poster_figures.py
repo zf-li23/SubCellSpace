@@ -232,8 +232,8 @@ def fig4_violins():
 # ═════════════════════════════════════════════════════════════════
 
 def fig5_pipeline():
-    fig, ax = plt.subplots(figsize=(14, 5))
-    ax.set_xlim(0, 14); ax.set_ylim(0, 5)
+    fig, ax = plt.subplots(figsize=(14, 3.2))
+    ax.set_xlim(0, 14); ax.set_ylim(0, 3.2)
     ax.axis('off')
 
     steps = [
@@ -247,17 +247,17 @@ def fig5_pipeline():
     ]
     for i, (title, desc, color) in enumerate(steps):
         x = i * 1.85 + 0.3
-        rect = plt.Rectangle((x, 0.6), 1.6, 3.6, facecolor=color, alpha=0.12,
+        rect = plt.Rectangle((x, 0.4), 1.6, 2.3, facecolor=color, alpha=0.12,
                              edgecolor=color, linewidth=2.5, zorder=2)
         ax.add_patch(rect)
-        ax.text(x + 0.8, 3.2, title, ha='center', va='center', fontsize=14,
+        ax.text(x + 0.8, 2.05, title, ha='center', va='center', fontsize=13,
                 fontweight='bold', color=color)
-        ax.text(x + 0.8, 1.8, desc, ha='center', va='center', fontsize=11, color='#555')
-        ax.text(x + 0.8, 4.2, str(i+1), ha='center', va='center', fontsize=18,
+        ax.text(x + 0.8, 1.1, desc, ha='center', va='center', fontsize=10, color='#555')
+        ax.text(x + 0.8, 2.75, str(i+1), ha='center', va='center', fontsize=16,
                 fontweight='bold', color=color,
-                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color, linewidth=2.5, pad=0.3))
+                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color, linewidth=2.5, pad=0.25))
         if i < len(steps) - 1:
-            ax.annotate('', xy=(x + 1.6, 2.4), xytext=(x + 1.3, 2.4),
+            ax.annotate('', xy=(x + 1.9, 1.55), xytext=(x + 1.5, 1.55),
                         arrowprops=dict(arrowstyle='->', color='#aaa', lw=2.5))
 
     fig.tight_layout()
