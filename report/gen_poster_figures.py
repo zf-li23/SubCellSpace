@@ -106,11 +106,11 @@ def fig1_platform_pipeline():
                 fontweight='bold', color=color)
         ax.text(x + BOX_W/2, 6.15, desc, ha='center', va='center', fontsize=8.5,
                 color='#555')
-        # 箭头（在 0.3 间隙中居中）
+        # 箭头（从右侧 15% 到 85% 间隙位置，避免贴框）
         if i < len(steps_upper) - 1:
-            ax.annotate('', xy=(x + BOX_W + GAP*0.6, 7.0),
-                        xytext=(x + BOX_W + GAP*0.4, 7.0),
-                        arrowprops=dict(arrowstyle='-|>', color='#999', lw=2.5, mutation_scale=18))
+            ax.annotate('', xy=(x + BOX_W + GAP*0.85, 7.0),
+                        xytext=(x + BOX_W + GAP*0.15, 7.0),
+                        arrowprops=dict(arrowstyle='simple', color='#999', lw=0, mutation_scale=16))
 
     # ═══════════════════════ 下段: 7 步分析 Pipeline（对齐上图）══════════════
 
@@ -145,9 +145,9 @@ def fig1_platform_pipeline():
                 bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color,
                           linewidth=2.5, pad=0.28))
         if i < len(steps_lower) - 1:
-            ax.annotate('', xy=(x + BOX_W + GAP*0.6, 1.85),
-                        xytext=(x + BOX_W + GAP*0.4, 1.85),
-                        arrowprops=dict(arrowstyle='-|>', color='#aaa', lw=2.5, mutation_scale=18))
+            ax.annotate('', xy=(x + BOX_W + GAP*0.85, 1.85),
+                        xytext=(x + BOX_W + GAP*0.15, 1.85),
+                        arrowprops=dict(arrowstyle='simple', color='#aaa', lw=0, mutation_scale=16))
 
     fig.savefig(OUT / 'fig1_platform_pipeline.png', dpi=300)
     plt.close(fig)
@@ -224,7 +224,7 @@ def fig3_three_modes():
                           linewidth=2.5, pad=0.25))
         if i < len(steps) - 1:
             ax.annotate('', xy=(x + 1.9, 1.65), xytext=(x + 1.5, 1.65),
-                        arrowprops=dict(arrowstyle='-|>', color='#aaa', lw=2.5, mutation_scale=18))
+                        arrowprops=dict(arrowstyle='simple', color='#aaa', lw=0, mutation_scale=20))
 
     # ── 顶部模式标题 ──
     ax.text(6, 3.25, 'Pipeline — scverse-native 6-step analysis',
