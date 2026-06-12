@@ -1,23 +1,47 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useRuns } from '../hooks/useQueries'
+import type { GeoJSON } from '../types/datasets'
 
-const PLATFORM_ICONS: Record<string, string> = { cosmx: '🧬', xenium: '🔬', merfish: '🧪', stereoseq: '🗺️' }
+const PLATFORMS = [
+  { key: 'cosmx',  label: 'CosMx',  file: '/cosmx.json',  icon: '🧬' },
+  { key: 'xenium', label: 'Xenium', file: '/xenium.json', icon: '🔬' },
+  { key: 'merfish',label: 'MERFISH',file: '/merfish.json',icon: '🧪' },
+]
 
-function detectPlatform(name: string): string {
-  for (const k of Object.keys(PLATFORM_ICONS)) if (name.toLowerCase().includes(k)) return k
-  return 'unknown'
-}
-
-function fmtNum(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
-  return String(n)
+interface PlatformStat {
+  key: string
+  label: string
+  icon: string
+  total: number
+  ready: number
+  pending: number
+  error: number
 }
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const { data: runs = [] } = useRuns()
+  const [stats, setStats] = useState<PlatformStat[]>([])
+
+  useEffect(() => {
+    Promise.all(PLATFORMS.map(async (p) => {
+      try {
+        const r = await fetch(p.file)
+        const j: GeoJSON = await r.json()
+        const rows = j.rows
+        return {
+          key: p.key, label: p.label, icon: p.icon,
+          total: rows.length,
+          ready: rows.filter(r => r.status === 'ready').length,
+          pending: rows.filter(r => r.status === 'pending').length,
+          error: rows.filter(r => r.status === 'error').length,
+        }
+      } catch {
+        return { key: p.key, label: p.label, icon: p.icon, total: 0, ready: 0, pending: 0, error: 0 }
+      }
+    })).then(setStats)
+  }, [])
+
+  const total = stats.reduce((s, p) => s + p.total, 0)
 
   return (
     <div className="container">
@@ -27,64 +51,56 @@ export default function HomePage() {
           <h1>SubCellSpace Viewer</h1>
           <p className="home-subtitle">
             Subcellular spatial transcriptomics analysis platform.
-            {runs.length > 0 && ` ${runs.length} datasets available.`}
+            {total > 0 && ` ${total} GEO datasets indexed.`}
           </p>
         </div>
       </section>
 
-      {runs.length === 0 ? (
-        <section className="card">
-          <div className="empty-state">
-            <p>No pipeline runs found.</p>
-            <code>subcellspace ingest ... && subcellspace run ...</code>
-          </div>
-        </section>
-      ) : (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ margin: 0 }}>Datasets</h2>
-            <button className="btn" onClick={() => navigate('/browser')}>📊 Browse All →</button>
-          </div>
-          <div className="home-cards">
-            {runs.map((run) => {
-              const plat = detectPlatform(run.run_name)
-              return (
-                <div key={run.run_name} className="home-card"
-                  onClick={() => navigate(`/report/${encodeURIComponent(run.run_name)}`)} role="button" tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/report/${encodeURIComponent(run.run_name)}`)}>
-                  <div className="home-card-icon">{PLATFORM_ICONS[plat] ?? '📦'}</div>
-                  <h3>{run.run_name}</h3>
-                  <div className="home-card-meta">
-                    <span>🦠 {fmtNum(run.n_cells)} cells</span>
-                    <span>🧬 {fmtNum(run.n_genes)} genes</span>
-                  </div>
-                  {run.denoise_backend && (
-                    <div className="home-card-backends">
-                      {[run.denoise_backend, run.segmentation_backend, run.clustering_backend]
-                        .filter(Boolean).join(' · ')}
-                    </div>
-                  )}
-                  <div className="home-card-actions">
-                    <span className="home-card-link">Open Report →</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h2 style={{ margin: 0 }}>Databases</h2>
+        <button className="btn" onClick={() => navigate('/browser')}>📊 Browse All →</button>
+      </div>
 
-          <section className="home-info" style={{ marginTop: 32 }}>
-            <h3>Pipeline Steps</h3>
-            <div className="home-steps">
-              {['Denoise','Segmentation','Spatial Domain','Clustering','Annotation'].map((s,i) => (
-                <div className="home-step" key={s}>
-                  <span className="home-step-num">{i+1}</span>
-                  <div><strong>{s}</strong></div>
-                </div>
-              ))}
+      <div className="home-cards">
+        {stats.map(s => (
+          <div key={s.key} className="home-card" style={{ cursor: 'pointer' }}
+            onClick={() => navigate('/browser')} role="button" tabIndex={0}>
+            <div className="home-card-icon">{s.icon}</div>
+            <h3>{s.label}</h3>
+            <div className="home-card-meta">
+              <span>📦 {s.total} datasets</span>
             </div>
-          </section>
-        </>
-      )}
+            <div style={{ fontSize: 12, marginTop: 8 }}>
+              <span style={{ color: '#27ae60' }}>🟢 {s.ready} ready</span>
+              {' · '}
+              <span style={{ color: '#f39c12' }}>🟡 {s.pending} pending</span>
+              {s.error > 0 && <> · <span style={{ color: '#e74c3c' }}>🔴 {s.error} error</span></>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <section className="home-info" style={{ marginTop: 32 }}>
+        <h3>Data Sources</h3>
+        <div className="home-steps">
+          <div className="home-step">
+            <span className="home-step-num">1</span>
+            <div><strong>GEO Enrichment</strong><br /><small>NCBI E-utilities → GSE metadata</small></div>
+          </div>
+          <div className="home-step">
+            <span className="home-step-num">2</span>
+            <div><strong>LLM Annotation</strong><br /><small>DeepSeek → tissue &amp; disease</small></div>
+          </div>
+          <div className="home-step">
+            <span className="home-step-num">3</span>
+            <div><strong>File Scan</strong><br /><small>Touch → available files &amp; size</small></div>
+          </div>
+          <div className="home-step">
+            <span className="home-step-num">4</span>
+            <div><strong>Stats</strong><br /><small>Streaming → tx/cell/gene counts</small></div>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
