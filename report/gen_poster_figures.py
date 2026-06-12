@@ -160,27 +160,45 @@ def fig2_file_coverage():
 def fig3_tissue_dist():
     all_rows = cosmx + xenium + merfish
     ready = [r for r in all_rows if r.get('status','').strip()=='ready']
-    tissue_counts = Counter()
+
+    # ── Tissue 计数 ──
+    tissue_cnt = Counter()
     for r in ready:
         t = r.get('tissue','').strip()
-        if t: tissue_counts[t] += 1
-    top = tissue_counts.most_common(10)
-    tissues, counts = zip(*top)
+        if t: tissue_cnt[t] += 1
+    top_tissues, top_t_counts = zip(*tissue_cnt.most_common(10))
 
-    fig, ax = plt.subplots(figsize=(9, 6))
-    colors = plt.cm.Set2(np.linspace(0, 1, 10))
-    bars = ax.barh(range(len(tissues)), counts, color=colors, edgecolor='white', height=0.7)
-    for bar, v in zip(bars, counts):
-        ax.text(bar.get_width() + 5, bar.get_y() + bar.get_height()/2, str(v),
-                va='center', fontsize=14, fontweight='bold')
+    # ── Disease 计数 ──
+    disease_cnt = Counter()
+    for r in ready:
+        d = r.get('disease_state','').strip()
+        if d: disease_cnt[d] += 1
+    top_diseases, top_d_counts = zip(*disease_cnt.most_common(10))
 
-    ax.set_yticks(range(len(tissues)))
-    short = [t[:25] + '...' if len(t) > 25 else t for t in tissues]
-    ax.set_yticklabels(short, fontsize=14)
-    ax.set_xlabel('Number of Datasets', fontsize=15)
-    ax.tick_params(axis='x', labelsize=13)
-    ax.set_xlim(0, max(counts) * 1.12)
-    for s in ['top','right']: ax.spines[s].set_visible(False)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(17, 6.5))
+
+    for ax, items, counts, title, color_fn in [
+        (ax1, top_tissues, top_t_counts, 'Tissue (Top 10)',
+         lambda: plt.cm.Set2(np.linspace(0.1, 0.9, 10))),
+        (ax2, top_diseases, top_d_counts, 'Disease State (Top 10)',
+         lambda: plt.cm.Paired(np.linspace(0.1, 0.9, 10))),
+    ]:
+        colors = color_fn()
+        bars = ax.barh(range(len(items)), counts, color=colors, edgecolor='white', height=0.7)
+        for bar, v in zip(bars, counts):
+            ax.text(bar.get_width() + max(counts)*0.015, bar.get_y() + bar.get_height()/2, str(v),
+                    va='center', fontsize=13, fontweight='bold')
+
+        ax.set_yticks(range(len(items)))
+        short = [t[:28] + '...' if len(t) > 28 else t for t in items]
+        ax.set_yticklabels(short, fontsize=13)
+        ax.set_xlabel('Number of Datasets (log)', fontsize=14)
+        ax.set_xscale('log')
+        ax.set_xlim(0.5, max(counts) * 3)
+        ax.tick_params(axis='x', labelsize=11)
+        ax.set_title(title, fontsize=16, fontweight='bold', pad=12)
+        for s in ['top','right']: ax.spines[s].set_visible(False)
+
     fig.tight_layout()
     fig.savefig(OUT / 'fig3_tissue_dist.png')
     plt.close(fig)
