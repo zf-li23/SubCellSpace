@@ -57,15 +57,15 @@ def flt(v):
 # ═════════════════════════════════════════════════════════════════
 
 def fig1_platform_pipeline():
-    fig, ax = plt.subplots(figsize=(16, 5))
-    ax.set_xlim(0, 16); ax.set_ylim(0, 5)
+    fig, ax = plt.subplots(figsize=(15.5, 5))
+    ax.set_xlim(0, 15.5); ax.set_ylim(0, 5)
     ax.axis('off')
 
-    # ── 三个大阶段 ──
+    # ── 三个大阶段（Acquisition → 步骤3右侧, Processing → 步骤5右侧）──
     phases = [
-        (0, 5.6, 'Data Acquisition', '#e8f4f8', '#2980b9'),
-        (5.6, 10.8, 'Data Processing', '#fef9e7', '#f39c12'),
-        (10.8, 16, 'Output & Analysis', '#eafaf1', '#27ae60'),
+        (0, 7.2, 'Data Acquisition', '#e8f4f8', '#2980b9'),
+        (7.2, 11.4, 'Data Processing', '#fef9e7', '#f39c12'),
+        (11.4, 15.5, 'Output & Analysis', '#eafaf1', '#27ae60'),
     ]
     for x0, x1, label, bg, edge in phases:
         rect = plt.Rectangle((x0, 0.15), x1-x0, 4.7,
@@ -86,7 +86,7 @@ def fig1_platform_pipeline():
     ]
 
     for i, (num, title, desc, color) in enumerate(steps):
-        x = i * 2.1 + 0.4
+        x = i * 2.1 + 0.3
         rect = plt.Rectangle((x, 0.7), 1.8, 2.8, facecolor=color, alpha=0.10,
                              edgecolor=color, linewidth=2.5, zorder=2, joinstyle='round',
                              linestyle='-')
@@ -105,43 +105,152 @@ def fig1_platform_pipeline():
             ax.annotate('', xy=(x + 2.35, 2.15), xytext=(x + 1.75, 2.15),
                         arrowprops=dict(arrowstyle='->', color='#999', lw=2.5))
 
-    # ── 底部数据集计数小条形 ──
-    ax_inset = fig.add_axes([0.32, 0.04, 0.40, 0.12])
-    platforms = ['CosMx', 'Xenium', 'MERFISH']
-    x_vals = np.arange(len(platforms))
-    width = 0.55
-    bottom = np.zeros(3)
-    for status, color in [('ready','#27ae60'),('pending','#f39c12'),('error','#e74c3c')]:
-        vals = [sum(1 for r in all_data[p] if r.get('status','').strip()==status) for p in platforms]
-        bars = ax_inset.bar(x_vals, vals, width, bottom=bottom, color=color,
-                            edgecolor='white', linewidth=0.8)
-        for bar, v in zip(bars, vals):
-            if v > 0:
-                ax_inset.text(bar.get_x()+bar.get_width()/2, bar.get_y()+v/2, str(v),
-                              ha='center', va='center', fontsize=8, fontweight='bold', color='white')
-        bottom += vals
-    for i, p in enumerate(platforms):
-        total = len(all_data[p])
-        ax_inset.text(i, total + 30, f'{total:,}', ha='center', fontsize=10, fontweight='bold')
-    ax_inset.set_xticks(x_vals)
-    ax_inset.set_xticklabels(platforms, fontsize=10, fontweight='bold')
-    ax_inset.set_ylabel('Datasets', fontsize=9)
-    ax_inset.tick_params(axis='y', labelsize=8)
-    ax_inset.set_ylim(0, max(len(all_data[p]) for p in platforms) * 1.2)
-    ax_inset.legend(['Ready', 'Pending', 'Error'], fontsize=7, loc='upper right',
-                    framealpha=0.9, edgecolor='#ddd')
-    for spine in ['top','right']:
-        ax_inset.spines[spine].set_visible(False)
-
     fig.savefig(OUT / 'fig1_platform_pipeline.png', dpi=300)
     plt.close(fig)
     print('  ✅ fig1_platform_pipeline')
 
 # ═════════════════════════════════════════════════════════════════
-# FIG 2: 可选文件热图 — 海报用
+# FIG 2: 三平台数据集数量（原 fig1，顺延至此）
 # ═════════════════════════════════════════════════════════════════
 
-def fig2_file_coverage():
+def fig2_platform_counts():
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    platforms = ['CosMx', 'Xenium', 'MERFISH']
+    x = np.arange(len(platforms))
+    width = 0.55
+    bottom = np.zeros(3)
+
+    for status, color in [('ready','#27ae60'),('pending','#f39c12'),('error','#e74c3c')]:
+        vals = [sum(1 for r in all_data[p] if r.get('status','').strip()==status) for p in platforms]
+        bars = ax.bar(x, vals, width, bottom=bottom, color=color, edgecolor='white', linewidth=0.8)
+        for bar, v in zip(bars, vals):
+            if v > 0:
+                ax.text(bar.get_x()+bar.get_width()/2, bar.get_y()+v/2, str(v),
+                        ha='center', va='center', fontsize=13, fontweight='bold', color='white')
+        bottom += vals
+
+    for i, p in enumerate(platforms):
+        total = len(all_data[p])
+        ax.text(i, total + 40, f'{total:,}', ha='center', fontsize=18, fontweight='bold')
+        ax.text(i, total - 0.5, 'datasets', ha='center', fontsize=10, color='#555')
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(platforms, fontsize=18, fontweight='bold')
+    ax.set_ylabel('Number of Datasets', fontsize=14)
+    ax.tick_params(axis='y', labelsize=12)
+    ax.set_ylim(0, max(len(all_data[p]) for p in platforms) * 1.15)
+    ax.legend(['Ready', 'Pending', 'Error'], fontsize=12, loc='upper right',
+              framealpha=0.9, edgecolor='#ddd')
+    fig.tight_layout()
+    fig.savefig(OUT / 'fig2_platform_counts.png')
+    plt.close(fig)
+    print('  ✅ fig2_platform_counts')
+
+# ═════════════════════════════════════════════════════════════════
+# FIG 3: 三种分析模式 — 纵向排列
+# ═════════════════════════════════════════════════════════════════
+
+def fig3_three_modes():
+    fig, ax = plt.subplots(figsize=(12, 8.5))
+    ax.set_xlim(0, 12); ax.set_ylim(0, 8.5)
+    ax.axis('off')
+
+    modes = [
+        {
+            'title': 'Pipeline Mode',
+            'subtitle': 'scverse-native 6-step analysis',
+            'color': '#3498db',
+            'y0': 5.8,
+            'steps': [
+                ('1', 'Denoise', 'basic / sparc'),
+                ('2', 'Patchify', 'grid / hex'),
+                ('3', 'Segment', 'fov_cell_id\n/ cellpose'),
+                ('4', 'Domain', 'spatial_leiden\n/ kmeans'),
+                ('5', 'Annotate', 'celltypist\n/ scrin'),
+                ('6', 'Spatial', "Moran's I\n/ Geary's C"),
+            ]
+        },
+        {
+            'title': 'Touch Mode',
+            'subtitle': 'File integrity & normalization',
+            'color': '#e67e22',
+            'y0': 3.0,
+            'steps': [
+                ('1', 'Scan', 'manifest compare'),
+                ('2', 'Report', 'required / optional'),
+                ('3', 'Normalize', 'GSM prefix rename'),
+                ('4', 'Export', 'CSV summary'),
+            ]
+        },
+        {
+            'title': 'Stats Mode',
+            'subtitle': 'Zero-I/O streaming statistics',
+            'color': '#27ae60',
+            'y0': 0.2,
+            'steps': [
+                ('1', 'Stream', 'read header / count'),
+                ('2', 'Aggregate', 'tx + cell + gene'),
+                ('3', 'Threshold', '50k cell safety'),
+                ('4', 'Export', 'CSV → GEO merge'),
+            ]
+        },
+    ]
+
+    for mode in modes:
+        y0 = mode['y0']
+        color = mode['color']
+        steps = mode['steps']
+        n = len(steps)
+
+        # ── 模式标题（左侧竖排区域）──
+        ax.text(0.5, y0 + 1.6, mode['title'], ha='center', va='center', fontsize=15,
+                fontweight='bold', color=color)
+        ax.text(0.5, y0 + 1.0, mode['subtitle'], ha='center', va='center',
+                fontsize=9, color='#777', style='italic')
+
+        # 模式标识色条
+        rect = plt.Rectangle((0.15, y0 - 0.1), 0.7, 2.6,
+                             facecolor=color, alpha=0.15,
+                             edgecolor=color, linewidth=2, zorder=2)
+        ax.add_patch(rect)
+
+        # ── 步骤方块（横向）──
+        for i, (num, title, desc) in enumerate(steps):
+            x = i * 1.7 + 1.3
+            rect = plt.Rectangle((x, y0 + 0.05), 1.5, 0.75,
+                                 facecolor=color, alpha=0.10,
+                                 edgecolor=color, linewidth=2, zorder=2)
+            ax.add_patch(rect)
+            # 编号圆圈
+            ax.text(x + 0.25, y0 + 0.42, num, ha='center', va='center', fontsize=11,
+                    fontweight='bold', color='white',
+                    bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
+                              linewidth=1.5, pad=0.15))
+            ax.text(x + 0.8, y0 + 0.55, title, ha='left', va='center', fontsize=12,
+                    fontweight='bold', color=color)
+            ax.text(x + 0.8, y0 + 0.2, desc, ha='left', va='center', fontsize=8.5,
+                    color='#555')
+            # 箭头
+            if i < n - 1:
+                ax.annotate('', xy=(x + 1.7, y0 + 0.42),
+                            xytext=(x + 1.45, y0 + 0.42),
+                            arrowprops=dict(arrowstyle='->', color='#aaa', lw=2))
+
+        # ── 行间分隔线 ──
+        if mode != modes[-1]:
+            next_y0 = modes[modes.index(mode) + 1]['y0']
+            ax.axhline(y=next_y0 + 2.9, xmin=0.03, xmax=0.97,
+                       color='#ddd', linewidth=1.5, linestyle='--')
+
+    fig.savefig(OUT / 'fig3_three_modes.png', dpi=300)
+    plt.close(fig)
+    print('  ✅ fig3_three_modes')
+
+# ═════════════════════════════════════════════════════════════════
+# FIG 4: 可选文件热图 — 海报用
+# ═════════════════════════════════════════════════════════════════
+
+def fig4_file_coverage():
     # 跨平台统一文件类别（Cell/Nucleus Boundary 拆开）
     categories = [
         ('polygons',           ['polygons'],                        'Polygons'),
@@ -197,15 +306,15 @@ def fig2_file_coverage():
     cbar.set_label('Coverage (%)', fontsize=12)
     cbar.ax.tick_params(labelsize=10)
     fig.tight_layout()
-    fig.savefig(OUT / 'fig2_file_coverage.png')
+    fig.savefig(OUT / 'fig4_file_coverage.png')
     plt.close(fig)
-    print('  ✅ fig2_file_coverage')
+    print('  ✅ fig4_file_coverage')
 
 # ═════════════════════════════════════════════════════════════════
-# FIG 3: 组织分布 Top 10 — 海报用
+# FIG 5: 组织 + 疾病分布 Top 10 — 海报用
 # ═════════════════════════════════════════════════════════════════
 
-def fig3_tissue_dist():
+def fig5_tissue_dist():
     all_rows = cosmx + xenium + merfish
     ready = [r for r in all_rows if r.get('status','').strip()=='ready']
 
@@ -248,15 +357,15 @@ def fig3_tissue_dist():
         for s in ['top','right']: ax.spines[s].set_visible(False)
 
     fig.tight_layout()
-    fig.savefig(OUT / 'fig3_tissue_dist.png')
+    fig.savefig(OUT / 'fig5_tissue_dist.png')
     plt.close(fig)
-    print('  ✅ fig3_tissue_dist')
+    print('  ✅ fig5_tissue_dist')
 
 # ═════════════════════════════════════════════════════════════════
-# FIG 4: 跨平台小提琴图 — 海报用（转录本数 + 细胞数）
+# FIG 6: 跨平台小提琴图 — 海报用
 # ═════════════════════════════════════════════════════════════════
 
-def fig4_violins():
+def fig6_violins():
     import pandas as pd
     fields = [
         ('n_transcripts', 'Transcripts per Dataset', True),
@@ -301,101 +410,9 @@ def fig4_violins():
         ax.tick_params(axis='y', labelsize=12)
 
     fig.tight_layout()
-    fig.savefig(OUT / 'fig4_violins.png')
+    fig.savefig(OUT / 'fig6_violins.png')
     plt.close(fig)
-    print('  ✅ fig4_violins')
-
-# ═════════════════════════════════════════════════════════════════
-# FIG 5: Pipeline 流程图 — 海报用
-# ═════════════════════════════════════════════════════════════════
-
-def fig5_three_modes():
-    fig, ax = plt.subplots(figsize=(16, 5.5))
-    ax.set_xlim(0, 16); ax.set_ylim(0, 5.5)
-    ax.axis('off')
-
-    modes = [
-        {
-            'title': 'Pipeline Mode',
-            'subtitle': 'scverse-native 6-step analysis',
-            'x0': 0.3,
-            'color': '#3498db',
-            'steps': [
-                ('1', 'Denoise', 'basic / sparc'),
-                ('2', 'Patchify', 'grid / hex'),
-                ('3', 'Segment', 'fov_cell_id / cellpose'),
-                ('4', 'Domain', 'spatial_leiden / kmeans'),
-                ('5', 'Annotate', 'celltypist / scrin'),
-                ('6', 'Spatial', "Moran's I / Geary's C"),
-            ]
-        },
-        {
-            'title': 'Touch Mode',
-            'subtitle': 'File integrity & normalization',
-            'x0': 5.9,
-            'color': '#e67e22',
-            'steps': [
-                ('1', 'Scan', 'manifest compare'),
-                ('2', 'Report', 'required / optional'),
-                ('3', 'Normalize', 'GSM prefix rename'),
-                ('4', 'Export', 'CSV summary'),
-            ]
-        },
-        {
-            'title': 'Stats Mode',
-            'subtitle': 'Zero-I/O streaming statistics',
-            'x0': 10.8,
-            'color': '#27ae60',
-            'steps': [
-                ('1', 'Stream', 'read header / count'),
-                ('2', 'Aggregate', 'tx + cell + gene'),
-                ('3', 'Threshold', '50k cell safety'),
-                ('4', 'Export', 'CSV → GEO merge'),
-            ]
-        },
-    ]
-
-    for mode in modes:
-        x0 = mode['x0']
-        color = mode['color']
-        steps = mode['steps']
-        n = len(steps)
-
-        # ── 模式标题 ──
-        ax.text(x0 + 1.7, 4.8, mode['title'], ha='center', va='center', fontsize=16,
-                fontweight='bold', color=color)
-        ax.text(x0 + 1.7, 4.35, mode['subtitle'], ha='center', va='center',
-                fontsize=10, color='#777', style='italic')
-
-        # ── 步骤方块 ──
-        for i, (num, title, desc) in enumerate(steps):
-            y = 3.2 - i * 0.85
-            rect = plt.Rectangle((x0 + 0.1, y - 0.25), 3.2, 0.65,
-                                 facecolor=color, alpha=0.10,
-                                 edgecolor=color, linewidth=2, zorder=2)
-            ax.add_patch(rect)
-            # 编号圆圈
-            ax.text(x0 + 0.35, y, num, ha='center', va='center', fontsize=11,
-                    fontweight='bold', color='white',
-                    bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
-                              linewidth=1.5, pad=0.15))
-            ax.text(x0 + 0.85, y, title, ha='left', va='center', fontsize=12,
-                    fontweight='bold', color=color)
-            ax.text(x0 + 2.0, y, desc, ha='center', va='center', fontsize=9,
-                    color='#555')
-            # 箭头
-            if i < n - 1:
-                ax.annotate('', xy=(x0 + 1.8, y - 0.85 + 0.3),
-                            xytext=(x0 + 1.8, y - 0.2),
-                            arrowprops=dict(arrowstyle='->', color='#aaa', lw=2))
-
-    # ── 模式间分隔线 ──
-    for sep_x in [5.5, 10.4]:
-        ax.axvline(x=sep_x, ymin=0.05, ymax=0.85, color='#ddd', linewidth=1.5, linestyle='--')
-
-    fig.savefig(OUT / 'fig5_three_modes.png', dpi=300)
-    plt.close(fig)
-    print('  ✅ fig5_three_modes')
+    print('  ✅ fig6_violins')
 
 # ═════════════════════════════════════════════════════════════════
 # 运行
@@ -404,8 +421,9 @@ def fig5_three_modes():
 if __name__ == '__main__':
     print('Generating poster-optimized figures...')
     fig1_platform_pipeline()
-    fig2_file_coverage()
-    fig3_tissue_dist()
-    fig4_violins()
-    fig5_three_modes()
+    fig2_platform_counts()
+    fig3_three_modes()
+    fig4_file_coverage()
+    fig5_tissue_dist()
+    fig6_violins()
     print(f'\nAll saved to {OUT}/')
