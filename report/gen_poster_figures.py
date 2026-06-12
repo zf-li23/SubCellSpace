@@ -184,8 +184,9 @@ def fig4_violins():
     fields = [
         ('n_transcripts', 'Transcripts per Dataset', True),
         ('n_cells', 'Cells per Dataset', True),
+        ('median_transcripts', 'Median tx / Cell', True),
     ]
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+    fig, axes = plt.subplots(1, 3, figsize=(17, 5.5))
     order = ['CosMx', 'Xenium', 'MERFISH']
 
     for idx, (field, label, log_scale) in enumerate(fields):
