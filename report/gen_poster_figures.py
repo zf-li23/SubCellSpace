@@ -408,26 +408,26 @@ def fig5_violins():
 # ═════════════════════════════════════════════════════════════════
 
 def fig6_example_output():
-    img_files = [
-        (OUT / 'subcellspace_plot (0).png', '(a) UMAP'),
-        (OUT / 'subcellspace_plot (1).png', '(b) FOV Layout'),
-        (OUT / 'subcellspace_plot (2).png', '(c) Spatial — Clusters'),
-        (OUT / 'subcellspace_plot (3).png', '(d) Spatial — Annotation'),
-    ]
+    # 0: 细胞空间位置(按转录本数着色), 1: UMAP(按转录本数着色)
+    # 2: 细胞空间位置(按聚类着色),   3: UMAP(按聚类着色)
+    paths = [OUT / f'subcellspace_plot ({i}).png' for i in range(4)]
+    imgs = [plt.imread(p) for p in paths]
+    h, w = imgs[0].shape[:2]
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
-    for ax, (path, label) in zip(axes.flat, img_files):
-        img = plt.imread(path)
-        ax.imshow(img)
-        ax.text(0.02, 0.97, label, transform=ax.transAxes,
-                fontsize=18, fontweight='bold', color='white',
-                va='top', ha='left',
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='#333',
-                          edgecolor='none', alpha=0.7))
+    fig, axes = plt.subplots(2, 2, figsize=(w/100*2, h/100*2))
+    fig.subplots_adjust(wspace=0, hspace=0, left=0, right=1, bottom=0, top=1)
+
+    for i, ax in enumerate(axes.flat):
+        ax.imshow(imgs[i])
         ax.axis('off')
+        if i == 0:
+            ax.text(0.02, 0.97, '(a)', transform=ax.transAxes,
+                    fontsize=22, fontweight='bold', color='white',
+                    va='top', ha='left',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='#222',
+                              edgecolor='none', alpha=0.6))
 
-    fig.tight_layout(pad=1.5)
-    fig.savefig(OUT / 'fig6_example_output.png', dpi=300)
+    fig.savefig(OUT / 'fig6_example_output.png', dpi=300, pad_inches=0)
     plt.close(fig)
     print('  ✅ fig6_example_output')
 
