@@ -420,12 +420,12 @@ def fig6_example_output():
     for i, ax in enumerate(axes.flat):
         ax.imshow(imgs[i])
         ax.axis('off')
-        if i == 0:
-            ax.text(0.02, 0.97, '(a)', transform=ax.transAxes,
-                    fontsize=22, fontweight='bold', color='white',
-                    va='top', ha='left',
-                    bbox=dict(boxstyle='round,pad=0.2', facecolor='#222',
-                              edgecolor='none', alpha=0.6))
+        labels = ['(a)', '(b)', '(c)', '(d)']
+        ax.text(0.02, 0.97, labels[i], transform=ax.transAxes,
+                fontsize=22, fontweight='bold', color='white',
+                va='top', ha='left',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='#222',
+                          edgecolor='none', alpha=0.6))
 
     fig.savefig(OUT / 'fig6_example_output.png', dpi=300, pad_inches=0)
     plt.close(fig)
