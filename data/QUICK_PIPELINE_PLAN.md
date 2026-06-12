@@ -10,13 +10,13 @@
 
 | 步骤 | 后端 | 预计耗时 | 说明 |
 |:-----|:------|:--------|:------|
-| ✅ **Ingestion** | 自动 | ~5-30s | 读取数据，**产出 n_transcripts, n_cells, n_genes** |
-| ✅ **Denoise** | `none` | ~0s | 跳过（非必要） |
-| ✅ **Analysis** | `leiden` | ~10-30s | QC 过滤 + 基础聚类，**产出 QC 后指标** |
-| ❌ **Segmentation** | 跳过 | - | 慢，OOM 风险 |
-| ❌ **Spatial analysis** | 跳过 | - | 非常慢（~2h/数据集）|
-| ❌ **Annotation** | 跳过 | - | 非必要 |
-| ❌ **Subcellular** | 跳过 | - | 非必要 |
+| ✅ **Ingestion** | 自动 | ~5-30s | 读取数据 + QC 过滤，**产出 n_transcripts, n_cells, n_genes** |
+| ❌ **Denoise** | `none` | 跳过 | |
+| ❌ **Analysis** | `none` | 跳过 | 含 cluster，不需要 |
+| ❌ **Segmentation** | `none` | 跳过 | |
+| ❌ **Spatial analysis** | `none` | 跳过 | |
+| ❌ **Annotation** | `none` | 跳过 | |
+| ❌ **Subcellular** | `none` | 跳过 | |
 
 ### 命令行
 
@@ -24,14 +24,13 @@
 subcellspace run <input> \
   --denoise-backend none \
   --segmentation-backend none \
+  --clustering-backend none \
+  --annotation-backend none \
   --spatial-analysis-backend none \
   --subcellular-analysis-backend none \
-  --annotation-backend none \
   --domain-backend none \
-  --clustering-backend leiden \
   --min-transcripts 10 --min-genes 5 \
-  --skip-container \
-  --no-export
+  --skip-container --no-export
 ```
 
 ### 预期资源消耗
