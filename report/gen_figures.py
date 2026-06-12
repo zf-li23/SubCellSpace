@@ -281,6 +281,48 @@ def fig2():
     fig.tight_layout()
     fig.savefig(OUT / 'small' / 'fig2B_geo_fillrate.png')
     plt.close(fig)
+
+    # ── 大图: 合并 A+B ─────────────────────────────────────────
+    fig = plt.figure(figsize=(14, 6))
+    gs = fig.add_gridspec(1, 2, wspace=0.3)
+
+    ax = fig.add_subplot(gs[0, 0])
+    colors_step = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22']
+    bars = ax.bar(range(len(steps)), y, color=colors_step, edgecolor='white', width=0.55)
+    for bar, label in zip(bars, labels):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.3,
+                label, ha='center', fontsize=10, fontweight='bold')
+    ax.set_xticks(range(len(steps)))
+    ax.set_xticklabels(steps.keys(), fontsize=10, fontweight='bold')
+    ax.set_ylabel('Cumulative Columns', fontsize=11)
+    ax.set_title('A  Enrichment Pipeline: 4 Steps → 21 Columns', fontsize=13, fontweight='bold', loc='left')
+    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+
+    ax = fig.add_subplot(gs[0, 1])
+    geo_fields = ['pdat', 'pubmedids', 'taxon', 'title', 'summary']
+    bar_colors = ['#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#1abc9c']
+    bar_width = 0.25
+    x = np.arange(len(geo_fields))
+    for i, (plat, rows) in enumerate([('CosMx', cosmx), ('Xenium', xenium), ('MERFISH', merfish)]):
+        n_ready = sum(1 for r in rows if r.get('status','').strip() == 'ready')
+        rates = []
+        for field in geo_fields:
+            filled = sum(1 for r in rows if r.get('status','').strip() == 'ready' and r.get(field,'').strip())
+            rates.append(filled / max(n_ready, 1) * 100)
+        ax.bar(x + i * bar_width, rates, bar_width, color=list(COLORS.values())[i],
+               label=plat, edgecolor='white', linewidth=0.5)
+    ax.set_xticks(x + bar_width)
+    ax.set_xticklabels(geo_fields, fontsize=10)
+    ax.set_ylabel('Fill Rate (%)', fontsize=11)
+    ax.set_title('B  GEO Metadata Completeness', fontsize=13, fontweight='bold', loc='left')
+    ax.legend(fontsize=9)
+    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+    ax.set_ylim(0, 105)
+
+    fig.suptitle('Figure 2.  GEO Database Enrichment Pipeline', fontsize=16, fontweight='bold', y=1.02)
+    fig.tight_layout()
+    fig.savefig(OUT / 'big' / 'fig2_enrichment.png', dpi=300)
+    plt.close(fig)
     print('  ✅ fig2')
 
 # ═════════════════════════════════════════════════════════════════
@@ -465,60 +507,70 @@ def fig4():
     plt.close(fig)
 
     # ── Pipeline + Backend 大图 ─────────────────────────────────
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 5), gridspec_kw={'width_ratios': [1, 1.3]})
+    fig = plt.figure(figsize=(16, 7))
+    gs = fig.add_gridspec(1, 2, wspace=0.25)
 
     # 左: 流程
-    ax1.set_xlim(0, 3); ax1.set_ylim(0, 7)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.set_xlim(0, 3); ax1.set_ylim(0, 8)
     ax1.axis('off')
     step_details = [
         ('Denoise', 'basic, sparc', '#3498db'),
         ('Patchify', 'grid, hex', '#2ecc71'),
-        ('Segmentation', 'fov_cell_id, cellpose\nbaysor, proseg, comseg', '#e67e22'),
+        ('Segmentation', 'fov_cell_id, cellpose, baysor, proseg, comseg', '#e67e22'),
         ('Spatial Domain', 'spatial_leiden, kmeans', '#f39c12'),
         ('Clustering', 'leiden, louvain', '#9b59b6'),
         ('Annotation', 'celltypist, scrin', '#e74c3c'),
         ('Spatial Analysis', "Moran's I, Geary's C", '#1abc9c'),
+        ('Subcellular', 'scrin, hdbscan, dbscan, phenograph', '#8e44ad'),
     ]
     for i, (name, backends, color) in enumerate(step_details):
-        y = 6.2 - i * 0.85
-        rect = plt.Rectangle((0.5, y - 0.3), 2.0, 0.65, facecolor=color, alpha=0.15,
+        y = 7.6 - i * 0.9
+        rect = plt.Rectangle((0.5, y - 0.35), 2.2, 0.7, facecolor=color, alpha=0.15,
                              edgecolor=color, linewidth=1.5, zorder=2)
         ax1.add_patch(rect)
-        ax1.text(1.5, y + 0.1, name, ha='center', va='center', fontsize=10, fontweight='bold', color=color)
+        ax1.text(1.6, y + 0.05, name, ha='center', va='center', fontsize=11, fontweight='bold', color=color)
+        ax1.text(1.6, y - 0.2, backends, ha='center', va='center', fontsize=7, color='#666')
         if i < len(step_details) - 1:
-            ax1.annotate('', xy=(1.5, y - 0.4), xytext=(1.5, y + 0.35),
+            ax1.annotate('', xy=(1.6, y - 0.45), xytext=(1.6, y + 0.35),
                         arrowprops=dict(arrowstyle='->', color='#ccc', lw=1.5))
-    ax1.set_title('A  6-Step Pipeline', fontsize=14, fontweight='bold', loc='left')
+    ax1.set_title('A  8-Step Pipeline', fontsize=14, fontweight='bold', loc='left')
 
-    # 右: Backend 详情
+    # 右: Backend 详情 — 使用 matplotlib table
+    ax2 = fig.add_subplot(gs[0, 1])
     ax2.axis('off')
-    backends_data = [
-        ('Step', 'Backend Options', 'Description'),
-        ('Denoise', 'basic, sparc', 'Transcript/cell filtering'),
-        ('Segmentation', 'fov_cell_id', 'Fast spatial join'),
-        ('', 'cellpose', 'Deep learning nuclei'),
-        ('', 'baysor', 'Bayesian boundary'),
-        ('', 'proseg', 'Probabilistic segmentation'),
-        ('', 'comseg', 'Combined segmentation'),
-        ('Clustering', 'leiden, louvain', 'Community detection'),
-        ('Annotation', 'celltypist', 'Immune reference'),
-        ('', 'scrin', 'Subcellular RNA loc.'),
-        ('Spatial', 'moran, geary', 'Autocorrelation'),
-        ('Subcellular', 'scrin', 'RNA localization'),
-        ('', 'hdbscan, dbscan', 'Domain clustering'),
-        ('', 'phenograph', 'Graph-based domain'),
+    table_data = [
+        ['Step', 'Backends', 'Description'],
+        ['Denoise', 'basic, sparc', 'Transcript / cell filtering'],
+        ['Patchify', 'grid, hex', 'Tissue patch splitting'],
+        ['Segmentation', 'fov_cell_id', 'Fast spatial join'],
+        ['', 'cellpose', 'Deep learning nuclei'],
+        ['', 'baysor', 'Bayesian boundary inference'],
+        ['', 'proseg', 'Probabilistic segmentation'],
+        ['', 'comseg', 'Combined segmentation'],
+        ['Spatial Domain', 'spatial_leiden, kmeans', 'Spatial niche detection'],
+        ['Clustering', 'leiden, louvain', 'Community detection'],
+        ['Annotation', 'celltypist', 'Immune cell reference'],
+        ['', 'scrin', 'Subcellular RNA localization'],
+        ['Spatial Analysis', "moran, geary", 'Spatial autocorrelation'],
+        ['Subcellular', 'scrin', 'RNA localization scoring'],
+        ['', 'hdbscan, dbscan', 'Density-based clustering'],
+        ['', 'phenograph', 'Graph-based clustering'],
     ]
-    col_x = [0, 0.35, 0.65]
-    col_w = [0.33, 0.28, 0.34]
-    for j, (label, w) in enumerate(zip(['Backend', 'Options', 'Description'], col_w)):
-        ax2.text(sum(col_w[:j]), 6.5, label, fontsize=10, fontweight='bold', transform=ax2.transAxes)
-    for i, (step, opts, desc) in enumerate(backends_data):
-        y = 6.0 - i * 0.35
-        ax2.text(0.02, y, step, fontsize=8, fontweight='bold' if step else 'normal',
-                 transform=ax2.transAxes, color='#2c3e50')
-        ax2.text(0.37, y, opts, fontsize=8, transform=ax2.transAxes, color='#555')
-        ax2.text(0.67, y, desc, fontsize=8, transform=ax2.transAxes, color='#777')
-    ax2.set_title('B  Available Backends', fontsize=14, fontweight='bold', loc='left')
+    table = ax2.table(cellText=table_data, loc='center', cellLoc='left', colWidths=[0.22, 0.38, 0.35])
+    table.auto_set_font_size(False)
+    table.set_fontsize(8)
+    table.scale(1, 1.6)
+    for (row, col), cell in table.get_celld().items():
+        if row == 0:
+            cell.set_text_props(fontweight='bold', color='white')
+            cell.set_facecolor('#2c3e50')
+        elif col == 0 and table_data[row][col]:
+            cell.set_text_props(fontweight='bold')
+            cell.set_facecolor('#e8f0fe')
+        else:
+            cell.set_facecolor('#f8f9fa')
+    ax2.set_title('B  Available Backends', fontsize=14, fontweight='bold', loc='left', pad=10)
 
     fig.suptitle('Figure 4.  Pipeline Architecture and Backend Ecosystem',
                  fontsize=16, fontweight='bold', y=1.02)
