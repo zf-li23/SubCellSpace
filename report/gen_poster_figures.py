@@ -57,17 +57,22 @@ def flt(v):
 # ═════════════════════════════════════════════════════════════════
 
 def fig1_platform_pipeline():
-    fig, ax = plt.subplots(figsize=(15.5, 8.8))
+    fig, ax = plt.subplots(figsize=(15.5, 9))
     ax.set_xlim(0, 15.5); ax.set_ylim(0, 10)
     ax.axis('off')
 
+    # ── 几何参数: 7 步 × (1.8 宽 + 0.3 间隙) = 14.4, 边距 (15.5-14.4)/2 = 0.55 ──
+    BOX_W, GAP, OFF = 1.8, 0.3, 0.55
+    DIV1 = OFF + 2*2.1 + BOX_W + GAP/2   # 步骤2与3之间: 6.70
+    DIV2 = OFF + 4*2.1 + BOX_W + GAP/2   # 步骤4与5之间: 10.90
+
     # ═══════════════════════ 上段: 平台搭建 Pipeline ═══════════════════════
 
-    # ── 三个大阶段（Processing 左边界稍移，右边界左移一个箭头）──
+    # ── 三个大阶段（分割线精确位于盒子间隙正中）──
     phases = [
-        (0, 6.3, 'Data Acquisition', '#e8f4f8', '#2980b9'),
-        (6.3, 10.6, 'Data Processing', '#fef9e7', '#f39c12'),
-        (10.6, 14.9, 'Output & Analysis', '#eafaf1', '#27ae60'),
+        (0, DIV1, 'Data Acquisition', '#e8f4f8', '#2980b9'),
+        (DIV1, DIV2, 'Data Processing', '#fef9e7', '#f39c12'),
+        (DIV2, 15.5, 'Output & Analysis', '#eafaf1', '#27ae60'),
     ]
     for x0, x1, label, bg, edge in phases:
         rect = plt.Rectangle((x0, 5.15), x1-x0, 4.5,
@@ -88,29 +93,29 @@ def fig1_platform_pipeline():
     ]
 
     for i, (num, title, desc, color) in enumerate(steps_upper):
-        x = i * 2.1 + 0.3
-        rect = plt.Rectangle((x, 5.7), 1.8, 2.6, facecolor=color, alpha=0.10,
+        x = i * 2.1 + OFF
+        rect = plt.Rectangle((x, 5.7), BOX_W, 2.6, facecolor=color, alpha=0.10,
                              edgecolor=color, linewidth=2.5, zorder=2, joinstyle='round',
                              linestyle='-')
         ax.add_patch(rect)
-        # 圆角编号
-        ax.text(x + 0.9, 7.9, num, ha='center', va='center', fontsize=16,
+        ax.text(x + BOX_W/2, 7.9, num, ha='center', va='center', fontsize=16,
                 fontweight='bold', color='white',
                 bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
                           linewidth=1.5, pad=0.2))
-        ax.text(x + 0.9, 7.05, title, ha='center', va='center', fontsize=12,
+        ax.text(x + BOX_W/2, 7.05, title, ha='center', va='center', fontsize=12,
                 fontweight='bold', color=color)
-        ax.text(x + 0.9, 6.15, desc, ha='center', va='center', fontsize=8.5,
+        ax.text(x + BOX_W/2, 6.15, desc, ha='center', va='center', fontsize=8.5,
                 color='#555')
-        # 箭头
+        # 箭头（在 0.3 间隙中居中）
         if i < len(steps_upper) - 1:
-            ax.annotate('', xy=(x + 2.35, 7.0), xytext=(x + 1.75, 7.0),
+            ax.annotate('', xy=(x + BOX_W + GAP*0.6, 7.0),
+                        xytext=(x + BOX_W + GAP*0.4, 7.0),
                         arrowprops=dict(arrowstyle='->', color='#999', lw=2.5))
 
-    # ═══════════════════════ 下段: 6 步分析 Pipeline（整体放大）═══════════════
+    # ═══════════════════════ 下段: 7 步分析 Pipeline（对齐上图）══════════════
 
     # ── 分隔标题 ──
-    ax.text(7.75, 4.55, 'Analysis Pipeline — scverse-native 6-step workflow',
+    ax.text(7.75, 4.55, 'Analysis Pipeline — scverse-native 7-step workflow',
             ha='center', va='center', fontsize=14, color='#555', style='italic',
             fontweight='bold',
             bbox=dict(boxstyle='round,pad=0.4', facecolor='#f5f5f5',
@@ -121,25 +126,27 @@ def fig1_platform_pipeline():
         ('2', 'Patchify', 'grid / hex', '#2ecc71'),
         ('3', 'Segment', 'fov_cell_id\n/ cellpose', '#e67e22'),
         ('4', 'Domain', 'spatial_leiden\n/ kmeans', '#f39c12'),
-        ('5', 'Annotate', 'celltypist\n/ scrin', '#9b59b6'),
+        ('5', 'Annotate', 'celltypist', '#9b59b6'),
         ('6', 'Spatial', "Moran's I\n/ Geary's C", '#1abc9c'),
+        ('7', 'Subcellular', 'scrin', '#e74c3c'),
     ]
 
     for i, (num, title, desc, color) in enumerate(steps_lower):
-        x = i * 2.1 + 0.3
-        rect = plt.Rectangle((x, 0.3), 1.8, 3.0, facecolor=color, alpha=0.12,
+        x = i * 2.1 + OFF  # 与上段完全相同的 x 坐标
+        rect = plt.Rectangle((x, 0.3), BOX_W, 3.0, facecolor=color, alpha=0.12,
                              edgecolor=color, linewidth=2.5, zorder=2)
         ax.add_patch(rect)
-        ax.text(x + 0.9, 2.6, title, ha='center', va='center', fontsize=14,
+        ax.text(x + BOX_W/2, 2.6, title, ha='center', va='center', fontsize=14,
                 fontweight='bold', color=color)
-        ax.text(x + 0.9, 1.5, desc, ha='center', va='center', fontsize=10,
+        ax.text(x + BOX_W/2, 1.5, desc, ha='center', va='center', fontsize=10,
                 color='#555')
-        ax.text(x + 0.9, 3.55, str(i+1), ha='center', va='center', fontsize=17,
+        ax.text(x + BOX_W/2, 3.55, str(i+1), ha='center', va='center', fontsize=17,
                 fontweight='bold', color=color,
                 bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color,
                           linewidth=2.5, pad=0.28))
         if i < len(steps_lower) - 1:
-            ax.annotate('', xy=(x + 2.35, 1.8), xytext=(x + 1.75, 1.8),
+            ax.annotate('', xy=(x + BOX_W + GAP*0.6, 1.85),
+                        xytext=(x + BOX_W + GAP*0.4, 1.85),
                         arrowprops=dict(arrowstyle='->', color='#aaa', lw=2.5))
 
     fig.savefig(OUT / 'fig1_platform_pipeline.png', dpi=300)
