@@ -145,13 +145,14 @@ def build():
 
     W6=43                               # FIG6 占左半全部宽度
     f6_h=dh(Cm(W6),6)                   # ~38.4cm
-    aimg(sl,HL,y,Cm(W6),'fig6_example_output.png','Fig 6. GSE263791 — 5xFAD mouse hippocampus')
+    aimg(sl,HL,y,Cm(W6),'fig6_example_output.png','Fig 6. GSE263791 — Alzheimer\'s disease mouse brain (CosMx)')
     # Case text below
-    y_cs=y+f6_h+Cm(0.6)
+    y_cs=y+f6_h+Cm(1.0)
     tb(sl,HL,y_cs,HW,Cm(5.0),
-       f'5xFAD Alzheimer\'s model (821 cells, 41 FOVs, 960 genes). '
-       '(a) Spatial transcript counts: hippocampal regional differences. '
-       '(b) UMAP by transcript count. (c) Leiden: 8 cell populations. '
+       'Alzheimer\'s disease mouse model (GSE263791). 42.6M transcripts, '
+       '821 cells, 960 genes, 41 FOVs. Median 35,825 transcripts per cell.\n\n'
+       '(a) Spatial transcript distribution: hippocampal regional differences. '
+       '(b) UMAP by transcript count. (c) Leiden clustering: 8 cell populations. '
        '(d) UMAP cluster validation. Microglia-astrocyte cross-talk '
        'in amyloid plaque niches revealed by spatial context.',
        sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
