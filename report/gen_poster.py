@@ -53,8 +53,8 @@ def build():
     prs=Presentation(); prs.slide_width=W; prs.slide_height=H; sl=ns(prs)
     # ── TITLE ──
     rect(sl,0,0,W,Cm(9.0),DARK)
-    tb(sl,M,Cm(1.2),Cm(83),Cm(4.0),'SubCellSpace: A Subcellular Spatial Transcriptomics Database & Analysis Platform',sz=Pt(72),c=WHITE,b=True,a=PP_ALIGN.CENTER)
-    tb(sl,M,Cm(5.5),Cm(83),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026  ·  https://github.com/zf-li23/SubCellSpace',sz=Pt(32),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
+    tb(sl,0,Cm(1.2),Cm(90),Cm(4.0),'SubCellSpace: A Subcellular Spatial Transcriptomics Database & Analysis Platform',sz=Pt(72),c=WHITE,b=True,a=PP_ALIGN.CENTER)
+    tb(sl,0,Cm(5.5),Cm(90),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026  ·  https://github.com/zf-li23/SubCellSpace',sz=Pt(32),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
 
     # ════════════ ROW 1: Pipeline ════════════════════════════
     y=Cm(9.5)
@@ -79,7 +79,7 @@ def build():
        f'deployment for batch processing.\n\n'
        'All three platforms share a single pipeline configuration (config/pipeline.yaml), '
        'enabling cross-platform comparative analyses at the subcellular level.',
-       sz=Pt(28),c=DARK)
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
     aimg(sl,M+tx_w+Cm(1.0),y,Cm(W1),'fig1_platform_pipeline.png','Fig 1. End-to-end platform construction pipeline (top) and scverse-native 6-step analysis workflow (bottom)')
     y+=f1_h+Cm(2.0)
 
@@ -98,19 +98,15 @@ def build():
     aimg(sl,M,y,w2,'fig2_platform_counts.png','Fig 2. Dataset counts')
     aimg(sl,M+w2+GAP,y,w3,'fig3_file_coverage.png','Fig 3. File coverage')
     tb(sl,tx1_x,y,tx1_w,Cm(h23)+Cm(0.8),
-       'Our database encompasses 2,410+ GEO entries across three major spatial '
-       'transcriptomics platforms, providing the most comprehensive curated '
-       'collection for subcellular SPT analysis.\n\n'
-       'Xenium (10x Genomics) leads with 1,525 entries (717 ready), reflecting its '
-       'dominant market presence. CosMx (NanoString) contributes 476 entries '
-       '(186 ready), primarily from targeted gene panels. MERFISH (Vizgen) has '
-       '130 entries (116 ready), with the highest proportion of ready datasets.\n\n'
-       'File completeness varies by platform: CosMx consistently provides expression '
-       'matrices (96%), cell metadata (99%), and FOV positions (100%). Xenium uniquely '
-       'offers both cell boundaries (74%) and nucleus boundaries (60%), plus gene panel '
-       'metadata (31%). MERFISH excels in expression (97%) and cell metadata (98%). '
-       'The Touch module auto-detects and normalizes all file types across platforms.',
-       sz=Pt(28),c=DARK)
+       'Our database encompasses 2,410+ GEO entries across three major SPT platforms. '
+       'Xenium leads with 1,525 entries (717 ready). CosMx contributes 476 entries '
+       '(186 ready) from targeted panels. MERFISH has 130 entries (116 ready), with '
+       'the highest ready ratio.\n\n'
+       'File completeness varies: CosMx provides expression matrices (96%), cell metadata '
+       '(99%), and FOV positions (100%). Xenium uniquely offers cell boundaries (74%), '
+       'nucleus boundaries (60%), and gene panel metadata (31%). MERFISH excels in '
+       'expression (97%) and cell metadata (98%). The Touch module auto-normalizes all.',
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
 
     y+=Cm(h23)+Cm(0.8)
 
@@ -123,15 +119,12 @@ def build():
     tblock(sl,M,y,tx2_w,Cm(h45)+Cm(0.8),
        ['The database spans 50+ tissue types and 30+ disease conditions,',
         'providing broad biological coverage. Brain, breast, lung, and lymph',
-        'node are the most represented tissues. Disease states include normal',
-        'tissue, various cancers (breast ductal carcinoma, lung adenocarcinoma,',
-        'glioma), and neurodegenerative conditions (Alzheimer\'s, Parkinson\'s).',
-        'Both H. sapiens and M. musculus specimens are included.',
-        '','Quality metrics reveal platform-specific strengths. Xenium achieves',
-        'the highest median transcript counts (181K/dataset) and broadest gene',
-        'panels (up to 6,522). MERFISH captures the most cells per experiment',
-        '(median 18K, max 550K). CosMx offers consistent 960-gene panels with',
-        'the highest per-cell transcript counts (median 35,825).'],sz=Pt(28),c=DARK)
+        'node are most represented, along with normal tissue, various cancers,',
+        'and neurodegenerative conditions (Alzheimer\'s, Parkinson\'s).',
+        '','Quality metrics: Xenium achieves the highest transcript counts (181K',
+        'median) and broadest gene panels (6,522). MERFISH captures the most',
+        'cells (18K median, 550K max). CosMx offers consistent 960-gene panels',
+        'with the highest per-cell transcript counts (35,825 median).'],sz=Pt(28),c=DARK)
     fx=M+tx2_w+GAP
     aimg(sl,fx,y,w4,'fig4_tissue_dist.png','Fig 4. Tissues & diseases')
     aimg(sl,fx+w4+GAP,y,w5,'fig5_violins.png','Fig 5. Quality metrics')
@@ -162,7 +155,7 @@ def build():
        '(b) UMAP by transcript count. (c) Leiden: 8 cell populations. '
        '(d) UMAP cluster validation. Microglia-astrocyte cross-talk '
        'in amyloid plaque niches revealed by spatial context.',
-       sz=Pt(28),c=DARK)
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
 
     # ── Right: Conclusion ──
     tblock(sl,HR,y,Cm(37),f6_h,[
