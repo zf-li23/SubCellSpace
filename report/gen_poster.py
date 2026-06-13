@@ -147,28 +147,40 @@ def build():
     W6=43                               # FIG6 占左半全部宽度
     f6_h=dh(Cm(W6),6)                   # ~38.4cm
     aimg(sl,HL,y,Cm(W6),'fig6_example_output.png','Fig 6. GSE263791 — Alzheimer\'s disease mouse brain (CosMx)')
-    # Case text + conclusion below FIG6（左栏）
+    # Case text below FIG6
     y_cs=y+f6_h+Cm(1.0)
-    c_h=Cm(6.5)
-    tb(sl,HL,y_cs,HW,c_h,
+    tb(sl,HL,y_cs,HW,Cm(5.0),
        'Alzheimer\'s disease mouse model (GSE263791). 42.6M transcripts, '
        '821 cells, 960 genes, 41 FOVs. Median 35,825 transcripts per cell. '
-       '(a)-(d) Spatial transcript distribution and UMAP clustering revealing '
-       'microglia-astrocyte cross-talk in amyloid plaque niches.\n\n'
-       'SubCellSpace delivers a unified database and analysis platform spanning '
-       '2,410+ GEO entries across CosMx, Xenium, and MERFISH (50+ tissue types, '
-       '30+ disease states). Future work will integrate spatial multi-omics, '
-       'deploy cloud-based pipelines, and establish a community dataset registry.',
+       '(a) Spatial transcript distribution: hippocampal regional differences. '
+       '(b) UMAP by transcript count. (c) Leiden clustering: 8 cell populations. '
+       '(d) UMAP cluster validation. Microglia-astrocyte cross-talk '
+       'in amyloid plaque niches revealed by spatial context.',
        sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
 
-    # ── Right: Concept Figure 全宽 ──
+    # ── Right: Concept Figure (居中) + Conclusion ──
     fig7_path = FIG / 'fig7_concept.png'
-    fig7_w = Cm(37)                     # section4 全宽
-    fig7_h = Cm(37)                     # 1:1 不变形
+    fig7_s = Cm(27)                     # 正方形边长
+    fig7_x = HR + (Cm(37) - fig7_s) // 2  # section4 中居中
     if fig7_path.exists():
-        sl.shapes.add_picture(str(fig7_path), HR, y+Cm(0.4), fig7_w, fig7_h)
+        sl.shapes.add_picture(str(fig7_path), fig7_x, y+Cm(0.4), fig7_s, fig7_s)
 
-    y = y_cs + c_h + Cm(0.5)
+    # Conclusion text below figure
+    conc_y = y + Cm(0.4) + fig7_s + Cm(0.5)
+    conc_h = f6_h - Cm(0.4) - fig7_s - Cm(0.5)
+    tb(sl,HR,conc_y,Cm(37),conc_h,
+       'SubCellSpace delivers a unified database and analysis platform covering '
+       '2,410+ GEO entries across CosMx, Xenium, and MERFISH platforms. The database '
+       'spans 50+ tissue types and 30+ disease states. The single-configuration pipeline '
+       'enables cross-platform subcellular analysis through denoising, segmentation, '
+       'domain detection, clustering, and annotation modules, complemented by SCRIN '
+       'for gene regulatory network inference and spatial autocorrelation statistics. '
+       'Future work will integrate spatial multi-omics data, deploy cloud-based analysis '
+       'pipelines, and establish a community-contributed dataset registry with persistent '
+       'identifiers to accelerate subcellular spatial transcriptomics research.',
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
+
+    y+=f6_h+Cm(6.5)
 
     prs.save(str(OUT/'SubCellSpace_Poster.pptx'))
     print('  ✅ Saved')
