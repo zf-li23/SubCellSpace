@@ -79,7 +79,7 @@ def build():
        f'deployment for batch processing.\n\n'
        'All three platforms share a single pipeline configuration (config/pipeline.yaml), '
        'enabling cross-platform comparative analyses at the subcellular level.',
-       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
+       sz=Pt(28),c=DARK)
     aimg(sl,M+tx_w+Cm(1.0),y,Cm(W1),'fig1_platform_pipeline.png','Fig 1. End-to-end platform construction pipeline (top) and scverse-native 6-step analysis workflow (bottom)')
     y+=f1_h+Cm(2.0)
 
@@ -106,7 +106,7 @@ def build():
        '(99%), and FOV positions (100%). Xenium uniquely offers cell boundaries (74%), '
        'nucleus boundaries (60%), and gene panel metadata (31%). MERFISH excels in '
        'expression (97%) and cell metadata (98%). The Touch module auto-normalizes all.',
-       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
+       sz=Pt(28),c=DARK)
 
     y+=Cm(h23)+Cm(0.8)
 
@@ -155,7 +155,7 @@ def build():
        '(b) UMAP by transcript count. (c) Leiden: 8 cell populations. '
        '(d) UMAP cluster validation. Microglia-astrocyte cross-talk '
        'in amyloid plaque niches revealed by spatial context.',
-       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
+       sz=Pt(28),c=DARK)
 
     # ── Right: Conclusion ──
     tblock(sl,HR,y,Cm(37),f6_h,[
