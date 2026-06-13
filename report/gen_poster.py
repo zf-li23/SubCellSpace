@@ -52,12 +52,12 @@ def aimg(sl,l,t,w,name,cap=''):
 def build():
     prs=Presentation(); prs.slide_width=W; prs.slide_height=H; sl=ns(prs)
     # ── TITLE ──
-    rect(sl,0,0,W,Cm(10.0),DARK)
-    tb(sl,M,Cm(1.5),Cm(83),Cm(4.5),'SubCellSpace: A Subcellular Spatial Transcriptomics Database & Analysis Platform',sz=Pt(64),c=WHITE,b=True,a=PP_ALIGN.CENTER)
-    tb(sl,M,Cm(6.0),Cm(83),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026  ·  github.com/zf-li23/SubCellSpace',sz=Pt(30),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
+    rect(sl,0,0,W,Cm(9.0),DARK)
+    tb(sl,M,Cm(1.2),Cm(83),Cm(4.0),'SubCellSpace: A Subcellular Spatial Transcriptomics Database & Analysis Platform',sz=Pt(72),c=WHITE,b=True,a=PP_ALIGN.CENTER)
+    tb(sl,M,Cm(5.5),Cm(83),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026  ·  https://github.com/zf-li23/SubCellSpace',sz=Pt(32),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
 
-    # ════════════ ROW 1: Pipeline (FIG1 放大) ══════════════
-    y=Cm(10.5)
+    # ════════════ ROW 1: Pipeline ════════════════════════════
+    y=Cm(9.5)
     hdr(sl,M,y,Cm(83),'1  Platform Construction & Analysis Pipeline'); y+=Cm(2.5)
     W1=53                               # 放大到 53cm
     f1_h=dh(Cm(W1),1)                   # ~31.2cm
@@ -98,11 +98,18 @@ def build():
     aimg(sl,M,y,w2,'fig2_platform_counts.png','Fig 2. Dataset counts')
     aimg(sl,M+w2+GAP,y,w3,'fig3_file_coverage.png','Fig 3. File coverage')
     tb(sl,tx1_x,y,tx1_w,Cm(h23)+Cm(0.8),
-       '2,410+ GEO entries. Xenium: 1,525 (717 ready), CosMx: 476 (186 ready), '
-       'MERFISH: 130 (116 ready). 269 GSEs, 4,478 GSM records.\n\n'
-       'CosMx: expression 96%, metadata 99%, FOV positions 100%. '
-       'Xenium: cell boundaries 74%, nucleus boundaries 60%, gene panels 31%. '
-       'MERFISH: expression 97%, metadata 98%. Touch module auto-normalizes all.',
+       'Our database encompasses 2,410+ GEO entries across three major spatial '
+       'transcriptomics platforms, providing the most comprehensive curated '
+       'collection for subcellular SPT analysis.\n\n'
+       'Xenium (10x Genomics) leads with 1,525 entries (717 ready), reflecting its '
+       'dominant market presence. CosMx (NanoString) contributes 476 entries '
+       '(186 ready), primarily from targeted gene panels. MERFISH (Vizgen) has '
+       '130 entries (116 ready), with the highest proportion of ready datasets.\n\n'
+       'File completeness varies by platform: CosMx consistently provides expression '
+       'matrices (96%), cell metadata (99%), and FOV positions (100%). Xenium uniquely '
+       'offers both cell boundaries (74%) and nucleus boundaries (60%), plus gene panel '
+       'metadata (31%). MERFISH excels in expression (97%) and cell metadata (98%). '
+       'The Touch module auto-detects and normalizes all file types across platforms.',
        sz=Pt(28),c=DARK)
 
     y+=Cm(h23)+Cm(0.8)
@@ -114,12 +121,17 @@ def build():
     tx2_w=Cm(83)-w4-w5-2*GAP            # text ~41.5cm
 
     tblock(sl,M,y,tx2_w,Cm(h45)+Cm(0.8),
-       ['50+ tissues, 30+ disease states. Brain, breast, lung, lymph',
-        'node most represented. Normal, cancers, Alzheimer\'s, Parkinson\'s.',
-        'Both H. sapiens and M. musculus.',
-        '','Xenium: highest transcript counts (181K median).',
-        'MERFISH: most cells (18K median, max 550K).',
-        'CosMx: 960-gene panels, 35,825 per-cell tx median.'],sz=Pt(28),c=DARK)
+       ['The database spans 50+ tissue types and 30+ disease conditions,',
+        'providing broad biological coverage. Brain, breast, lung, and lymph',
+        'node are the most represented tissues. Disease states include normal',
+        'tissue, various cancers (breast ductal carcinoma, lung adenocarcinoma,',
+        'glioma), and neurodegenerative conditions (Alzheimer\'s, Parkinson\'s).',
+        'Both H. sapiens and M. musculus specimens are included.',
+        '','Quality metrics reveal platform-specific strengths. Xenium achieves',
+        'the highest median transcript counts (181K/dataset) and broadest gene',
+        'panels (up to 6,522). MERFISH captures the most cells per experiment',
+        '(median 18K, max 550K). CosMx offers consistent 960-gene panels with',
+        'the highest per-cell transcript counts (median 35,825).'],sz=Pt(28),c=DARK)
     fx=M+tx2_w+GAP
     aimg(sl,fx,y,w4,'fig4_tissue_dist.png','Fig 4. Tissues & diseases')
     aimg(sl,fx+w4+GAP,y,w5,'fig5_violins.png','Fig 5. Quality metrics')
