@@ -166,29 +166,20 @@ def build():
     if fig7_path.exists():
         sl.shapes.add_picture(str(fig7_path), HR, y+Cm(0.4), fig7_w, fig7_h)
 
-    # Text below
+    # Text below concept figure: key achievements + vision
     conc_y = y + Cm(0.4) + fig7_h + Cm(0.5)
     conc_h = f6_h - Cm(0.4) - fig7_h - Cm(0.5)
-    tblock(sl,HR,conc_y,Cm(37),conc_h,[
-        'Key Achievements',
-        '',
-        '• Unified platform for CosMx, Xenium,',
-        '  and MERFISH spatial transcriptomics',
-        '• 2,410+ GEO datasets curated & processed',
-        '  (269 GSEs, 4,478 GSM records)',
-        '• 50+ tissue types, 30+ disease states',
-        '• Single config drives all 3 platforms',
-        '• Touch + Stats: data integrity assurance',
-        '• React static browser, no backend needed',
-        '',
-        'Future Directions',
-        '',
-        '• Process 3,000+ pending GEO datasets',
-        '• Multi-sample integrative analysis',
-        '• Spatial multi-omics data support',
-        '• Cloud-deployed pipeline (Docker/Singularity)',
-        '• Community dataset registry with DOI',
-    ],sz=Pt(28),c=DARK)
+    tb(sl,HR,conc_y,Cm(37),conc_h,
+       'SubCellSpace delivers a unified database and analysis platform covering '
+       '2,410+ GEO entries across CosMx, Xenium, and MERFISH platforms. The database '
+       'spans 50+ tissue types and 30+ disease states. The single-configuration pipeline '
+       'enables cross-platform subcellular analysis through denoising, segmentation, '
+       'domain detection, clustering, and annotation modules, complemented by SCRIN '
+       'for gene regulatory network inference and spatial autocorrelation statistics. '
+       'Future work will integrate spatial multi-omics data, deploy cloud-based analysis '
+       'pipelines, and establish a community-contributed dataset registry with persistent '
+       'identifiers to accelerate subcellular spatial transcriptomics research.',
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
 
     y+=f6_h+Cm(6.5)
 

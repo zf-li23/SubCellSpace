@@ -432,46 +432,146 @@ def fig6_example_output():
     print('  ✅ fig6_example_output')
 
 # ═════════════════════════════════════════════════════════════════
-# FIG 7: 应用概念图 — SubCellSpace 应用方向
+# FIG 7: 四格应用概念图
 # ═════════════════════════════════════════════════════════════════
 
 def fig7_concept():
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_xlim(-5, 5); ax.set_ylim(-5, 5)
-    ax.set_facecolor('#2C3E50')
-    fig.patch.set_facecolor('#2C3E50')
-    ax.axis('off')
+    from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+    from matplotlib.path import Path
 
-    # Central node
-    circle = plt.Circle((0, 0), 1.0, color='#2980B9', alpha=0.9, ec='white', lw=3, zorder=10)
-    ax.add_patch(circle)
-    ax.text(0, 0.15, 'SubCellSpace', ha='center', va='center', fontsize=14,
-            fontweight='bold', color='white', zorder=11)
-    ax.text(0, -0.4, 'Database & Platform', ha='center', va='center', fontsize=8,
-            color='#BDC3C7', zorder=11)
+    fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+    fig.patch.set_facecolor('white')
+    BG = '#F8F9FA'
 
-    # Application nodes
-    apps = [
-        (0, 3.2,  '🧠  Alzheimer\'s &\n    Neurodegeneration', '#E74C3C'),
-        (2.8, 1.6, '🦠  Cancer\n    Microenvironment', '#E67E22'),
-        (2.8, -1.6,'💊  Drug Target\n    Discovery', '#F1C40F'),
-        (0, -3.2, '🧬  Developmental\n    Biology', '#2ECC71'),
-        (-2.8, -1.6,'🔬  Multi-Omics\n    Integration', '#1ABC9C'),
-        (-2.8, 1.6,'🎯  Precision\n    Medicine', '#9B59B6'),
+    # ── Panel labels ──
+    titles = [
+        '(a) Gene Regulation Network (SCRIN)',
+        '(b) Subcellular Domain Identification',
+        '(c) Spatially Variable Genes',
+        '(d) Virtual Cell Model',
     ]
 
-    for x, y, label, color in apps:
-        # Connection line
-        ax.plot([x*0.7, x*0.85], [y*0.7, y*0.85],
-                color=color, lw=2.5, alpha=0.6, zorder=5)
-        # Node
-        node = plt.Circle((x, y), 0.85, color=color, alpha=0.15,
-                          ec=color, lw=2.5, zorder=8)
-        ax.add_patch(node)
-        ax.text(x, y-0.05, label, ha='center', va='center', fontsize=10,
-                fontweight='bold', color='white', zorder=9)
+    for idx, ax in enumerate(axes.flat):
+        ax.set_xlim(0, 10); ax.set_ylim(0, 10)
+        ax.set_facecolor(BG)
+        ax.set_aspect('equal')
+        ax.text(0.5, 9.5, titles[idx], fontsize=12, fontweight='bold',
+                color='#2C3E50', ha='left', va='top')
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
 
-    fig.savefig(OUT / 'fig7_concept.png', dpi=300, bbox_inches='tight', pad_inches=0.3)
+    ax1, ax2, ax3, ax4 = axes.flat
+
+    # ── (a) GRN / SCRIN ──
+    np.random.seed(42)
+    nodes = [(2,7), (5,8), (8,6), (3,4), (6,3), (7,7), (4,6)]
+    colors_grn = ['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22']
+    labels_grn = ['GeneA','GeneB','GeneC','GeneD','GeneE','GeneF','GeneG']
+
+    # Edges
+    edges = [(0,1),(0,3),(1,2),(1,4),(2,5),(3,4),(3,6),(4,6),(5,6)]
+    for i,j in edges:
+        ax1.plot([nodes[i][0], nodes[j][0]], [nodes[i][1], nodes[j][1]],
+                color='#95A5A6', lw=1.5, alpha=0.6, zorder=1)
+
+    for (x,y), c, lbl in zip(nodes, colors_grn, labels_grn):
+        circle = plt.Circle((x,y), 0.5, color=c, alpha=0.25, ec=c, lw=2, zorder=2)
+        ax1.add_patch(circle)
+        ax1.text(x, y-0.9, lbl, ha='center', va='center', fontsize=8,
+                fontweight='bold', color=c, zorder=3)
+
+    ax1.text(5, 1.5, 'SCRIN: Subcellular\nRegulatory Interaction Network',
+             ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
+
+    # ── (b) Subcellular domains ──
+    # Cell membrane
+    cell = plt.Circle((5,5), 3.5, color='#2980B9', alpha=0.05, ec='#2980B9', lw=2.5)
+    ax2.add_patch(cell)
+    ax2.text(5, 9.2, 'Nucleus', ha='center', fontsize=8, color='#E74C3C', fontweight='bold')
+
+    # Nucleus
+    nucleus = plt.Circle((5,6.5), 1.5, color='#E74C3C', alpha=0.15, ec='#E74C3C', lw=2)
+    ax2.add_patch(nucleus)
+
+    # Mitochondria
+    mito1 = plt.Circle((3,4.5), 0.8, color='#2ECC71', alpha=0.15, ec='#2ECC71', lw=1.5)
+    mito2 = plt.Circle((7,4), 0.7, color='#2ECC71', alpha=0.15, ec='#2ECC71', lw=1.5)
+    ax2.add_patch(mito1); ax2.add_patch(mito2)
+
+    # ER-like
+    er = FancyBboxPatch((2.5,2), 2, 1.5, boxstyle="round,pad=0.2",
+                        color='#F39C12', alpha=0.15, ec='#F39C12', lw=1.5)
+    ax2.add_patch(er)
+
+    # Vesicle
+    ves = plt.Circle((7.5,6.5), 0.5, color='#9B59B6', alpha=0.15, ec='#9B59B6', lw=1.5)
+    ax2.add_patch(ves)
+
+    # Labels
+    ax2.text(3, 4.5, 'Mito', ha='center', fontsize=7, color='#2ECC71', fontweight='bold')
+    ax2.text(7, 4, 'Mito', ha='center', fontsize=7, color='#2ECC71', fontweight='bold')
+    ax2.text(3.5, 2.5, 'ER', ha='center', fontsize=7, color='#F39C12', fontweight='bold')
+    ax2.text(7.5, 6.5, 'Ves', ha='center', fontsize=7, color='#9B59B6', fontweight='bold')
+    ax2.text(5, 0.8, 'Subcellular niche /\norganelle identification',
+             ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
+
+    # ── (c) Spatially variable genes ──
+    cell3 = plt.Circle((5,5), 3.5, color='#2980B9', alpha=0.05, ec='#2980B9', lw=2.5)
+    ax3.add_patch(cell3)
+
+    np.random.seed(123)
+    clusters = [
+        (2.5, 6.5, 50, '#E74C3C', 'GeneX'),
+        (6.5, 7, 40, '#3498DB', 'GeneY'),
+        (4, 3, 45, '#2ECC71', 'GeneZ'),
+        (7, 3.5, 30, '#F39C12', 'GeneW'),
+    ]
+    for cx, cy, n, c, lbl in clusters:
+        pts = np.random.randn(n, 2) * 0.6 + [cx, cy]
+        ax3.scatter(pts[:,0], pts[:,1], s=15, color=c, alpha=0.5, zorder=2)
+        ax3.text(cx, cy-0.8, lbl, ha='center', fontsize=8, fontweight='bold', color=c)
+
+    # Background dots
+    bg_pts = np.random.rand(60, 2) * 7 + 1.5
+    ax3.scatter(bg_pts[:,0], bg_pts[:,1], s=8, color='#BDC3C7', alpha=0.3, zorder=1)
+
+    ax3.text(5, 0.8, 'Spatially variable gene\ndetection & clustering',
+             ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
+
+    # ── (d) Virtual cell model (electron cloud) ──
+    cell4 = plt.Circle((5,5), 3.5, color='#2980B9', alpha=0.05, ec='#2980B9', lw=2.5)
+    ax4.add_patch(cell4)
+
+    np.random.seed(456)
+    # Electron cloud density: more dense near center with some hotspots
+    n_pts = 500
+    angles = np.random.uniform(0, 2*np.pi, n_pts)
+    radii = np.random.exponential(1.2, n_pts) * 2.5
+    radii = np.clip(radii, 0, 3.3)
+    x_cloud = 5 + radii * np.cos(angles)
+    y_cloud = 5 + radii * np.sin(angles)
+    # Density coloring
+    density = np.exp(-radii/1.5) + np.random.uniform(0, 0.3, n_pts)
+    ax4.scatter(x_cloud, y_cloud, s=12, c=density, cmap='YlOrRd', alpha=0.5, zorder=2)
+
+    # Probability contours
+    from matplotlib.patches import Ellipse
+    for scale, lw, alpha in [(1.5, 2, 0.3), (2.5, 1.5, 0.2), (3.3, 1, 0.1)]:
+        e = Ellipse((5,5), scale*2.5, scale*2.5, color='#E74C3C', fill=False, lw=lw, alpha=alpha)
+        ax4.add_patch(e)
+
+    # Arrow indicating vectorization concept
+    ax4.annotate('', xy=(8.5, 8), xytext=(6.5, 6.5),
+                arrowprops=dict(arrowstyle='->', color='#E74C3C', lw=2))
+    ax4.text(8.8, 8.2, 'Transcripts as\nelectron clouds',
+             ha='left', va='center', fontsize=8, color='#E74C3C', fontweight='bold', style='italic')
+
+    ax4.text(5, 0.8, 'Probability density estimation\n→ Virtual cell model',
+             ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
+
+    fig.tight_layout(pad=2)
+    fig.savefig(OUT / 'fig7_concept.png', dpi=300, bbox_inches='tight')
     plt.close(fig)
     print('  ✅ fig7_concept')
 
