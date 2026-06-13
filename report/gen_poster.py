@@ -117,13 +117,14 @@ def build():
     w5=int(h45*360000*ASP[5])           # ~27.8cm
     tx2_w=Cm(83)-w4-w5-2*GAP            # text ~30.5cm
 
-    tblock(sl,M,y+Cm(0.4),tx2_w,Cm(h45)-Cm(0.4),
-       ['The database spans 50+ tissue types and 30+ disease conditions. Brain,',
-        'breast, lung, and lymph node are most represented, along with normal',
-        'tissue, various cancers, and neurodegenerative conditions (Alzheimer\'s).',
-        '','Xenium achieves the highest transcript counts (181K median) and broadest',
-        'gene panels (6,522). MERFISH captures the most cells (18K median, 550K',
-        'max). CosMx offers consistent 960-gene panels (35,825 per-cell tx).'],sz=Pt(28),c=DARK)
+    tb(sl,M,y+Cm(0.4),tx2_w,Cm(h45)-Cm(0.4),
+       'The database spans 50+ tissue types and 30+ disease conditions. Brain, breast, '
+       'lung, and lymph node are most represented, along with normal tissue, various '
+       'cancers, and neurodegenerative conditions (Alzheimer\'s). Xenium achieves the '
+       'highest transcript counts (181K median) and broadest gene panels (6,522). '
+       'MERFISH captures the most cells (18K median, 550K max). CosMx offers consistent '
+       '960-gene panels with 35,825 per-cell transcript median.',
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
     fx=M+tx2_w+GAP
     aimg(sl,fx,y,w4,'fig4_tissue_dist.png','Fig 4. Tissues & diseases')
     aimg(sl,fx+w4+GAP,y,w5,'fig5_violins.png','Fig 5. Quality metrics')
@@ -150,7 +151,7 @@ def build():
     y_cs=y+f6_h+Cm(1.0)
     tb(sl,HL,y_cs,HW,Cm(5.0),
        'Alzheimer\'s disease mouse model (GSE263791). 42.6M transcripts, '
-       '821 cells, 960 genes, 41 FOVs. Median 35,825 transcripts per cell.\n\n'
+       '821 cells, 960 genes, 41 FOVs. Median 35,825 transcripts per cell. '
        '(a) Spatial transcript distribution: hippocampal regional differences. '
        '(b) UMAP by transcript count. (c) Leiden clustering: 8 cell populations. '
        '(d) UMAP cluster validation. Microglia-astrocyte cross-talk '
