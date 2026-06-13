@@ -432,6 +432,50 @@ def fig6_example_output():
     print('  ✅ fig6_example_output')
 
 # ═════════════════════════════════════════════════════════════════
+# FIG 7: 应用概念图 — SubCellSpace 应用方向
+# ═════════════════════════════════════════════════════════════════
+
+def fig7_concept():
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_xlim(-5, 5); ax.set_ylim(-5, 5)
+    ax.set_facecolor('#2C3E50')
+    fig.patch.set_facecolor('#2C3E50')
+    ax.axis('off')
+
+    # Central node
+    circle = plt.Circle((0, 0), 1.0, color='#2980B9', alpha=0.9, ec='white', lw=3, zorder=10)
+    ax.add_patch(circle)
+    ax.text(0, 0.15, 'SubCellSpace', ha='center', va='center', fontsize=14,
+            fontweight='bold', color='white', zorder=11)
+    ax.text(0, -0.4, 'Database & Platform', ha='center', va='center', fontsize=8,
+            color='#BDC3C7', zorder=11)
+
+    # Application nodes
+    apps = [
+        (0, 3.2,  '🧠  Alzheimer\'s &\n    Neurodegeneration', '#E74C3C'),
+        (2.8, 1.6, '🦠  Cancer\n    Microenvironment', '#E67E22'),
+        (2.8, -1.6,'💊  Drug Target\n    Discovery', '#F1C40F'),
+        (0, -3.2, '🧬  Developmental\n    Biology', '#2ECC71'),
+        (-2.8, -1.6,'🔬  Multi-Omics\n    Integration', '#1ABC9C'),
+        (-2.8, 1.6,'🎯  Precision\n    Medicine', '#9B59B6'),
+    ]
+
+    for x, y, label, color in apps:
+        # Connection line
+        ax.plot([x*0.7, x*0.85], [y*0.7, y*0.85],
+                color=color, lw=2.5, alpha=0.6, zorder=5)
+        # Node
+        node = plt.Circle((x, y), 0.85, color=color, alpha=0.15,
+                          ec=color, lw=2.5, zorder=8)
+        ax.add_patch(node)
+        ax.text(x, y-0.05, label, ha='center', va='center', fontsize=10,
+                fontweight='bold', color='white', zorder=9)
+
+    fig.savefig(OUT / 'fig7_concept.png', dpi=300, bbox_inches='tight', pad_inches=0.3)
+    plt.close(fig)
+    print('  ✅ fig7_concept')
+
+# ═════════════════════════════════════════════════════════════════
 # 运行
 # ═════════════════════════════════════════════════════════════════
 
@@ -443,4 +487,5 @@ if __name__ == '__main__':
     fig4_tissue_dist()
     fig5_violins()
     fig6_example_output()
+    fig7_concept()
     print(f'\nAll saved to {OUT}/')

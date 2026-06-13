@@ -159,7 +159,17 @@ def build():
        sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
 
     # ── Right: Conclusion ──
-    tblock(sl,HR,y+Cm(0.4),Cm(37),f6_h-Cm(0.4),[
+    # Concept figure on top
+    fig7_path = FIG / 'fig7_concept.png'
+    fig7_w = Cm(35)
+    fig7_h = Cm(20)  # square-ish but compact
+    if fig7_path.exists():
+        sl.shapes.add_picture(str(fig7_path), HR, y+Cm(0.4), fig7_w, fig7_h)
+
+    # Text below
+    conc_y = y + Cm(0.4) + fig7_h + Cm(0.5)
+    conc_h = f6_h - Cm(0.4) - fig7_h - Cm(0.5)
+    tblock(sl,HR,conc_y,Cm(37),conc_h,[
         'Key Achievements',
         '',
         '• Unified platform for CosMx, Xenium,',
