@@ -52,12 +52,13 @@ def aimg(sl,l,t,w,name,cap=''):
 def build():
     prs=Presentation(); prs.slide_width=W; prs.slide_height=H; sl=ns(prs)
     # ── TITLE ──
-    rect(sl,0,0,W,Cm(9.0),DARK)
-    tb(sl,0,Cm(1.2),Cm(90),Cm(4.0),'SubCellSpace: A Subcellular Spatial Transcriptomics Database & Analysis Platform',sz=Pt(72),c=WHITE,b=True,a=PP_ALIGN.CENTER)
-    tb(sl,0,Cm(5.5),Cm(90),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026  ·  https://github.com/zf-li23/SubCellSpace',sz=Pt(32),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
+    rect(sl,0,0,W,Cm(10.0),DARK)
+    tb(sl,0,Cm(1.0),Cm(90),Cm(4.0),'SubCellSpace: A Subcellular Spatial Transcriptomics Database & Analysis Platform',sz=Pt(72),c=WHITE,b=True,a=PP_ALIGN.CENTER)
+    tb(sl,0,Cm(5.3),Cm(90),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026',sz=Pt(32),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
+    tb(sl,0,Cm(7.2),Cm(90),Cm(1.2),'zf-li23@mails.tsinghua.edu.cn, 2023011400  ·  https://github.com/zf-li23/SubCellSpace',sz=Pt(26),c=RGBColor(0x95,0xA5,0xA6),a=PP_ALIGN.CENTER)
 
     # ════════════ ROW 1: Pipeline ════════════════════════════
-    y=Cm(9.5)
+    y=Cm(10.5)
     hdr(sl,M,y,Cm(83),'1  Platform Construction & Analysis Pipeline'); y+=Cm(2.5)
     W1=53                               # 放大到 53cm
     f1_h=dh(Cm(W1),1)                   # ~31.2cm
@@ -79,7 +80,7 @@ def build():
        f'deployment for batch processing.\n\n'
        'All three platforms share a single pipeline configuration (config/pipeline.yaml), '
        'enabling cross-platform comparative analyses at the subcellular level.',
-       sz=Pt(28),c=DARK)
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
     aimg(sl,M+tx_w+Cm(1.0),y,Cm(W1),'fig1_platform_pipeline.png','Fig 1. End-to-end platform construction pipeline (top) and scverse-native 6-step analysis workflow (bottom)')
     y+=f1_h+Cm(2.0)
 
@@ -89,9 +90,9 @@ def build():
     GAP=Cm(0.7)  # inter-element gap
 
     # ── Top line: FIG2 | FIG3 | text ──
-    h23=10                              # FIG2=FIG3 height
-    w2=int(h23*360000*ASP[2])           # ~14.5cm
-    w3=int(h23*360000*ASP[3])           # ~22.8cm
+    h23=12                              # FIG2=FIG3 height
+    w2=int(h23*360000*ASP[2])           # ~17.4cm
+    w3=int(h23*360000*ASP[3])           # ~27.4cm
     tx1_w=Cm(83)-w2-w3-2*GAP            # text ~44.1cm
     tx1_x=M+w2+GAP+w3+GAP
 
@@ -106,25 +107,23 @@ def build():
        '(99%), and FOV positions (100%). Xenium uniquely offers cell boundaries (74%), '
        'nucleus boundaries (60%), and gene panel metadata (31%). MERFISH excels in '
        'expression (97%) and cell metadata (98%). The Touch module auto-normalizes all.',
-       sz=Pt(28),c=DARK)
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
 
     y+=Cm(h23)+Cm(0.8)
 
     # ── Bottom line: text | FIG4 | FIG5 ──
-    h45=7                               # FIG4=FIG5 height
-    w4=int(h45*360000*ASP[4])           # ~18.3cm
-    w5=int(h45*360000*ASP[5])           # ~21.6cm
-    tx2_w=Cm(83)-w4-w5-2*GAP            # text ~41.5cm
+    h45=9                               # FIG4=FIG5 height
+    w4=int(h45*360000*ASP[4])           # ~23.5cm
+    w5=int(h45*360000*ASP[5])           # ~27.8cm
+    tx2_w=Cm(83)-w4-w5-2*GAP            # text ~30.5cm
 
     tblock(sl,M,y,tx2_w,Cm(h45)+Cm(0.8),
-       ['The database spans 50+ tissue types and 30+ disease conditions,',
-        'providing broad biological coverage. Brain, breast, lung, and lymph',
-        'node are most represented, along with normal tissue, various cancers,',
-        'and neurodegenerative conditions (Alzheimer\'s, Parkinson\'s).',
-        '','Quality metrics: Xenium achieves the highest transcript counts (181K',
-        'median) and broadest gene panels (6,522). MERFISH captures the most',
-        'cells (18K median, 550K max). CosMx offers consistent 960-gene panels',
-        'with the highest per-cell transcript counts (35,825 median).'],sz=Pt(28),c=DARK)
+       ['The database spans 50+ tissue types and 30+ disease conditions. Brain,',
+        'breast, lung, and lymph node are most represented, along with normal',
+        'tissue, various cancers, and neurodegenerative conditions (Alzheimer\'s).',
+        '','Xenium achieves the highest transcript counts (181K median) and broadest',
+        'gene panels (6,522). MERFISH captures the most cells (18K median, 550K',
+        'max). CosMx offers consistent 960-gene panels (35,825 per-cell tx).'],sz=Pt(28),c=DARK)
     fx=M+tx2_w+GAP
     aimg(sl,fx,y,w4,'fig4_tissue_dist.png','Fig 4. Tissues & diseases')
     aimg(sl,fx+w4+GAP,y,w5,'fig5_violins.png','Fig 5. Quality metrics')
@@ -155,7 +154,7 @@ def build():
        '(b) UMAP by transcript count. (c) Leiden: 8 cell populations. '
        '(d) UMAP cluster validation. Microglia-astrocyte cross-talk '
        'in amyloid plaque niches revealed by spatial context.',
-       sz=Pt(28),c=DARK)
+       sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
 
     # ── Right: Conclusion ──
     tblock(sl,HR,y,Cm(37),f6_h,[
@@ -180,16 +179,6 @@ def build():
     ],sz=Pt(28),c=DARK)
 
     y+=f6_h+Cm(6.5)
-
-    # ── Footer ──
-    if y<Cm(117): y=Cm(117)
-    if y+Cm(2.0)>H: y=H-Cm(2.0)
-    rect(sl,0,y,W,H-y,DARK)
-    tb(sl,M,y+Cm(0.5),Cm(83),Cm(1.2),
-       'Data: GEO (NCBI)  ·  Code: github.com/zf-li23/SubCellSpace (MIT)  ·  '
-       'Tools: scanpy, squidpy, spatialdata, SCRIN, CellTypist  ·  '
-       'Poster: Tsinghua University SLS Undergraduate Research',
-       sz=Pt(24),c=WHITE,a=PP_ALIGN.CENTER)
 
     prs.save(str(OUT/'SubCellSpace_Poster.pptx'))
     print('  ✅ Saved')
