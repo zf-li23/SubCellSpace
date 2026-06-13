@@ -52,34 +52,34 @@ def aimg(sl,l,t,w,name,cap=''):
 def build():
     prs=Presentation(); prs.slide_width=W; prs.slide_height=H; sl=ns(prs)
     # ── TITLE ──
-    rect(sl,0,0,W,Cm(10.0),DARK)
+    rect(sl,0,0,W,Cm(9.0),DARK)
     tb(sl,0,Cm(1.0),Cm(90),Cm(4.0),'SubCellSpace: A Subcellular Spatial Transcriptomics Database & Analysis Platform',sz=Pt(72),c=WHITE,b=True,a=PP_ALIGN.CENTER)
-    tb(sl,0,Cm(5.3),Cm(90),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026',sz=Pt(32),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
-    tb(sl,0,Cm(7.2),Cm(90),Cm(1.2),'zf-li23@mails.tsinghua.edu.cn, 2023011400  ·  https://github.com/zf-li23/SubCellSpace',sz=Pt(26),c=RGBColor(0x95,0xA5,0xA6),a=PP_ALIGN.CENTER)
+    tb(sl,0,Cm(5.5),Cm(90),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026  ·  zf-li23@mails.tsinghua.edu.cn  ·  github.com/zf-li23/SubCellSpace',sz=Pt(30),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
 
     # ════════════ ROW 1: Pipeline ════════════════════════════
-    y=Cm(10.5)
+    y=Cm(9.5)
     hdr(sl,M,y,Cm(83),'1  Platform Construction & Analysis Pipeline'); y+=Cm(2.5)
     W1=53                               # 放大到 53cm
     f1_h=dh(Cm(W1),1)                   # ~31.2cm
     tx_w=Cm(83)-Cm(W1)-Cm(2.5)          # text ~27.5cm
     tb(sl,M,y,tx_w,f1_h,
-       'SubCellSpace is a unified subcellular spatial transcriptomics (SPT) platform that supports '
+       'SubCellSpace is a unified subcellular spatial transcriptomics platform that supports '
        'CosMx (NanoString), Xenium (10x Genomics), and MERFISH (Vizgen) with a single end-to-end '
        'pipeline. The platform integrates three major phases:\n\n'
        '1. Data Acquisition — GEO metadata curation via NCBI E-utilities (269 GSE series, '
        '4,478 GSM records), LLM-powered tissue/disease annotation (DeepSeek), and automated '
        'file integrity checking through the Touch module.\n\n'
        '2. Data Processing — Zero-I/O streaming statistics (Stats module) for transcript, cell, '
-       'and gene counting, followed by the core 6-step scverse-native analysis pipeline: '
-       'Denoising (basic/SPARC) -> Patchify (grid/hex) -> Segmentation (fov_cell_id/cellpose) '
-       '-> Domain Detection (spatial_leiden/k-means) -> Clustering (Leiden/Louvain) -> '
-       'Annotation (celltypist + SCRIN subcellular scoring).\n\n'
+       'and gene counting. The 7-step analysis pipeline (illustrated below) is executed via a '
+       'single configuration file shared across all platforms.\n\n'
        '3. Output & Visualization — React + TypeScript static frontend with platform-tabbed '
        'browsing, HTML report generation with publication-quality figures, and Slurm HPC '
-       f'deployment for batch processing.\n\n'
-       'All three platforms share a single pipeline configuration (config/pipeline.yaml), '
-       'enabling cross-platform comparative analyses at the subcellular level.',
+       f'deployment for batch processing (10 concurrent tasks).\n\n'
+       'Key innovations include the Touch module for automated file integrity normalization '
+       'across naming inconsistencies (e.g., fov_position vs. fov_positions), and the Stats '
+       'module for memory-safe streaming statistics with a 50,000-cell threshold. The database '
+       'encompasses 2,410+ GEO entries across 269 GSE series, supplemented by 998 non-GEO '
+       'public datasets — all uniformly processed through the same pipeline.',
        sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
     aimg(sl,M+tx_w+Cm(1.0),y,Cm(W1),'fig1_platform_pipeline.png','Fig 1. End-to-end platform construction pipeline (top) and scverse-native 6-step analysis workflow (bottom)')
     y+=f1_h+Cm(2.0)
