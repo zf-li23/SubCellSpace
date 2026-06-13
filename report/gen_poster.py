@@ -98,7 +98,7 @@ def build():
 
     aimg(sl,M,y,w2,'fig2_platform_counts.png','Fig 2. Dataset counts')
     aimg(sl,M+w2+GAP,y,w3,'fig3_file_coverage.png','Fig 3. File coverage')
-    tb(sl,tx1_x,y,tx1_w,Cm(h23)+Cm(0.8),
+    tb(sl,tx1_x,y,tx1_w,Cm(h23),
        'Our database encompasses 2,410+ GEO entries across three major SPT platforms. '
        'Xenium leads with 1,525 entries (717 ready). CosMx contributes 476 entries '
        '(186 ready) from targeted panels. MERFISH has 130 entries (116 ready), with '
@@ -117,7 +117,7 @@ def build():
     w5=int(h45*360000*ASP[5])           # ~27.8cm
     tx2_w=Cm(83)-w4-w5-2*GAP            # text ~30.5cm
 
-    tblock(sl,M,y,tx2_w,Cm(h45)+Cm(0.8),
+    tblock(sl,M,y,tx2_w,Cm(h45),
        ['The database spans 50+ tissue types and 30+ disease conditions. Brain,',
         'breast, lung, and lymph node are most represented, along with normal',
         'tissue, various cancers, and neurodegenerative conditions (Alzheimer\'s).',
