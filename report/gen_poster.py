@@ -159,14 +159,14 @@ def build():
        sz=Pt(28),c=DARK,a=PP_ALIGN.JUSTIFY)
 
     # ── Right: Conclusion ──
-    # Concept figure on top
+    # Concept figure — square, full col width, no distortion
     fig7_path = FIG / 'fig7_concept.png'
-    fig7_w = Cm(35)
-    fig7_h = Cm(20)  # square-ish but compact
+    fig7_w = Cm(28)
+    fig7_h = Cm(28)  # 1:1 aspect ratio, no distortion
     if fig7_path.exists():
         sl.shapes.add_picture(str(fig7_path), HR, y+Cm(0.4), fig7_w, fig7_h)
 
-    # Text below concept figure: key achievements + vision
+    # Text below concept figure
     conc_y = y + Cm(0.4) + fig7_h + Cm(0.5)
     conc_h = f6_h - Cm(0.4) - fig7_h - Cm(0.5)
     tb(sl,HR,conc_y,Cm(37),conc_h,

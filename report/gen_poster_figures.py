@@ -481,18 +481,17 @@ def fig7_concept():
         ax1.text(x, y-0.9, lbl, ha='center', va='center', fontsize=8,
                 fontweight='bold', color=c, zorder=3)
 
-    ax1.text(5, 1.5, 'SCRIN: Subcellular\nRegulatory Interaction Network',
+    ax1.text(5, 1.5, 'SCRIN: Subcellular\nRNA Interaction Network',
              ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
 
     # ── (b) Subcellular domains ──
     # Cell membrane
     cell = plt.Circle((5,5), 3.5, color='#2980B9', alpha=0.05, ec='#2980B9', lw=2.5)
     ax2.add_patch(cell)
-    ax2.text(5, 9.2, 'Nucleus', ha='center', fontsize=8, color='#E74C3C', fontweight='bold')
-
     # Nucleus
     nucleus = plt.Circle((5,6.5), 1.5, color='#E74C3C', alpha=0.15, ec='#E74C3C', lw=2)
     ax2.add_patch(nucleus)
+    ax2.text(5, 6.5, 'Nucleus', ha='center', va='center', fontsize=8, color='#E74C3C', fontweight='bold')
 
     # Mitochondria
     mito1 = plt.Circle((3,4.5), 0.8, color='#2ECC71', alpha=0.15, ec='#2ECC71', lw=1.5)
@@ -500,7 +499,7 @@ def fig7_concept():
     ax2.add_patch(mito1); ax2.add_patch(mito2)
 
     # ER-like
-    er = FancyBboxPatch((2.5,2), 2, 1.5, boxstyle="round,pad=0.2",
+    er = FancyBboxPatch((4.0,2.5), 2, 1.5, boxstyle="round,pad=0.2",
                         color='#F39C12', alpha=0.15, ec='#F39C12', lw=1.5)
     ax2.add_patch(er)
 
@@ -511,7 +510,7 @@ def fig7_concept():
     # Labels
     ax2.text(3, 4.5, 'Mito', ha='center', fontsize=7, color='#2ECC71', fontweight='bold')
     ax2.text(7, 4, 'Mito', ha='center', fontsize=7, color='#2ECC71', fontweight='bold')
-    ax2.text(3.5, 2.5, 'ER', ha='center', fontsize=7, color='#F39C12', fontweight='bold')
+    ax2.text(5, 3, 'ER', ha='center', fontsize=7, color='#F39C12', fontweight='bold')
     ax2.text(7.5, 6.5, 'Ves', ha='center', fontsize=7, color='#9B59B6', fontweight='bold')
     ax2.text(5, 0.8, 'Subcellular niche /\norganelle identification',
              ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
