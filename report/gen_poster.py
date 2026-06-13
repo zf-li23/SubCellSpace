@@ -53,30 +53,38 @@ def build():
     prs=Presentation(); prs.slide_width=W; prs.slide_height=H; sl=ns(prs)
     # ── TITLE ──
     rect(sl,0,0,W,Cm(10.0),DARK)
-    tb(sl,M,Cm(1.5),Cm(83),Cm(4.5),'SubCellSpace: A Unified Platform for Subcellular Spatial Transcriptomics',sz=Pt(64),c=WHITE,b=True,a=PP_ALIGN.CENTER)
-    tb(sl,M,Cm(5.8),Cm(83),Cm(1.5),'Zhefu Li  ·  Tsinghua University · Jun 2026',sz=Pt(32),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
-    tb(sl,M,Cm(7.5),Cm(83),Cm(1.2),'github.com/zf-li23/SubCellSpace  |  Data: GEO (269 GSEs) + Public Repositories',sz=Pt(28),c=RGBColor(0x95,0xA5,0xA6),a=PP_ALIGN.CENTER)
+    tb(sl,M,Cm(1.5),Cm(83),Cm(4.5),'SubCellSpace: A Subcellular Spatial Transcriptomics Database & Analysis Platform',sz=Pt(64),c=WHITE,b=True,a=PP_ALIGN.CENTER)
+    tb(sl,M,Cm(6.0),Cm(83),Cm(1.5),'Zhefu Li  ·  Supervisor: Xuerui Yang  ·  Tsinghua University  ·  Jun 2026  ·  github.com/zf-li23/SubCellSpace',sz=Pt(30),c=RGBColor(0xBD,0xC3,0xC7),a=PP_ALIGN.CENTER)
 
     # ════════════ ROW 1: Pipeline (FIG1 放大) ══════════════
     y=Cm(10.5)
     hdr(sl,M,y,Cm(83),'1  Platform Construction & Analysis Pipeline'); y+=Cm(2.5)
-    W1=50                               # 放大到 50cm
-    f1_h=dh(Cm(W1),1)                   # ~29.4cm
-    tx_w=Cm(83)-Cm(W1)-Cm(2.5)          # text ~30.5cm
+    W1=53                               # 放大到 53cm
+    f1_h=dh(Cm(W1),1)                   # ~31.2cm
+    tx_w=Cm(83)-Cm(W1)-Cm(2.5)          # text ~27.5cm
     tb(sl,M,y,tx_w,f1_h,
-       'SubCellSpace unifies CosMx, Xenium, MERFISH under one pipeline.\n\n'
-       'Database: 2,410+ GEO entries (269 GSEs) + 998 non-GEO datasets.\n\n'
-       'Platform: GEO Download -> Metadata Curation -> LLM Annotation -> '
-       'Touch Check -> Stats Streaming -> Frontend -> HTML Report.\n\n'
-       'Analysis: Denoise -> Patchify -> Segment -> Domain Detection -> '
-       'Leiden Clustering -> celltypist/SCRIN Annotation -> '
-       f'Spatial Autocorrelation (Moran\'s I / Geary\'s C).',
+       'SubCellSpace is a unified subcellular spatial transcriptomics (SPT) platform that supports '
+       'CosMx (NanoString), Xenium (10x Genomics), and MERFISH (Vizgen) with a single end-to-end '
+       'pipeline. The platform integrates three major phases:\n\n'
+       '1. Data Acquisition — GEO metadata curation via NCBI E-utilities (269 GSE series, '
+       '4,478 GSM records), LLM-powered tissue/disease annotation (DeepSeek), and automated '
+       'file integrity checking through the Touch module.\n\n'
+       '2. Data Processing — Zero-I/O streaming statistics (Stats module) for transcript, cell, '
+       'and gene counting, followed by the core 6-step scverse-native analysis pipeline: '
+       'Denoising (basic/SPARC) -> Patchify (grid/hex) -> Segmentation (fov_cell_id/cellpose) '
+       '-> Domain Detection (spatial_leiden/k-means) -> Clustering (Leiden/Louvain) -> '
+       'Annotation (celltypist + SCRIN subcellular scoring).\n\n'
+       '3. Output & Visualization — React + TypeScript static frontend with platform-tabbed '
+       'browsing, HTML report generation with publication-quality figures, and Slurm HPC '
+       f'deployment for batch processing.\n\n'
+       'All three platforms share a single pipeline configuration (config/pipeline.yaml), '
+       'enabling cross-platform comparative analyses at the subcellular level.',
        sz=Pt(28),c=DARK)
-    aimg(sl,M+tx_w+Cm(1.0),y,Cm(W1),'fig1_platform_pipeline.png','Fig 1. End-to-end pipeline')
+    aimg(sl,M+tx_w+Cm(1.0),y,Cm(W1),'fig1_platform_pipeline.png','Fig 1. End-to-end platform construction pipeline (top) and scverse-native 6-step analysis workflow (bottom)')
     y+=f1_h+Cm(2.0)
 
     # ════════════ ROW 2: Database (2行并排) ════════════════
-    hdr(sl,M,y,Cm(83),'2–5  Database Overview: Composition, Coverage, Biology & Quality'); y+=Cm(2.5)
+    hdr(sl,M,y,Cm(83),'2  Database Overview: Composition, Coverage, Biology & Quality'); y+=Cm(2.5)
 
     GAP=Cm(0.7)  # inter-element gap
 
@@ -127,8 +135,8 @@ def build():
     # right edge: 49.5+37=86.5 (83 usable from M) ✅
     # Actually right section = 83-HW-HG = 83-43-3 = 37cm
 
-    hdr(sl,HL,y,HW,'6  Case Study: Alzheimer\'s Mouse Brain',c=TEAL)
-    hdr(sl,HR,y,Cm(37),'7  Conclusion & Outlook',c=TEAL)
+    hdr(sl,HL,y,HW,'3  Case Study: Alzheimer\'s Mouse Brain',c=TEAL)
+    hdr(sl,HR,y,Cm(37),'4  Conclusion & Outlook',c=TEAL)
     y+=Cm(2.5)
 
     W6=43                               # FIG6 占左半全部宽度
