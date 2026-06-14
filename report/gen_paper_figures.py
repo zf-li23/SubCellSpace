@@ -718,41 +718,7 @@ def fig3():
 # ═════════════════════════════════════════════════════════════════
 
 def fig4():
-    """Pipeline 功能 + Backend 矩阵"""
-    # ── Backend 数据 ────────────────────────────────────────────
-    capabilities = [
-        ('Denoise',    ['basic','sparc'],                    C['cosmx']),
-        ('Patchify',   ['grid','hex'],                       C['xenium']),
-        ('Segment',    ['fov_cell_id','cellpose','baysor'],   C['ready']),
-        ('Domain',     ['spatial_leiden','kmeans'],           C['pending']),
-        ('Annotate',   ['celltypist','scrin'],                C['error']),
-        ('Spatial',    ["Moran's I","Geary's C"],            '#1abc9c'),
-        ('Subcell',    ['scrin','hdbscan','phenograph'],     '#8e44ad'),
-    ]
-
-    # ── 小图: Pipeline 步骤 ─────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(14, 4))
-    ax.set_xlim(0, 14); ax.set_ylim(0, 4)
-    ax.axis('off')
-    for i, (name, backends, color) in enumerate(capabilities):
-        x = i * 1.85 + 0.35
-        rect = plt.Rectangle((x, 0.5), 1.55, 2.5, facecolor=color, alpha=0.12,
-                             edgecolor=color, lw=2.5, zorder=2)
-        ax.add_patch(rect)
-        ax.text(x+0.775, 2.3, name, ha='center', va='center', fontsize=14,
-                fontweight='bold', color=color)
-        ax.text(x+0.775, 1.3, '\n'.join(backends), ha='center', va='center',
-                fontsize=8, color='#555')
-        ax.text(x+0.775, 3.1, str(i+1), ha='center', va='center', fontsize=16,
-                fontweight='bold', color=color,
-                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color, lw=2.5))
-        if i < len(capabilities)-1:
-            ax.annotate('', xy=(x+2.0, 1.75), xytext=(x+1.5, 1.75),
-                       arrowprops=dict(arrowstyle='simple', color='#aaa', mutation_scale=18))
-    fig.savefig(OUT / 'small' / 'fig4_pipeline.png', dpi=300)
-    plt.close(fig)
-
-    # ── 大图: 完整复刻海报 fig1_platform_pipeline ───────────────
+    """完整复刻海报 fig1_platform_pipeline"""
     fig, ax = plt.subplots(figsize=(16, 10))
     ax.set_xlim(0, 16); ax.set_ylim(0, 10)
     ax.axis('off')
@@ -858,21 +824,6 @@ def fig5():
     from matplotlib.image import imread
     imgs = [imread(p) for p in paths]
     h, w = imgs[0].shape[:2]
-
-    # ── 小图: 单行 4 面板 ──────────────────────────────────────
-    fig, axes = plt.subplots(1, 4, figsize=(w/100*4, h/100))
-    fig.subplots_adjust(wspace=0, left=0, right=1, bottom=0, top=1)
-    for i, ax in enumerate(axes):
-        ax.imshow(imgs[i])
-        ax.axis('off')
-        labels = ['(a)', '(b)', '(c)', '(d)']
-        ax.text(0.03, 0.96, labels[i], transform=ax.transAxes,
-                fontsize=14, fontweight='bold', color='white',
-                va='top', ha='left',
-                bbox=dict(boxstyle='round,pad=0.15', facecolor='#222',
-                          edgecolor='none', alpha=0.6))
-    fig.savefig(OUT / 'small' / 'fig5_case_study.png', dpi=300, pad_inches=0)
-    plt.close(fig)
 
     # ── 大图: 2x2 无缝拼接 ─────────────────────────────────────
     fig, axes = plt.subplots(2, 2, figsize=(w/100*2, h/100*2))
