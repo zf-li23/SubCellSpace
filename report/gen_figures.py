@@ -1,17 +1,14 @@
 """
-SubCellSpace 科研成果图表生成
-==============================
-生成 6 张大图 + 8 张补充图，每张图同时输出:
-  - big/      出版风格紧凑版（多子图组合，适合 paper）
-  - small/    展示风格宽松版（单子图，标注详细，适合 PPT）
+海报专用子图 — report/figures/poster/
+========================================
+针对 90×120cm 海报优化：大字号、高对比度、高信息密度。
 
-用法: conda run -n subcellspace python report/gen_figures.py
+用法: conda run -n subcellspace python report/gen_poster_figures.py
 """
 
-import csv, json, math
+import csv
 from collections import Counter
 from pathlib import Path
-
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -19,14 +16,12 @@ import matplotlib.ticker as ticker
 import numpy as np
 import seaborn as sns
 
-# ── 路径 ─────────────────────────────────────────────────────────
 BASE = Path(__file__).resolve().parent.parent
 DATA = BASE / 'data'
-OUT = BASE / 'report' / 'figures'
-(OUT / 'big').mkdir(parents=True, exist_ok=True)
-(OUT / 'small').mkdir(parents=True, exist_ok=True)
+OUT = BASE / 'report' / 'figures' / 'poster'
+OUT.mkdir(parents=True, exist_ok=True)
 
-# ── 全局样式 ─────────────────────────────────────────────────────
+# ── 全局海报样式 ─────────────────────────────────────────────────
 plt.rcParams.update({
     'font.family': 'sans-serif',
     'font.sans-serif': ['DejaVu Sans'],
@@ -35,693 +30,561 @@ plt.rcParams.update({
     'figure.dpi': 200,
     'savefig.dpi': 300,
     'savefig.bbox': 'tight',
-    'savefig.pad_inches': 0.1,
+    'savefig.pad_inches': 0.15,
+    'axes.linewidth': 1.5,
+    'xtick.major.width': 1.5,
+    'ytick.major.width': 1.5,
 })
 
-COLORS = {
-    'ready': '#27ae60', 'pending': '#f39c12', 'error': '#e74c3c',
-    'cosmx': '#3498db', 'xenium': '#9b59b6', 'merfish': '#1abc9c',
-    'geo': '#3498db', 'llm': '#9b59b6', 'touch': '#2ecc71', 'stats': '#e67e22',
-}
+COLORS = {'ready': '#27ae60', 'pending': '#f39c12', 'error': '#e74c3c'}
+PLAT_COLORS = {'CosMx': '#3498db', 'Xenium': '#9b59b6', 'MERFISH': '#1abc9c'}
 
-sns.set_style('whitegrid')
-
-# ── 数据加载 ─────────────────────────────────────────────────────
-def load_csv(name):
+# ── 数据 ─────────────────────────────────────────────────────────
+def load(name):
     with open(DATA / name, encoding='utf-8') as f:
         return list(csv.DictReader(f))
-
-cosmx = load_csv('cosmx_geo.csv')
-xenium = load_csv('xenium_geo.csv')
-merfish = load_csv('merfish_geo.csv')
+cosmx = load('cosmx_geo.csv')
+xenium = load('xenium_geo.csv')
+merfish = load('merfish_geo.csv')
 all_data = {'CosMx': cosmx, 'Xenium': xenium, 'MERFISH': merfish}
 
-def float_or_none(v):
+def flt(v):
     try: return float(v)
     except: return None
 
 # ═════════════════════════════════════════════════════════════════
-# FIGURE 1: 平台总览与数据库规模
+# FIG 1: 整体 SubCellSpace 平台搭建 Pipeline — 海报用
 # ═════════════════════════════════════════════════════════════════
 
-def fig1():
-    # ── 小图 A: 数据集数量堆叠柱状图 ────────────────────────────
-    fig, ax = plt.subplots(figsize=(6, 4.5))
+def fig1_platform_pipeline():
+    fig, ax = plt.subplots(figsize=(15.5, 9))
+    ax.set_xlim(0, 15.5); ax.set_ylim(0, 10)
+    ax.axis('off')
+
+    # ── 几何参数: 7 步 × (1.8 宽 + 0.3 间隙) = 14.4, 边距 (15.5-14.4)/2 = 0.55 ──
+    BOX_W, GAP, OFF = 1.8, 0.3, 0.55
+    DIV1 = OFF + 2*2.1 + BOX_W + GAP/2   # 步骤2与3之间: 6.70
+    DIV2 = OFF + 4*2.1 + BOX_W + GAP/2   # 步骤4与5之间: 10.90
+
+    # ═══════════════════════ 上段: 平台搭建 Pipeline ═══════════════════════
+
+    # ── 三个大阶段（分割线精确位于盒子间隙正中）──
+    phases = [
+        (0, DIV1, 'Data Acquisition', '#e8f4f8', '#2980b9'),
+        (DIV1, DIV2, 'Data Processing', '#fef9e7', '#f39c12'),
+        (DIV2, 15.5, 'Output & Analysis', '#eafaf1', '#27ae60'),
+    ]
+    for x0, x1, label, bg, edge in phases:
+        rect = plt.Rectangle((x0, 5.15), x1-x0, 4.5,
+                             facecolor=bg, edgecolor=edge, linewidth=2, alpha=0.5, zorder=0)
+        ax.add_patch(rect)
+        ax.text((x0+x1)/2, 9.4, label, ha='center', va='top', fontsize=14,
+                fontweight='bold', color=edge, style='italic')
+
+    # ── 7 个步骤 ──
+    steps_upper = [
+        ('1', 'GEO\nDownload', 'NCBI GEO\n→ Cluster', '#2980b9'),
+        ('2', 'GEO\nMetadata', 'E-utilities\nGSM Expansion', '#3498db'),
+        ('3', 'LLM\nAnnotation', 'DeepSeek API\nTissue / Disease', '#5dade2'),
+        ('4', 'Touch\nIntegrity', 'File Scan\nNormalize', '#f39c12'),
+        ('5', 'Stats\nStreaming', 'Zero-I/O\nCounts → CSV', '#e67e22'),
+        ('6', 'Frontend\nBrowser', 'React Static\n3 Platform Tabs', '#27ae60'),
+        ('7', 'HTML\nReport', 'Publication\nFigures + PPTX', '#1abc9c'),
+    ]
+
+    for i, (num, title, desc, color) in enumerate(steps_upper):
+        x = i * 2.1 + OFF
+        rect = plt.Rectangle((x, 5.7), BOX_W, 2.6, facecolor=color, alpha=0.10,
+                             edgecolor=color, linewidth=2.5, zorder=2, joinstyle='round',
+                             linestyle='-')
+        ax.add_patch(rect)
+        ax.text(x + BOX_W/2, 7.9, num, ha='center', va='center', fontsize=16,
+                fontweight='bold', color='white',
+                bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
+                          linewidth=1.5, pad=0.2))
+        ax.text(x + BOX_W/2, 7.05, title, ha='center', va='center', fontsize=12,
+                fontweight='bold', color=color)
+        ax.text(x + BOX_W/2, 6.15, desc, ha='center', va='center', fontsize=8.5,
+                color='#555')
+        # 箭头（从右侧 15% 到 85% 间隙位置，避免贴框）
+        if i < len(steps_upper) - 1:
+            ax.annotate('', xy=(x + BOX_W + GAP*0.85, 7.0),
+                        xytext=(x + BOX_W + GAP*0.15, 7.0),
+                        arrowprops=dict(arrowstyle='simple', color='#999', lw=0, mutation_scale=16))
+
+    # ═══════════════════════ 下段: 7 步分析 Pipeline（对齐上图）══════════════
+
+    # ── 分隔标题 ──
+    ax.text(7.75, 4.55, 'Analysis Pipeline — scverse-native 7-step workflow',
+            ha='center', va='center', fontsize=14, color='#555', style='italic',
+            fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='#f5f5f5',
+                      edgecolor='#ccc', linewidth=1))
+
+    steps_lower = [
+        ('1', 'Denoise', 'basic / sparc', '#3498db'),
+        ('2', 'Patchify', 'grid / hex', '#2ecc71'),
+        ('3', 'Segment', 'fov_cell_id\n/ cellpose', '#e67e22'),
+        ('4', 'Domain', 'spatial_leiden\n/ kmeans', '#f39c12'),
+        ('5', 'Annotate', 'celltypist', '#9b59b6'),
+        ('6', 'Spatial', "Moran's I\n/ Geary's C", '#1abc9c'),
+        ('7', 'Subcellular', 'scrin', '#e74c3c'),
+    ]
+
+    for i, (num, title, desc, color) in enumerate(steps_lower):
+        x = i * 2.1 + OFF  # 与上段完全相同的 x 坐标
+        rect = plt.Rectangle((x, 0.3), BOX_W, 3.0, facecolor=color, alpha=0.12,
+                             edgecolor=color, linewidth=2.5, zorder=2)
+        ax.add_patch(rect)
+        ax.text(x + BOX_W/2, 2.6, title, ha='center', va='center', fontsize=14,
+                fontweight='bold', color=color)
+        ax.text(x + BOX_W/2, 1.5, desc, ha='center', va='center', fontsize=10,
+                color='#555')
+        ax.text(x + BOX_W/2, 3.55, str(i+1), ha='center', va='center', fontsize=17,
+                fontweight='bold', color=color,
+                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color,
+                          linewidth=2.5, pad=0.28))
+        if i < len(steps_lower) - 1:
+            ax.annotate('', xy=(x + BOX_W + GAP*0.85, 1.85),
+                        xytext=(x + BOX_W + GAP*0.15, 1.85),
+                        arrowprops=dict(arrowstyle='simple', color='#aaa', lw=0, mutation_scale=16))
+
+    fig.savefig(OUT / 'fig1_platform_pipeline.png', dpi=300)
+    plt.close(fig)
+    print('  ✅ fig1_platform_pipeline')
+
+# ═════════════════════════════════════════════════════════════════
+# FIG 2: 三平台数据集数量（原 fig1，顺延至此）
+# ═════════════════════════════════════════════════════════════════
+
+def fig2_platform_counts():
+    fig, ax = plt.subplots(figsize=(8, 5.5))
     platforms = ['CosMx', 'Xenium', 'MERFISH']
     x = np.arange(len(platforms))
     width = 0.55
-    bottom = np.zeros(len(platforms))
+    bottom = np.zeros(3)
 
-    for status, color in [('ready', '#27ae60'), ('pending', '#f39c12'), ('error', '#e74c3c')]:
-        vals = [sum(1 for r in all_data[p] if r.get('status','').strip() == status) for p in platforms]
-        bars = ax.bar(x, vals, width, bottom=bottom, color=color, label=status.capitalize(),
-                      edgecolor='white', linewidth=0.5)
+    for status, color in [('ready','#27ae60'),('pending','#f39c12'),('error','#e74c3c')]:
+        vals = [sum(1 for r in all_data[p] if r.get('status','').strip()==status) for p in platforms]
+        bars = ax.bar(x, vals, width, bottom=bottom, color=color, edgecolor='white', linewidth=0.8)
+        for bar, v in zip(bars, vals):
+            if v > 0:
+                ax.text(bar.get_x()+bar.get_width()/2, bar.get_y()+v/2, str(v),
+                        ha='center', va='center', fontsize=13, fontweight='bold', color='white')
         bottom += vals
 
     for i, p in enumerate(platforms):
         total = len(all_data[p])
-        ax.text(i, total + 25, str(total), ha='center', fontsize=13, fontweight='bold')
+        ax.text(i, total + 40, f'{total:,}', ha='center', fontsize=18, fontweight='bold')
+        ax.text(i, total - 0.5, 'datasets', ha='center', fontsize=10, color='#555')
 
-    ax.set_xticks(x); ax.set_xticklabels(platforms, fontsize=14, fontweight='bold')
-    ax.set_ylabel('Number of Datasets', fontsize=12)
-    ax.set_title('Database Scale by Platform', fontsize=15, fontweight='bold')
-    ax.legend(fontsize=10, loc='upper right')
+    ax.set_xticks(x)
+    ax.set_xticklabels(platforms, fontsize=18, fontweight='bold')
+    ax.set_ylabel('Number of Datasets', fontsize=14)
+    ax.tick_params(axis='y', labelsize=12)
+    ax.set_ylim(0, max(len(all_data[p]) for p in platforms) * 1.15)
+    ax.legend(['Ready', 'Pending', 'Error'], fontsize=12, loc='upper right',
+              framealpha=0.9, edgecolor='#ddd')
     fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'fig1A_dataset_counts.png')
+    fig.savefig(OUT / 'fig2_platform_counts.png')
     plt.close(fig)
-
-    # ── 小图 B: 可选文件覆盖率热图 ──────────────────────────────
-    opt_files = {
-        'CosMx': ['polygons', 'expr_matrix', 'cell_metadata', 'fov_positions'],
-        'Xenium': ['cell_boundaries', 'nucleus_boundaries', 'cell_metadata', 'expr_matrix', 'gene_panel'],
-        'MERFISH': ['expr_matrix', 'cell_metadata'],
-    }
-    heat_data = []
-    for p in platforms:
-        ready = [r for r in all_data[p] if r.get('status','').strip() == 'ready']
-        n = max(len(ready), 1)
-        row = []
-        for fname in opt_files[p]:
-            cnt = sum(1 for r in ready if fname in r.get('available_files',''))
-            row.append(cnt / n * 100)
-        heat_data.append(row)
-
-    fig, ax = plt.subplots(figsize=(7, 3.5))
-    max_cols = max(len(v) for v in opt_files.values())
-    padded = []
-    labels = []
-    for p in platforms:
-        row = heat_data[platforms.index(p)]
-        row += [np.nan] * (max_cols - len(row))
-        padded.append(row)
-        labels.append(p)
-
-    im = ax.imshow(padded, cmap='YlGn', aspect='auto', vmin=0, vmax=100)
-    for i in range(len(platforms)):
-        for j in range(max_cols):
-            v = padded[i][j]
-            if not np.isnan(v):
-                ax.text(j, i, f'{v:.0f}%', ha='center', va='center', fontsize=11,
-                        color='white' if v > 50 else '#2c3e50', fontweight='bold')
-
-    ax.set_xticks(range(max_cols))
-    ax.set_xticklabels([f.replace('_',' ').title() for f in list(opt_files.values())[0]] +
-                       [''] * (max_cols - len(list(opt_files.values())[0])),
-                       fontsize=9, rotation=15, ha='right')
-    ax.set_yticks(range(len(platforms)))
-    ax.set_yticklabels(labels, fontsize=12, fontweight='bold')
-    ax.set_title('Optional File Coverage by Platform (%)', fontsize=14, fontweight='bold')
-    plt.colorbar(im, ax=ax, shrink=0.7, label='Coverage %')
-    fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'fig1B_file_coverage.png')
-    plt.close(fig)
-
-    # ── 小图 C: 组织分布 top 10 ─────────────────────────────────
-    all_rows = cosmx + xenium + merfish
-    ready = [r for r in all_rows if r.get('status','').strip() == 'ready']
-    tissue_counts = Counter()
-    for r in ready:
-        t = r.get('tissue','').strip()
-        if t: tissue_counts[t] += 1
-    top = tissue_counts.most_common(10)
-    tissues, t_counts = zip(*top)
-
-    fig, ax = plt.subplots(figsize=(7, 4))
-    colors = plt.cm.Set2(np.linspace(0, 1, len(tissues)))
-    bars = ax.barh(range(len(tissues)), t_counts, color=colors, edgecolor='white', height=0.7)
-    ax.set_yticks(range(len(tissues)))
-    ax.set_yticklabels([t[:25] + '...' if len(t) > 25 else t for t in tissues], fontsize=10)
-    ax.set_xlabel('Number of Datasets', fontsize=12)
-    ax.set_title('Top 10 Tissue Types in GEO Database', fontsize=14, fontweight='bold')
-    for bar, v in zip(bars, t_counts):
-        ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2, str(v), va='center', fontsize=10)
-    fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'fig1C_tissue_distribution.png')
-    plt.close(fig)
-
-    # ── 大图: fig1 (4 panels) ───────────────────────────────────
-    fig = plt.figure(figsize=(16, 10))
-    gs = fig.add_gridspec(2, 2, hspace=0.25, wspace=0.25)
-
-    # Panel A: 数据集数量 (左上)
-    ax = fig.add_subplot(gs[0, 0])
-    x = np.arange(3); bottom = np.zeros(3)
-    for status, color in [('ready','#27ae60'),('pending','#f39c12'),('error','#e74c3c')]:
-        vals = [sum(1 for r in all_data[p] if r.get('status','').strip() == status) for p in platforms]
-        ax.bar(x, vals, 0.55, bottom=bottom, color=color, label=status.capitalize(), edgecolor='white')
-        bottom += vals
-    for i, p in enumerate(platforms):
-        ax.text(i, len(all_data[p]) + 25, str(len(all_data[p])), ha='center', fontsize=12, fontweight='bold')
-    ax.set_xticks(x); ax.set_xticklabels(platforms, fontsize=12, fontweight='bold')
-    ax.set_ylabel('Datasets', fontsize=11)
-    ax.set_title('A  Database Scale', fontsize=13, fontweight='bold', loc='left')
-    ax.legend(fontsize=9, loc='upper right')
-    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-
-    # Panel B: 可选文件热图 (右上)
-    ax = fig.add_subplot(gs[0, 1])
-    im = ax.imshow(padded, cmap='YlGn', aspect='auto', vmin=0, vmax=100)
-    for i in range(len(platforms)):
-        for j in range(max_cols):
-            v = padded[i][j]
-            if not np.isnan(v):
-                ax.text(j, i, f'{v:.0f}%', ha='center', va='center', fontsize=10,
-                        color='white' if v > 50 else '#2c3e50', fontweight='bold')
-    ax.set_xticks(range(max_cols))
-    ax.set_xticklabels([f.replace('_',' ').title() for f in list(opt_files.values())[0]] +
-                       [''] * (max_cols - len(list(opt_files.values())[0])), fontsize=8, rotation=20, ha='right')
-    ax.set_yticks(range(len(platforms)))
-    ax.set_yticklabels(labels, fontsize=11, fontweight='bold')
-    ax.set_title('B  Optional File Coverage (%)', fontsize=13, fontweight='bold', loc='left')
-
-    # Panel C: 组织分布 (左下)
-    ax = fig.add_subplot(gs[1, 0])
-    colors = plt.cm.Set2(np.linspace(0, 1, 10))
-    bars = ax.barh(range(len(tissues)), t_counts, color=colors, edgecolor='white', height=0.7)
-    ax.set_yticks(range(len(tissues)))
-    ax.set_yticklabels([t[:22]+'...' if len(t) > 22 else t for t in tissues], fontsize=9)
-    ax.set_xlabel('Datasets', fontsize=11)
-    ax.set_title('C  Tissue Types (Top 10)', fontsize=13, fontweight='bold', loc='left')
-    for bar, v in zip(bars, t_counts):
-        ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, str(v), va='center', fontsize=9)
-
-    # Panel D: 疾病分布 (右下)
-    ax = fig.add_subplot(gs[1, 1])
-    disease_counts = Counter()
-    for r in ready:
-        d = r.get('disease_state','').strip()
-        if d and d.lower() != 'normal':
-            disease_counts[d] += 1
-    top_d = disease_counts.most_common(8)
-    if top_d:
-        diseases, d_counts = zip(*top_d)
-        colors = plt.cm.Set3(np.linspace(0, 1, len(diseases)))
-        bars = ax.barh(range(len(diseases)), d_counts, color=colors, edgecolor='white', height=0.7)
-        ax.set_yticks(range(len(diseases)))
-        ax.set_yticklabels([d[:22]+'...' if len(d) > 22 else d for d in diseases], fontsize=9)
-        ax.set_xlabel('Datasets', fontsize=11)
-        ax.set_title('D  Disease Conditions', fontsize=13, fontweight='bold', loc='left')
-        for bar, v in zip(bars, d_counts):
-            ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height()/2, str(v), va='center', fontsize=9)
-
-    fig.suptitle('Figure 1.  SubCellSpace Database Overview', fontsize=16, fontweight='bold', y=1.01)
-    fig.savefig(OUT / 'big' / 'fig1_overview.png', dpi=300)
-    plt.close(fig)
-    print('  ✅ fig1')
+    print('  ✅ fig2_platform_counts')
 
 # ═════════════════════════════════════════════════════════════════
-# FIGURE 2: GEO 数据库与元数据富集
+# FIG 3: 三种分析模式 — 纵向排列
 # ═════════════════════════════════════════════════════════════════
 
-def fig2():
-    # 21 列按步骤分类
-    steps = {'GEO Crawl': 5, 'LLM Annotate': 2, 'File Info': 3, 'Stats': 7}
-    cum = 0; x = []; y = []; labels = []
-    for step, n in steps.items():
-        cum += n
-        x.append(step); y.append(cum); labels.append(f'{cum} cols')
-
-    # ── 小图: 列累积增长 ───────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(6, 4))
-    colors = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22']
-    bars = ax.bar(range(len(steps)), y, color=colors, edgecolor='white', width=0.6)
-    for bar, label in zip(bars, labels):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.3,
-                label, ha='center', fontsize=11, fontweight='bold')
-    ax.set_xticks(range(len(steps)))
-    ax.set_xticklabels(steps.keys(), fontsize=11, fontweight='bold')
-    ax.set_ylabel('Cumulative Columns', fontsize=12)
-    ax.set_title('4-Step Enrichment Pipeline → 21 Columns', fontsize=14, fontweight='bold')
-    for s in ['top','right']: ax.spines[s].set_visible(False)
-    fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'fig2A_column_growth.png')
-    plt.close(fig)
-
-    # ── 小图: GEO 字段填充率 ───────────────────────────────────
-    geo_fields = ['pdat', 'pubmedids', 'taxon', 'title']
-    fig, axes = plt.subplots(1, 3, figsize=(11, 3.5))
-    for idx, (plat, rows) in enumerate([('CosMx', cosmx), ('Xenium', xenium), ('MERFISH', merfish)]):
-        ax = axes[idx]
-        n_ready = sum(1 for r in rows if r.get('status','').strip() == 'ready')
-        rates = []
-        for field in geo_fields:
-            filled = sum(1 for r in rows if r.get('status','').strip() == 'ready' and r.get(field,'').strip())
-            rates.append(filled / max(n_ready, 1) * 100)
-        bars = ax.barh(range(len(geo_fields)), rates, color=['#3498db','#e74c3c','#2ecc71','#9b59b6'],
-                       edgecolor='white', height=0.6)
-        ax.set_yticks(range(len(geo_fields)))
-        ax.set_yticklabels(geo_fields, fontsize=10)
-        ax.set_xlim(0, 105)
-        ax.set_title(f'{plat} (n={n_ready})', fontsize=12, fontweight='bold')
-        for bar, r in zip(bars, rates):
-            ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2,
-                    f'{r:.0f}%', va='center', fontsize=9, fontweight='bold')
-        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-    fig.suptitle('GEO Metadata Fill Rate by Platform', fontsize=14, fontweight='bold', y=1.03)
-    fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'fig2B_geo_fillrate.png')
-    plt.close(fig)
-
-    # ── 大图: 合并 A+B ─────────────────────────────────────────
-    fig = plt.figure(figsize=(14, 6))
-    gs = fig.add_gridspec(1, 2, wspace=0.3)
-
-    ax = fig.add_subplot(gs[0, 0])
-    colors_step = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22']
-    bars = ax.bar(range(len(steps)), y, color=colors_step, edgecolor='white', width=0.55)
-    for bar, label in zip(bars, labels):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.3,
-                label, ha='center', fontsize=10, fontweight='bold')
-    ax.set_xticks(range(len(steps)))
-    ax.set_xticklabels(steps.keys(), fontsize=10, fontweight='bold')
-    ax.set_ylabel('Cumulative Columns', fontsize=11)
-    ax.set_title('A  Enrichment Pipeline: 4 Steps → 21 Columns', fontsize=13, fontweight='bold', loc='left')
-    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-
-    ax = fig.add_subplot(gs[0, 1])
-    geo_fields = ['pdat', 'pubmedids', 'taxon', 'title', 'summary']
-    bar_colors = ['#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#1abc9c']
-    bar_width = 0.25
-    x = np.arange(len(geo_fields))
-    for i, (plat, rows) in enumerate([('CosMx', cosmx), ('Xenium', xenium), ('MERFISH', merfish)]):
-        n_ready = sum(1 for r in rows if r.get('status','').strip() == 'ready')
-        rates = []
-        for field in geo_fields:
-            filled = sum(1 for r in rows if r.get('status','').strip() == 'ready' and r.get(field,'').strip())
-            rates.append(filled / max(n_ready, 1) * 100)
-        ax.bar(x + i * bar_width, rates, bar_width, color=list(COLORS.values())[i],
-               label=plat, edgecolor='white', linewidth=0.5)
-    ax.set_xticks(x + bar_width)
-    ax.set_xticklabels(geo_fields, fontsize=10)
-    ax.set_ylabel('Fill Rate (%)', fontsize=11)
-    ax.set_title('B  GEO Metadata Completeness', fontsize=13, fontweight='bold', loc='left')
-    ax.legend(fontsize=9)
-    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-    ax.set_ylim(0, 105)
-
-    fig.suptitle('Figure 2.  GEO Database Enrichment Pipeline', fontsize=16, fontweight='bold', y=1.02)
-    fig.tight_layout()
-    fig.savefig(OUT / 'big' / 'fig2_enrichment.png', dpi=300)
-    plt.close(fig)
-    print('  ✅ fig2')
-
-# ═════════════════════════════════════════════════════════════════
-# FIGURE 3: 跨平台数据特征对比
-# ═════════════════════════════════════════════════════════════════
-
-def fig3():
-    stats_fields = ['n_transcripts', 'n_cells', 'n_genes', 'median_transcripts', 'median_genes']
-    labels = ['Transcripts', 'Cells', 'Genes', 'Median tx/cell', 'Median genes/cell']
-    platform_map = {'CosMx': cosmx, 'Xenium': xenium, 'MERFISH': merfish}
-
-    # 收集数据
-    plot_data = {f: [] for f in stats_fields}
-    plot_plat = {f: [] for f in stats_fields}
-
-    for plat, rows in platform_map.items():
-        ready = [r for r in rows if r.get('status','').strip() == 'ready']
-        for field in stats_fields:
-            for r in ready:
-                v = float_or_none(r.get(field, ''))
-                if v and v > 0:
-                    plot_data[field].append(v)
-                    plot_plat[field].append(plat)
-
-    # ── 小提琴图大图 ────────────────────────────────────────────
-    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
-    axes_flat = axes.flatten()
-
-    for idx, (field, label) in enumerate(zip(stats_fields, labels)):
-        if idx >= 5: break
-        ax = axes_flat[idx]
-        df_data = []
-        for plat in ['CosMx', 'Xenium', 'MERFISH']:
-            vals = []
-            for r in platform_map[plat]:
-                if r.get('status','').strip() == 'ready':
-                    v = float_or_none(r.get(field, ''))
-                    if v and v > 0:
-                        vals.append(v)
-            for v in vals:
-                df_data.append({'Platform': plat, 'Value': v})
-
-        if df_data:
-            import pandas as pd
-            pdf = pd.DataFrame(df_data)
-            log_scale = field in ['n_transcripts', 'n_cells']
-            order = ['CosMx', 'Xenium', 'MERFISH']
-
-            if log_scale:
-                pdf['Value'] = np.log10(pdf['Value'].clip(lower=1))
-                sns.violinplot(data=pdf, x='Platform', y='Value', order=order,
-                               palette=[COLORS[p.lower()] for p in order], ax=ax, cut=0)
-                ax.set_ylabel(f'log10({label})', fontsize=10)
-            else:
-                sns.violinplot(data=pdf, x='Platform', y='Value', order=order,
-                               palette=[COLORS[p.lower()] for p in order], ax=ax, cut=0)
-                ax.set_ylabel(label, fontsize=10)
-
-            # 标注中位数
-            for i, plat in enumerate(order):
-                vals = pdf[pdf['Platform'] == plat]['Value']
-                if not vals.empty:
-                    med = vals.median()
-                    ax.text(i, med, f'{med:.1f}', ha='center', va='bottom', fontsize=8, fontweight='bold')
-
-        ax.set_xlabel('')
-        ax.set_title(label, fontsize=12, fontweight='bold')
-        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-
-    # 第6个子图: data_size 分布
-    ax = axes_flat[5]
-    sizes = []
-    for plat, rows in platform_map.items():
-        for r in rows:
-            if r.get('status','').strip() == 'ready':
-                s = r.get('data_size','').strip()
-                if s:
-                    sizes.append((plat, s))
-    # 转为数值
-    size_vals = {'CosMx': [], 'Xenium': [], 'MERFISH': []}
-    for plat, s in sizes:
-        try:
-            if s.endswith('G'): v = float(s[:-1]) * 1024
-            elif s.endswith('M'): v = float(s[:-1])
-            elif s.endswith('K'): v = float(s[:-1]) / 1024
-            else: continue
-            size_vals[plat].append(v)
-        except: pass
-
-    df_sizes = []
-    for plat in ['CosMx', 'Xenium', 'MERFISH']:
-        for v in size_vals[plat]:
-            df_sizes.append({'Platform': plat, 'Size_MB': v})
-    if df_sizes:
-        pdf = pd.DataFrame(df_sizes)
-        sns.violinplot(data=pdf, x='Platform', y='Size_MB',
-                       palette=[COLORS[p.lower()] for p in ['CosMx','Xenium','MERFISH']], ax=ax, cut=0)
-        ax.set_ylabel('Data Size (MB)', fontsize=10)
-        ax.set_title('Data Size Distribution', fontsize=12, fontweight='bold')
-        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-    else:
-        ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-
-    fig.suptitle('Figure 3.  Cross-Platform Data Characteristics', fontsize=16, fontweight='bold', y=1.01)
-    fig.tight_layout()
-    fig.savefig(OUT / 'big' / 'fig3_cross_platform.png', dpi=300)
-    plt.close(fig)
-
-    # ── 各特征单独小图（for PPT）─────────────────────────────────
-    for idx, (field, label) in enumerate(zip(stats_fields, labels)):
-        fig, ax = plt.subplots(figsize=(7, 4.5))
-        df_data = []
-        for plat in ['CosMx', 'Xenium', 'MERFISH']:
-            for r in platform_map[plat]:
-                if r.get('status','').strip() == 'ready':
-                    v = float_or_none(r.get(field, ''))
-                    if v and v > 0:
-                        df_data.append({'Platform': plat, 'Value': v})
-        pdf = pd.DataFrame(df_data)
-        log_scale = field in ['n_transcripts', 'n_cells']
-        if log_scale:
-            pdf['Value'] = np.log10(pdf['Value'].clip(lower=1))
-            sns.violinplot(data=pdf, x='Platform', y='Value',
-                          palette=[COLORS[p.lower()] for p in ['CosMx','Xenium','MERFISH']], ax=ax, cut=0)
-            ax.set_ylabel(f'log10({label})', fontsize=12)
-        else:
-            sns.violinplot(data=pdf, x='Platform', y='Value',
-                          palette=[COLORS[p.lower()] for p in ['CosMx','Xenium','MERFISH']], ax=ax, cut=0)
-            ax.set_ylabel(label, fontsize=12)
-
-        for i, plat in enumerate(['CosMx', 'Xenium', 'MERFISH']):
-            vals = pdf[pdf['Platform'] == plat]['Value']
-            if not vals.empty:
-                med = vals.median()
-                ax.text(i, med, f'Median: {med:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold',
-                        bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor='gray', alpha=0.8))
-
-        ax.set_xlabel('')
-        ax.set_title(f'{label} by Platform', fontsize=14, fontweight='bold')
-        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-        fig.tight_layout()
-        fig.savefig(OUT / 'small' / f'fig3_{field}.png')
-        plt.close(fig)
-
-    print('  ✅ fig3')
-
-
-# ═════════════════════════════════════════════════════════════════
-# FIGURE 4: Pipeline 步骤示意图
-# ═════════════════════════════════════════════════════════════════
-
-def fig4():
-    """Pipeline architecture diagram (conceptual)"""
-    fig, ax = plt.subplots(figsize=(14, 4))
-    ax.set_xlim(0, 14); ax.set_ylim(0, 4)
+def fig3_three_modes():
+    # Pipeline Mode 单独展示（回到最初水平管道图风格）
+    fig, ax = plt.subplots(figsize=(12, 3.5))
+    ax.set_xlim(0, 12); ax.set_ylim(0, 3.5)
     ax.axis('off')
 
     steps = [
-        ('1. Denoise', 'Filter\nlow-quality', '#3498db'),
-        ('2. Patchify', 'Split into\nspatial patches', '#2ecc71'),
-        ('3. Segment', 'Assign tx\nto cells', '#e67e22'),
-        ('4. Cluster', 'Leiden /\nLouvain', '#9b59b6'),
-        ('5. Annotate', 'CellTypist /\nSCRIN', '#e74c3c'),
-        ('6. Spatial', 'Moran\'s I /\nGeary\'s C', '#1abc9c'),
+        ('1', 'Denoise', 'basic / sparc', '#3498db'),
+        ('2', 'Patchify', 'grid / hex', '#2ecc71'),
+        ('3', 'Segment', 'fov_cell_id\n/ cellpose', '#e67e22'),
+        ('4', 'Domain', 'spatial_leiden\n/ kmeans', '#f39c12'),
+        ('5', 'Annotate', 'celltypist\n/ scrin', '#9b59b6'),
+        ('6', 'Spatial', "Moran's I\n/ Geary's C", '#1abc9c'),
     ]
-    for i, (title, desc, color) in enumerate(steps):
-        x = i * 2.2 + 0.3
-        rect = plt.Rectangle((x, 0.5), 1.8, 2.8, facecolor=color, alpha=0.12,
-                             edgecolor=color, linewidth=2, zorder=2)
+
+    for i, (num, title, desc, color) in enumerate(steps):
+        x = i * 1.85 + 0.35
+        rect = plt.Rectangle((x, 0.5), 1.55, 2.3, facecolor=color, alpha=0.12,
+                             edgecolor=color, linewidth=2.5, zorder=2)
         ax.add_patch(rect)
-        ax.text(x + 0.9, 2.6, title, ha='center', va='center', fontsize=10, fontweight='bold', color=color)
-        ax.text(x + 0.9, 1.5, desc, ha='center', va='center', fontsize=8, color='#555')
-        ax.text(x + 0.9, 3.4, str(i + 1), ha='center', va='center', fontsize=14, fontweight='bold',
-                color=color, bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color, linewidth=2))
+        ax.text(x + 0.775, 2.1, title, ha='center', va='center', fontsize=13,
+                fontweight='bold', color=color)
+        ax.text(x + 0.775, 1.15, desc, ha='center', va='center', fontsize=9,
+                color='#555')
+        ax.text(x + 0.775, 2.85, str(i+1), ha='center', va='center', fontsize=16,
+                fontweight='bold', color=color,
+                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color,
+                          linewidth=2.5, pad=0.25))
         if i < len(steps) - 1:
-            ax.annotate('', xy=(x + 2.1, 1.9), xytext=(x + 1.8, 1.9),
-                        arrowprops=dict(arrowstyle='->', color='#aaa', lw=2))
+            ax.annotate('', xy=(x + 1.9, 1.65), xytext=(x + 1.5, 1.65),
+                        arrowprops=dict(arrowstyle='simple', color='#aaa', lw=0, mutation_scale=20))
 
-    ax.set_title('SubCellSpace Pipeline: 6 Core Steps', fontsize=16, fontweight='bold', pad=10)
-    fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'fig4_pipeline.png', dpi=300)
+    # ── 顶部模式标题 ──
+    ax.text(6, 3.25, 'Pipeline — scverse-native 6-step analysis',
+            ha='center', va='top', fontsize=12, color='#555', style='italic',
+            fontweight='bold')
+
+    fig.savefig(OUT / 'fig3_three_modes.png', dpi=300)
     plt.close(fig)
+    print('  ✅ fig3_three_modes')
 
-    # ── Pipeline + Backend 大图 ─────────────────────────────────
-    fig = plt.figure(figsize=(16, 7))
-    gs = fig.add_gridspec(1, 2, wspace=0.25)
+# ═════════════════════════════════════════════════════════════════
+# FIG 3: 可选文件热图 — 海报用
+# ═════════════════════════════════════════════════════════════════
 
-    # 左: 流程
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax1.set_xlim(0, 3); ax1.set_ylim(0, 8)
-    ax1.axis('off')
-    step_details = [
-        ('Denoise', 'basic, sparc', '#3498db'),
-        ('Patchify', 'grid, hex', '#2ecc71'),
-        ('Segmentation', 'fov_cell_id, cellpose, baysor, proseg, comseg', '#e67e22'),
-        ('Spatial Domain', 'spatial_leiden, kmeans', '#f39c12'),
-        ('Clustering', 'leiden, louvain', '#9b59b6'),
-        ('Annotation', 'celltypist, scrin', '#e74c3c'),
-        ('Spatial Analysis', "Moran's I, Geary's C", '#1abc9c'),
-        ('Subcellular', 'scrin, hdbscan, dbscan, phenograph', '#8e44ad'),
+def fig3_file_coverage():
+    # 跨平台统一文件类别（Cell/Nucleus Boundary 拆开）
+    categories = [
+        ('polygons',           ['polygons'],                        'Polygons'),
+        ('expr_matrix',        ['expr_matrix'],                     'Expr Matrix'),
+        ('cell_metadata',      ['cell_metadata'],                   'Cell Metadata'),
+        ('fov_positions',      ['fov_positions'],                   'FOV Positions'),
+        ('cell_boundaries',    ['cell_boundaries'],                 'Cell\nBoundary'),
+        ('nucleus_boundaries', ['nucleus_boundaries'],              'Nucleus\nBoundary'),
+        ('gene_panel',         ['gene_panel'],                      'Gene Panel'),
     ]
-    for i, (name, backends, color) in enumerate(step_details):
-        y = 7.6 - i * 0.9
-        rect = plt.Rectangle((0.5, y - 0.35), 2.2, 0.7, facecolor=color, alpha=0.15,
-                             edgecolor=color, linewidth=1.5, zorder=2)
-        ax1.add_patch(rect)
-        ax1.text(1.6, y + 0.05, name, ha='center', va='center', fontsize=11, fontweight='bold', color=color)
-        ax1.text(1.6, y - 0.2, backends, ha='center', va='center', fontsize=7, color='#666')
-        if i < len(step_details) - 1:
-            ax1.annotate('', xy=(1.6, y - 0.45), xytext=(1.6, y + 0.35),
-                        arrowprops=dict(arrowstyle='->', color='#ccc', lw=1.5))
-    ax1.set_title('A  8-Step Pipeline', fontsize=14, fontweight='bold', loc='left')
+    platforms = ['CosMx', 'Xenium', 'MERFISH']
 
-    # 右: Backend 详情 — 使用 matplotlib table
-    ax2 = fig.add_subplot(gs[0, 1])
-    ax2.axis('off')
-    table_data = [
-        ['Step', 'Backends', 'Description'],
-        ['Denoise', 'basic, sparc', 'Transcript / cell filtering'],
-        ['Patchify', 'grid, hex', 'Tissue patch splitting'],
-        ['Segmentation', 'fov_cell_id', 'Fast spatial join'],
-        ['', 'cellpose', 'Deep learning nuclei'],
-        ['', 'baysor', 'Bayesian boundary inference'],
-        ['', 'proseg', 'Probabilistic segmentation'],
-        ['', 'comseg', 'Combined segmentation'],
-        ['Spatial Domain', 'spatial_leiden, kmeans', 'Spatial niche detection'],
-        ['Clustering', 'leiden, louvain', 'Community detection'],
-        ['Annotation', 'celltypist', 'Immune cell reference'],
-        ['', 'scrin', 'Subcellular RNA localization'],
-        ['Spatial Analysis', "moran, geary", 'Spatial autocorrelation'],
-        ['Subcellular', 'scrin', 'RNA localization scoring'],
-        ['', 'hdbscan, dbscan', 'Density-based clustering'],
-        ['', 'phenograph', 'Graph-based clustering'],
+    # 构建数据矩阵: platforms × categories
+    data = []
+    for p in platforms:
+        ready = [r for r in all_data[p] if r.get('status','').strip()=='ready']
+        n = max(len(ready), 1)
+        row = []
+        for cat_key, cat_names, cat_label in categories:
+            cnt = 0
+            for r in ready:
+                avail = r.get('available_files','')
+                for name in cat_names:
+                    if name in avail:
+                        cnt += 1
+                        break
+            row.append(cnt / n * 100)
+        data.append(row)
+
+    cats = [c[2] for c in categories]
+
+    fig, ax = plt.subplots(figsize=(11, 4.5))
+    cmap = plt.cm.Greens
+    im = ax.imshow(data, cmap=cmap, aspect='auto', vmin=0, vmax=100)
+
+    for i in range(len(platforms)):
+        for j in range(len(cats)):
+            v = data[i][j]
+            txt_color = 'white' if v > 50 else '#2c3e50'
+            if v == 0:
+                ax.text(j, i, '—', ha='center', va='center', fontsize=16, color='#bbb')
+            else:
+                ax.text(j, i, f'{v:.0f}%', ha='center', va='center',
+                        fontsize=16, fontweight='bold', color=txt_color)
+
+    ax.set_xticks(range(len(cats)))
+    ax.set_xticklabels(cats, fontsize=10, ha='center')
+    ax.set_yticks(range(len(platforms)))
+    ax.set_yticklabels(platforms, fontsize=16, fontweight='bold')
+    ax.tick_params(axis='y', length=0)
+
+    cbar = plt.colorbar(im, ax=ax, shrink=0.6, pad=0.02)
+    cbar.set_label('Coverage (%)', fontsize=12)
+    cbar.ax.tick_params(labelsize=10)
+    fig.tight_layout()
+    fig.savefig(OUT / 'fig3_file_coverage.png')
+    plt.close(fig)
+    print('  ✅ fig3_file_coverage')
+
+# ═════════════════════════════════════════════════════════════════
+# FIG 4: 组织 + 疾病分布 Top 10 — 海报用
+# ═════════════════════════════════════════════════════════════════
+
+def fig4_tissue_dist():
+    all_rows = cosmx + xenium + merfish
+    ready = [r for r in all_rows if r.get('status','').strip()=='ready']
+
+    # ── Tissue 计数 ──
+    tissue_cnt = Counter()
+    for r in ready:
+        t = r.get('tissue','').strip()
+        if t: tissue_cnt[t] += 1
+    top_tissues, top_t_counts = zip(*tissue_cnt.most_common(10))
+
+    # ── Disease 计数 ──
+    disease_cnt = Counter()
+    for r in ready:
+        d = r.get('disease_state','').strip()
+        if d: disease_cnt[d] += 1
+    top_diseases, top_d_counts = zip(*disease_cnt.most_common(10))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(17, 6.5))
+
+    for ax, items, counts, title, color_fn in [
+        (ax1, top_tissues, top_t_counts, 'Tissue (Top 10)',
+         lambda: plt.cm.Set2(np.linspace(0.1, 0.9, 10))),
+        (ax2, top_diseases, top_d_counts, 'Disease State (Top 10)',
+         lambda: plt.cm.Paired(np.linspace(0.1, 0.9, 10))),
+    ]:
+        colors = color_fn()
+        bars = ax.barh(range(len(items)), counts, color=colors, edgecolor='white', height=0.7)
+        x_max = max(counts)
+        for bar, v in zip(bars, counts):
+            ax.text(bar.get_width() + x_max * 0.015, bar.get_y() + bar.get_height()/2, str(v),
+                    va='center', fontsize=13, fontweight='bold')
+
+        ax.set_yticks(range(len(items)))
+        short = [t[:28] + '...' if len(t) > 28 else t for t in items]
+        ax.set_yticklabels(short, fontsize=13)
+        ax.set_xlabel('Number of Datasets', fontsize=14)
+        ax.set_xlim(0, x_max * 1.25)
+        ax.tick_params(axis='x', labelsize=11)
+        ax.set_title(title, fontsize=16, fontweight='bold', pad=12)
+        for s in ['top','right']: ax.spines[s].set_visible(False)
+
+    fig.tight_layout()
+    fig.savefig(OUT / 'fig4_tissue_dist.png')
+    plt.close(fig)
+    print('  ✅ fig4_tissue_dist')
+
+# ═════════════════════════════════════════════════════════════════
+# FIG 5: 跨平台小提琴图 — 海报用
+# ═════════════════════════════════════════════════════════════════
+
+def fig5_violins():
+    import pandas as pd
+    fields = [
+        ('n_transcripts', 'Transcripts per Dataset', True),
+        ('n_cells', 'Cells per Dataset', True),
+        ('median_transcripts', 'Median tx / Cell', True),
     ]
-    table = ax2.table(cellText=table_data, loc='center', cellLoc='left', colWidths=[0.22, 0.38, 0.35])
-    table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    table.scale(1, 1.6)
-    for (row, col), cell in table.get_celld().items():
-        if row == 0:
-            cell.set_text_props(fontweight='bold', color='white')
-            cell.set_facecolor('#2c3e50')
-        elif col == 0 and table_data[row][col]:
-            cell.set_text_props(fontweight='bold')
-            cell.set_facecolor('#e8f0fe')
-        else:
-            cell.set_facecolor('#f8f9fa')
-    ax2.set_title('B  Available Backends', fontsize=14, fontweight='bold', loc='left', pad=10)
+    fig, axes = plt.subplots(1, 3, figsize=(17, 5.5))
+    order = ['CosMx', 'Xenium', 'MERFISH']
 
-    fig.suptitle('Figure 4.  Pipeline Architecture and Backend Ecosystem',
-                 fontsize=16, fontweight='bold', y=1.02)
-    fig.tight_layout()
-    fig.savefig(OUT / 'big' / 'fig4_pipeline.png', dpi=300)
-    plt.close(fig)
-    print('  ✅ fig4')
-
-
-# ═════════════════════════════════════════════════════════════════
-# FIGURE 5: Stats 统计分布直方图
-# ═════════════════════════════════════════════════════════════════
-
-def fig5():
-    """CosMx stats histograms"""
-    fields = ['n_transcripts', 'n_cells', 'n_genes', 'n_fovs', 'median_transcripts', 'median_genes']
-    labels = ['Transcripts', 'Cells', 'Genes', 'FOVs', 'Median tx/cell', 'Median genes/cell']
-    colors = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#e74c3c', '#1abc9c']
-
-    # ── 大图 ─────────────────────────────────────────────────────
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8))
-    for idx, (field, label) in enumerate(zip(fields, labels)):
-        ax = axes[idx // 3][idx % 3]
-        vals = []
-        for rows in [cosmx]:
-            for r in rows:
-                if r.get('status','').strip() != 'ready': continue
-                v = float_or_none(r.get(field, ''))
-                if v and v > 0: vals.append(v)
-
-        if not vals:
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-            continue
-
-        ax.hist(vals, bins=30, color=colors[idx], alpha=0.7, edgecolor='white', linewidth=0.3)
-        median_val = np.median(vals)
-        ax.axvline(median_val, color='red', linestyle='--', linewidth=1.5, label=f'Median: {median_val:,.0f}')
-        ax.legend(fontsize=9, loc='upper right')
-        ax.set_xlabel(label, fontsize=11)
-        ax.set_ylabel('Count', fontsize=11)
-        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-
-        if max(vals) > 1e6:
-            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, p: f'{x/1e6:.0f}M'))
-        elif max(vals) > 1e3:
-            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, p: f'{x/1e3:.0f}K'))
-
-    fig.suptitle('Figure 5.  CosMx Dataset Statistics', fontsize=16, fontweight='bold', y=1.01)
-    fig.tight_layout()
-    fig.savefig(OUT / 'big' / 'fig5_stats.png', dpi=300)
-    plt.close(fig)
-
-    # ── 各特征小图 ──────────────────────────────────────────────
-    for idx, (field, label) in enumerate(zip(fields, labels)):
-        fig, ax = plt.subplots(figsize=(7, 4.5))
-        vals = []
-        for rows in [cosmx]:
-            for r in rows:
-                if r.get('status','').strip() != 'ready': continue
-                v = float_or_none(r.get(field, ''))
-                if v and v > 0: vals.append(v)
-        if not vals: continue
-        ax.hist(vals, bins=35, color=colors[idx], alpha=0.8, edgecolor='white', linewidth=0.4)
-        median_val = np.median(vals)
-        ax.axvline(median_val, color='red', linestyle='--', linewidth=2, label=f'Median = {median_val:,.0f}')
-        ax.legend(fontsize=11, loc='upper right')
-        ax.set_xlabel(label, fontsize=13)
-        ax.set_ylabel('Number of Datasets', fontsize=13)
-        ax.set_title(f'Distribution of {label} (CosMx, n={len(vals)})', fontsize=14, fontweight='bold')
-        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-        if max(vals) > 1e6:
-            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, p: f'{x/1e6:.0f}M'))
-        elif max(vals) > 1e3:
-            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, p: f'{x/1e3:.0f}K'))
-        fig.tight_layout()
-        fig.savefig(OUT / 'small' / f'fig5_{field}.png')
-        plt.close(fig)
-    print('  ✅ fig5')
-
-
-# ═════════════════════════════════════════════════════════════════
-# FIGURE 6: 补充统计图
-# ═════════════════════════════════════════════════════════════════
-
-def fig6():
-    """Supplementary: per-GSE distribution, status distribution, data completeness"""
-    # ── S1: 各 GSE 的数据集数量分布 ──────────────────────────────
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
-    for idx, (plat, rows) in enumerate([('CosMx', cosmx), ('Xenium', xenium), ('MERFISH', merfish)]):
+    for idx, (field, label, log_scale) in enumerate(fields):
         ax = axes[idx]
-        gse_counts = Counter()
-        for r in rows:
-            gse_counts[r.get('GSE','')] += 1
-        counts = list(gse_counts.values())
-        ax.hist(counts, bins=20, color=list(COLORS.values())[idx], alpha=0.7, edgecolor='white')
-        ax.set_xlabel('Datasets per GSE', fontsize=10)
-        ax.set_ylabel('GSEs', fontsize=10)
-        ax.set_title(f'{plat} ({len(gse_counts)} GSEs)', fontsize=12, fontweight='bold')
-        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-    fig.suptitle('Supplementary Figure 1.  Dataset Distribution Across GSEs',
-                 fontsize=14, fontweight='bold', y=1.03)
+        df_data = []
+        for plat in order:
+            for r in all_data[plat]:
+                if r.get('status','').strip() != 'ready': continue
+                v = flt(r.get(field,''))
+                if v and v > 0:
+                    df_data.append({'Platform': plat, 'Value': v})
+        pdf = pd.DataFrame(df_data)
+        if log_scale:
+            pdf['Value'] = np.log10(pdf['Value'].clip(lower=1))
+            ylabel = f'log₁₀({label})'
+        else:
+            ylabel = label
+
+        sns.violinplot(data=pdf, x='Platform', y='Value', order=order,
+                       palette=[PLAT_COLORS[p] for p in order], ax=ax, cut=0,
+                       inner='quartile', linewidth=2)
+        for i, plat in enumerate(order):
+            vals = pdf[pdf['Platform']==plat]['Value']
+            if not vals.empty:
+                med = vals.median()
+                ax.text(i, med + 0.1, f'{med:.1f}', ha='center', va='bottom',
+                        fontsize=13, fontweight='bold',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                                  edgecolor=PLAT_COLORS[plat], linewidth=1.5))
+
+        ax.set_xlabel('')
+        ax.set_ylabel(ylabel, fontsize=14)
+        ax.set_title(label, fontsize=16, fontweight='bold')
+        ax.tick_params(axis='x', labelsize=15)
+        ax.tick_params(axis='y', labelsize=12)
+
     fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'figS1_gse_distribution.png')
+    fig.savefig(OUT / 'fig5_violins.png')
     plt.close(fig)
-
-    # ── S2: 列完成率热图 ────────────────────────────────────────
-    all_cols = ['GSE','name','status','pdat','pubmedids','taxon','title',
-                'tissue','disease_state','available_files','file_names','data_size',
-                'n_transcripts','n_cells','n_genes','n_fovs','gene_panel_size',
-                'median_transcripts','median_genes']
-    fill_rates = []
-    for plat, rows in [('CosMx', cosmx), ('Xenium', xenium), ('MERFISH', merfish)]:
-        n = len(rows)
-        rates = []
-        for col in all_cols:
-            filled = sum(1 for r in rows if r.get(col, '').strip())
-            rates.append(filled / max(n, 1) * 100)
-        fill_rates.append(rates)
-
-    fig, ax = plt.subplots(figsize=(12, 3.5))
-    im = ax.imshow(fill_rates, cmap='RdYlGn', aspect='auto', vmin=0, vmax=100)
-    for i in range(3):
-        for j in range(len(all_cols)):
-            v = fill_rates[i][j]
-            ax.text(j, i, f'{v:.0f}%', ha='center', va='center', fontsize=8,
-                    color='white' if v < 40 else '#2c3e50', fontweight='bold')
-    ax.set_xticks(range(len(all_cols)))
-    ax.set_xticklabels(all_cols, fontsize=8, rotation=45, ha='right')
-    ax.set_yticks(range(3))
-    ax.set_yticklabels(['CosMx', 'Xenium', 'MERFISH'], fontsize=11, fontweight='bold')
-    ax.set_title('Supplementary Figure 2.  Column Fill Rate Across Platforms',
-                 fontsize=14, fontweight='bold')
-    plt.colorbar(im, ax=ax, shrink=0.8, label='Fill Rate (%)')
-    fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'figS2_column_fillrate.png')
-    plt.close(fig)
-    print('  ✅ fig6 (supplementary)')
-
+    print('  ✅ fig5_violins')
 
 # ═════════════════════════════════════════════════════════════════
-# 主入口
+# FIG 6: GSE263791 阿尔茨海默小鼠脑示例 — a-d 子图
+# ═════════════════════════════════════════════════════════════════
+
+def fig6_example_output():
+    # 0: 细胞空间位置(按转录本数着色), 1: UMAP(按转录本数着色)
+    # 2: 细胞空间位置(按聚类着色),   3: UMAP(按聚类着色)
+    paths = [OUT / f'subcellspace_plot ({i}).png' for i in range(4)]
+    imgs = [plt.imread(p) for p in paths]
+    h, w = imgs[0].shape[:2]
+
+    fig, axes = plt.subplots(2, 2, figsize=(w/100*2, h/100*2))
+    fig.subplots_adjust(wspace=0, hspace=0, left=0, right=1, bottom=0, top=1)
+
+    for i, ax in enumerate(axes.flat):
+        ax.imshow(imgs[i])
+        ax.axis('off')
+        labels = ['(a)', '(b)', '(c)', '(d)']
+        ax.text(0.02, 0.97, labels[i], transform=ax.transAxes,
+                fontsize=22, fontweight='bold', color='white',
+                va='top', ha='left',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='#222',
+                          edgecolor='none', alpha=0.6))
+
+    fig.savefig(OUT / 'fig6_example_output.png', dpi=300, pad_inches=0)
+    plt.close(fig)
+    print('  ✅ fig6_example_output')
+
+# ═════════════════════════════════════════════════════════════════
+# FIG 7: 四格应用概念图
+# ═════════════════════════════════════════════════════════════════
+
+def fig7_concept():
+    from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+    from matplotlib.path import Path
+
+    fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+    fig.patch.set_facecolor('white')
+    BG = '#F8F9FA'
+
+    # ── Panel labels ──
+    titles = [
+        '(a) Gene Regulation Network (SCRIN)',
+        '(b) Subcellular Domain Identification',
+        '(c) Spatially Variable Genes',
+        '(d) Virtual Cell Model',
+    ]
+
+    for idx, ax in enumerate(axes.flat):
+        ax.set_xlim(0, 10); ax.set_ylim(0, 10)
+        ax.set_facecolor(BG)
+        ax.set_aspect('equal')
+        ax.text(0.5, 9.5, titles[idx], fontsize=12, fontweight='bold',
+                color='#2C3E50', ha='left', va='top')
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+    ax1, ax2, ax3, ax4 = axes.flat
+
+    # ── (a) GRN / SCRIN ──
+    np.random.seed(42)
+    nodes = [(2,7), (5,8), (8,6), (3,4), (6,3), (7,7), (4,6)]
+    colors_grn = ['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22']
+    labels_grn = ['GeneA','GeneB','GeneC','GeneD','GeneE','GeneF','GeneG']
+
+    # Edges
+    edges = [(0,1),(0,3),(1,2),(1,4),(2,5),(3,4),(3,6),(4,6),(5,6)]
+    for i,j in edges:
+        ax1.plot([nodes[i][0], nodes[j][0]], [nodes[i][1], nodes[j][1]],
+                color='#95A5A6', lw=1.5, alpha=0.6, zorder=1)
+
+    for (x,y), c, lbl in zip(nodes, colors_grn, labels_grn):
+        circle = plt.Circle((x,y), 0.5, color=c, alpha=0.25, ec=c, lw=2, zorder=2)
+        ax1.add_patch(circle)
+        ax1.text(x, y-0.9, lbl, ha='center', va='center', fontsize=8,
+                fontweight='bold', color=c, zorder=3)
+
+    ax1.text(5, 1.5, 'SCRIN: Subcellular\nRNA Interaction Network',
+             ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
+
+    # ── (b) Subcellular domains ──
+    # Cell membrane
+    cell = plt.Circle((5,5), 3.5, color='#2980B9', alpha=0.05, ec='#2980B9', lw=2.5)
+    ax2.add_patch(cell)
+    # Nucleus
+    nucleus = plt.Circle((5,6.5), 1.5, color='#E74C3C', alpha=0.15, ec='#E74C3C', lw=2)
+    ax2.add_patch(nucleus)
+    ax2.text(5, 6.5, 'Nucleus', ha='center', va='center', fontsize=8, color='#E74C3C', fontweight='bold')
+
+    # Mitochondria
+    mito1 = plt.Circle((3,4.5), 0.8, color='#2ECC71', alpha=0.15, ec='#2ECC71', lw=1.5)
+    mito2 = plt.Circle((7,4), 0.7, color='#2ECC71', alpha=0.15, ec='#2ECC71', lw=1.5)
+    ax2.add_patch(mito1); ax2.add_patch(mito2)
+
+    # ER-like
+    er = FancyBboxPatch((4.0,2.5), 2, 1.5, boxstyle="round,pad=0.2",
+                        color='#F39C12', alpha=0.15, ec='#F39C12', lw=1.5)
+    ax2.add_patch(er)
+
+    # Vesicle
+    ves = plt.Circle((7.5,6.5), 0.5, color='#9B59B6', alpha=0.15, ec='#9B59B6', lw=1.5)
+    ax2.add_patch(ves)
+
+    # Labels
+    ax2.text(3, 4.5, 'Mito', ha='center', fontsize=7, color='#2ECC71', fontweight='bold')
+    ax2.text(7, 4, 'Mito', ha='center', fontsize=7, color='#2ECC71', fontweight='bold')
+    ax2.text(5, 3, 'ER', ha='center', fontsize=7, color='#F39C12', fontweight='bold')
+    ax2.text(7.5, 6.5, 'Ves', ha='center', fontsize=7, color='#9B59B6', fontweight='bold')
+    ax2.text(5, 0.8, 'Subcellular niche /\norganelle identification',
+             ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
+
+    # ── (c) Spatially variable genes ──
+    cell3 = plt.Circle((5,5), 3.5, color='#2980B9', alpha=0.05, ec='#2980B9', lw=2.5)
+    ax3.add_patch(cell3)
+
+    np.random.seed(123)
+    clusters = [
+        (2.5, 6.5, 50, '#E74C3C', 'GeneX'),
+        (6.5, 7, 40, '#3498DB', 'GeneY'),
+        (4, 3, 45, '#2ECC71', 'GeneZ'),
+        (7, 3.5, 30, '#F39C12', 'GeneW'),
+    ]
+    for cx, cy, n, c, lbl in clusters:
+        pts = np.random.randn(n, 2) * 0.6 + [cx, cy]
+        ax3.scatter(pts[:,0], pts[:,1], s=15, color=c, alpha=0.5, zorder=2)
+        ax3.text(cx, cy-0.8, lbl, ha='center', fontsize=8, fontweight='bold', color=c)
+
+    # Background dots
+    bg_pts = np.random.rand(60, 2) * 7 + 1.5
+    ax3.scatter(bg_pts[:,0], bg_pts[:,1], s=8, color='#BDC3C7', alpha=0.3, zorder=1)
+
+    ax3.text(5, 0.8, 'Spatially variable gene\ndetection & clustering',
+             ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
+
+    # ── (d) Virtual cell model (electron cloud) ──
+    cell4 = plt.Circle((5,5), 3.5, color='#2980B9', alpha=0.05, ec='#2980B9', lw=2.5)
+    ax4.add_patch(cell4)
+
+    np.random.seed(456)
+    # Electron cloud density: more dense near center with some hotspots
+    n_pts = 500
+    angles = np.random.uniform(0, 2*np.pi, n_pts)
+    radii = np.random.exponential(1.2, n_pts) * 2.5
+    radii = np.clip(radii, 0, 3.3)
+    x_cloud = 5 + radii * np.cos(angles)
+    y_cloud = 5 + radii * np.sin(angles)
+    # Density coloring
+    density = np.exp(-radii/1.5) + np.random.uniform(0, 0.3, n_pts)
+    ax4.scatter(x_cloud, y_cloud, s=12, c=density, cmap='YlOrRd', alpha=0.5, zorder=2)
+
+    # Probability contours
+    from matplotlib.patches import Ellipse
+    for scale, lw, alpha in [(1.5, 2, 0.3), (2.5, 1.5, 0.2), (3.3, 1, 0.1)]:
+        e = Ellipse((5,5), scale*2.5, scale*2.5, color='#E74C3C', fill=False, lw=lw, alpha=alpha)
+        ax4.add_patch(e)
+
+    # Arrow indicating vectorization concept
+    ax4.annotate('', xy=(8.5, 8), xytext=(6.5, 6.5),
+                arrowprops=dict(arrowstyle='->', color='#E74C3C', lw=2))
+    ax4.text(8.8, 8.2, 'Transcripts as\nelectron clouds',
+             ha='left', va='center', fontsize=8, color='#E74C3C', fontweight='bold', style='italic')
+
+    ax4.text(5, 0.8, 'Probability density estimation\n→ Virtual cell model',
+             ha='center', va='center', fontsize=9, color='#7F8C8D', style='italic')
+
+    fig.tight_layout(pad=2)
+    fig.savefig(OUT / 'fig7_concept.png', dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print('  ✅ fig7_concept')
+
+# ═════════════════════════════════════════════════════════════════
+# 运行
 # ═════════════════════════════════════════════════════════════════
 
 if __name__ == '__main__':
-    print('Generating figures...')
-    fig1()
-    fig2()
-    fig3()
-    fig4()
-    fig5()
-    fig6()
-    print(f'\nAll figures saved to {OUT}')
-    print(f'  big/   — {len(list((OUT/"big").glob("*.png")))} files (publication style)')
-    print(f'  small/ — {len(list((OUT/"small").glob("*.png")))} files (presentation style)')
+    print('Generating poster-optimized figures...')
+    fig1_platform_pipeline()
+    fig2_platform_counts()
+    fig3_file_coverage()
+    fig4_tissue_dist()
+    fig5_violins()
+    fig6_example_output()
+    fig7_concept()
+    print(f'\nAll saved to {OUT}/')
