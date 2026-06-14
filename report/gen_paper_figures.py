@@ -370,21 +370,27 @@ def fig2():
     fig.savefig(OUT / 'small' / 'fig2A_file_coverage.png', dpi=300)
     plt.close(fig)
 
-    # ── 小图 B: 元数据完整度 ────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(10, 7))
-    y = np.arange(len(meta_labels))
-    h = 0.22
-    for i, (p, color) in enumerate(zip(PLATFORMS, PLAT_COLORS)):
-        vals = [meta_data[i][j] for j in range(len(meta_labels))]
-        ax.barh(y + (i-1)*h, vals, h, label=p, color=color, alpha=0.85, edgecolor='white', lw=0.5)
-        for j, v in enumerate(vals):
-            if v > 0:
-                ax.text(v+1, j+(i-1)*h, f'{v:.0f}%', va='center', fontsize=6.5, fontweight='bold', color=color)
-    ax.set_yticks(y)
-    ax.set_yticklabels(meta_labels, fontsize=9)
-    ax.set_xlabel('Fill Rate (%)', fontsize=11)
-    ax.set_xlim(0, 110)
-    ax.legend(fontsize=9, loc='lower right')
+    # ── 小图 B: 元数据完整度热图 (与大图风格一致) ─────────────
+    meta_arr = np.array(meta_data).T  # (n_fields, 3)
+    avg = meta_arr.mean(axis=1)
+    sidx = np.argsort(-avg)
+    meta_arr_sorted = meta_arr[sidx]
+    meta_labels_sorted = [meta_labels[i] for i in sidx]
+    fig, ax = plt.subplots(figsize=(9, 7))
+    im = ax.imshow(meta_arr_sorted, aspect='auto', cmap='RdYlGn', vmin=0, vmax=100)
+    ax.set_yticks(range(len(meta_labels_sorted)))
+    ax.set_yticklabels(meta_labels_sorted, fontsize=9)
+    ax.set_xticks(range(3))
+    ax.set_xticklabels(PLATFORMS, fontsize=12, fontweight='bold')
+    for i in range(len(meta_labels_sorted)):
+        for j in range(3):
+            v = meta_arr_sorted[i, j]
+            tc = 'white' if v < 50 else '#333'
+            ax.text(j, i, f'{v:.0f}%', ha='center', va='center', fontsize=9,
+                    fontweight='bold', color=tc)
+    cbar = plt.colorbar(im, ax=ax, shrink=0.6, pad=0.02)
+    cbar.set_label('Fill Rate (%)', fontsize=10)
+    ax.set_title('Metadata Completeness Heatmap', fontsize=14, fontweight='bold')
     fig.tight_layout()
     fig.savefig(OUT / 'small' / 'fig2B_metadata.png', dpi=300)
     plt.close(fig)
