@@ -23,36 +23,44 @@ function getCellValue(row: GeoRow, colName: string): string {
 
 const PAGE_SIZES = [25, 50, 100, 0]
 
-// ── Row Detail Modal ─────────────────────────────────────────────────
+// ── Row Detail View ─────────────────────────────────────────────
 
-function RowDetail({ row, columns, onClose }: { row: GeoRow; columns: ColumnMeta[]; onClose: () => void }) {
+function RowDetailView({ row, columns, onBack }: { row: GeoRow; columns: ColumnMeta[]; onBack: () => void }) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content modal-detail" onClick={e => e.stopPropagation()} style={{ maxWidth: 750 }}>
-        <button className="modal-close" onClick={onClose}>✕</button>
-        <h2>{row.name}</h2>
-        <p style={{ color: 'var(--color-text-secondary,#666)', fontSize: 13, marginBottom: 16 }}>
-          {row.GSE}/{row.sample_name}
-        </p>
-        <div className="detail-grid">
-          {columns.map(col => {
-            const val = getCellValue(row, col.name)
-            const isGseLink = col.name === 'GSE' && val !== '—'
-            const isGsmLink = col.name === 'sample_name' && val !== '—'
-            const href = isGseLink ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
-              : isGsmLink ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}` : ''
-            return (
-              <div key={col.name} className="detail-item">
-                <span className="detail-label">{col.label_zh}</span>
-                <span className="detail-value">
-                  {href
-                    ? <a href={href} target="_blank" rel="noopener noreferrer" className="url-link">{val}</a>
-                    : val.length > 120 ? <span title={val}>{val.slice(0, 117)}...</span> : val}
-                </span>
-              </div>
-            )
-          })}
+    <div className="detail-page">
+      <div className="detail-topbar">
+        <button className="back-btn" onClick={onBack}>← Back to results</button>
+        <div className="detail-topbar-links">
+          {row.GSE && (
+            <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${row.GSE}`}
+              target="_blank" rel="noopener noreferrer" className="pubmed-btn">
+              View on GEO ↗
+            </a>
+          )}
         </div>
+      </div>
+      <h2 className="detail-title">{row.name}</h2>
+      <p style={{ color: 'var(--color-text-secondary,#666)', fontSize: 13, marginBottom: 20 }}>
+        {row.GSE}/{row.sample_name}
+      </p>
+      <div className="detail-grid">
+        {columns.map(col => {
+          const val = getCellValue(row, col.name)
+          const isGseLink = col.name === 'GSE' && val !== '—'
+          const isGsmLink = col.name === 'sample_name' && val !== '—'
+          const href = isGseLink ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
+            : isGsmLink ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}` : ''
+          return (
+            <div key={col.name} className="detail-item">
+              <span className="detail-label">{col.label_zh}</span>
+              <span className="detail-value">
+                {href
+                  ? <a href={href} target="_blank" rel="noopener noreferrer" className="url-link">{val}</a>
+                  : val.length > 120 ? <span title={val}>{val.slice(0, 117)}...</span> : val}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -182,6 +190,14 @@ export default function DataBrowser() {
     URL.revokeObjectURL(url)
   }, [filteredRows, visibleColumns, platform])
 
+  if (expandedRow) {
+    return (
+      <div className="container">
+        <RowDetailView row={expandedRow} columns={columns} onBack={() => setExpandedRow(null)} />
+      </div>
+    )
+  }
+
   if (isLoading && !data) return <div className="container"><div className="empty-state">Loading {platform} database...</div></div>
   if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed to load {platform}.<br/><small>Run <code>python3 scripts/export_frontend_json.py</code> to regenerate.</small></div></div>
 
@@ -279,8 +295,6 @@ export default function DataBrowser() {
           </div>
         </>
       )}
-
-      {expandedRow && <RowDetail row={expandedRow} columns={columns} onClose={() => setExpandedRow(null)} />}
     </div>
   )
 }
