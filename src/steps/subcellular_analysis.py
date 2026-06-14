@@ -386,8 +386,13 @@ def _subcell_scrin(
 
         # Find mpiexec — prefer conda-installed, fall back to system
         mpiexec = shutil.which("mpiexec") or "/usr/bin/mpiexec"
-        cmd = [
-            mpiexec, "-n", "2",
+        # Use srun within Slurm to properly handle MPI process allocation
+        srun = shutil.which("srun")
+        if srun and "SLURM_JOB_ID" in os.environ:
+            mpi_launcher = [srun, "--ntasks=2"]
+        else:
+            mpi_launcher = [mpiexec, "-n", "2"]
+        cmd = mpi_launcher + [
             sys.executable, "-m", "scrin.main",
             "--data_path", str(input_csv),
             "--save_path", str(output_dir / "scrin_results.csv"),

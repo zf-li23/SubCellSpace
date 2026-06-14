@@ -150,6 +150,20 @@ txt(s, Inches(0.5), Inches(5.6), Inches(12), Inches(0.6),
     "SubCellSpace：数据收集 → 质量控制 → 统计分析 → 可视化 一站式方案",
     size=18, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
 
+# ── 参考项目预览 ──
+refs = [
+    "Squidpy (Nat. Methods 2022) · SpatialData (Nat. Methods 2024) · Giotto (Genome Biol. 2021)",
+    "Cellpose (Nat. Methods 2021) · Baysor (Nat. Biotechnol. 2022) · SCRIN (bioRxiv 2024)",
+    "SpatialDB (NAR 2021) · CROST (NAR 2024) · TISCH2 (NAR 2023)",
+]
+rect(s, Inches(0.5), Inches(6.3), Inches(12.3), Inches(1.0), LGRAY)
+rect(s, Inches(0.5), Inches(6.3), Inches(0.06), Inches(1.0), TEAL)
+txt(s, Inches(0.7), Inches(6.35), Inches(11.8), Inches(0.25),
+    "相关项目参考（详见引用页）", size=13, color=NAVY, bold=True)
+for i, line in enumerate(refs):
+    txt(s, Inches(0.7), Inches(6.65)+Inches(0.2)*i, Inches(11.8), Inches(0.2),
+        line, size=11, color=GRAY)
+
 
 # ═══ SLIDE 4: Pipeline (居中) ══════════════════════════════
 
@@ -266,53 +280,116 @@ txt(s, Inches(0.3), Inches(6.8), Inches(12.5), Inches(0.5),
     size=14, color=GRAY, align=PP_ALIGN.CENTER)
 
 
-# ═══ SLIDE 10: Concept (居中) ═══════════════════════════════
-
-s = new_slide(); set_bg(s)
-header(s, "亚细胞分析概念图")
-img(s, FIG_POSTER/"fig7_concept.png", Inches(3.8), Inches(1.2), w=Inches(5.7), h=Inches(5.5))
-txt(s, Inches(0.3), Inches(6.9), Inches(12.5), Inches(0.4),
-    "(a) SCRIN 基因调控网络 · (b) 亚细胞域识别 · (c) 空间可变基因 · (d) 虚拟细胞模型",
-    size=13, color=GRAY, align=PP_ALIGN.CENTER)
-
-
-# ═══ SLIDE 11: Summary ════════════════════════════════════════
+# ═══ SLIDE 10: 总结与展望 (左文右图) ═════════════════════════
 
 s = new_slide(); set_bg(s)
 header(s, "总结与展望")
-rect(s, Inches(0.5), Inches(1.3), Inches(6.0), Inches(5.3), LGRAY)
-rect(s, Inches(0.5), Inches(1.3), Inches(0.08), Inches(5.3), GREEN)
-txt(s, Inches(0.8), Inches(1.4), Inches(5.5), Inches(0.5), "✅  已完成", size=22, color=GREEN, bold=True)
+
+# 右侧: 概念图
+img(s, FIG_POSTER/"fig7_concept.png", Inches(6.8), Inches(1.3), w=Inches(6.2), h=Inches(5.5))
+
+# 左侧: 已完成
+rect(s, Inches(0.4), Inches(1.3), Inches(6.0), Inches(2.8), LGRAY)
+rect(s, Inches(0.4), Inches(1.3), Inches(0.08), Inches(2.8), GREEN)
+txt(s, Inches(0.7), Inches(1.4), Inches(5.5), Inches(0.5),
+    "已完成", size=24, color=GREEN, bold=True)
 done = [
-    "scverse-native 6 步统一分析 Pipeline",
-    "CosMx / Xenium / MERFISH 三平台摄入",
-    "GEO 数据库：4,478 条记录，269 个 GSE",
-    "Touch 完整性检查 + 统计流式处理",
-    "React 前端：Browser + Report 页面",
-    "7 张海报图 + 5 张论文大图 + PPT",
+    "✓  scverse-native 6 步统一 Pipeline",
+    "✓  三平台摄入 + GEO 数据库 (4,478 条)",
+    "✓  Touch 完整性 + 统计流式处理",
+    "✓  React 前端 + 全套论文图表",
 ]
 for i, item in enumerate(done):
-    txt(s, Inches(0.8), Inches(2.1)+Inches(0.55)*i, Inches(5.5), Inches(0.45),
-        f"✓  {item}", size=14, color=BLACK)
+    txt(s, Inches(0.7), Inches(2.1)+Inches(0.5)*i, Inches(5.5), Inches(0.4),
+        item, size=16, color=BLACK)
 
-rect(s, Inches(6.8), Inches(1.3), Inches(6.0), Inches(5.3), LGRAY)
-rect(s, Inches(6.8), Inches(1.3), Inches(0.08), Inches(5.3), ORANGE)
-txt(s, Inches(7.1), Inches(1.4), Inches(5.5), Inches(0.5), "🔄  待完成", size=22, color=ORANGE, bold=True)
+# 左侧: 待完成
+rect(s, Inches(0.4), Inches(4.3), Inches(6.0), Inches(2.5), LGRAY)
+rect(s, Inches(0.4), Inches(4.3), Inches(0.08), Inches(2.5), ORANGE)
+txt(s, Inches(0.7), Inches(4.4), Inches(5.5), Inches(0.5),
+    "进行中", size=24, color=ORANGE, bold=True)
 todo = [
-    "1,761 个 CosMx pending 数据下载",
-    "Xenium 统计覆盖提升（当前 38%）",
-    "MERFISH 异构数据格式处理",
-    "Docker 容器化部署",
-    "性能 Benchmark 与工具对比",
+    "○  1,761 个 CosMx pending 数据下载",
+    "○  Xenium 统计覆盖提升 (当前 38%)",
+    "○  MERFISH 异构数据格式处理",
+    "○  Docker + 性能 Benchmark",
 ]
 for i, item in enumerate(todo):
-    txt(s, Inches(7.1), Inches(2.1)+Inches(0.55)*i, Inches(5.5), Inches(0.45),
-        f"○  {item}", size=14, color=BLACK)
+    txt(s, Inches(0.7), Inches(5.0)+Inches(0.5)*i, Inches(5.5), Inches(0.4),
+        item, size=16, color=BLACK)
 
 rect(s, 0, Inches(7.0), W, Inches(0.5), NAVY)
 txt(s, Inches(0.5), Inches(7.02), Inches(12), Inches(0.45),
-    "github.com/zf-li23/SubCellSpace  ·  263 commits  ·  ~15K lines of code",
+    "github.com/zf-li23/SubCellSpace  ·  263 commits  ·  ~25 万行累计代码",
     size=13, color=MID, align=PP_ALIGN.CENTER)
+
+
+# ═══ SLIDE 11: References ═════════════════════════════════════
+
+s = new_slide(); set_bg(s)
+header(s, "参考文献与参考项目")
+
+refs = [
+    ("分析工具", [
+        "Palla et al., Squidpy: a scalable framework for spatial omics analysis. Nature Methods, 2022.",
+        "Marconato et al., SpatialData: an open and universal data framework for spatial omics. Nature Methods, 2024.",
+        "Dries et al., Giotto: a toolbox for integrative analysis and visualization of spatial expression data. Genome Biology, 2021.",
+        "Stringer et al., Cellpose: a generalist algorithm for cellular segmentation. Nature Methods, 2021.",
+        "Petukhov et al., Baysor: cell segmentation in imaging-based spatial transcriptomics. Nature Biotechnology, 2022.",
+    ]),
+    ("数据库", [
+        "Fan et al., SpatialDB: a database for spatially resolved transcriptomes. Nucleic Acids Research, 2021.",
+        "Wang et al., CROST: a comprehensive resource of spatial transcriptomics. Nucleic Acids Research, 2024.",
+        "SOuND: Spatial Omics UNderstanding Database. Nucleic Acids Research, 2025.",
+        "Han et al., TISCH2: Tumor Immune Single-cell Hub 2. Nucleic Acids Research, 2023.",
+    ]),
+    ("本课题组", [
+        "Yang, Chen, Li, Zeng. Dissection of context-dependent RNA colocalization landscapes from subcellular spatial transcriptomics data. Research Square (preprint), 2025. doi:10.21203/rs.3.rs-7463836/v1",
+    ]),
+]
+
+y = Inches(1.3)
+for section, items in refs:
+    rect(s, Inches(0.5), y, Inches(12.3), Inches(0.4), BLUE)
+    txt(s, Inches(0.7), y+Inches(0.03), Inches(11.8), Inches(0.35),
+        section, size=16, color=WHITE, bold=True)
+    y += Inches(0.5)
+    for item in items:
+        txt(s, Inches(0.7), y, Inches(11.8), Inches(0.32),
+            f"•  {item}", size=11, color=BLACK)
+        y += Inches(0.34)
+    y += Inches(0.15)
+
+
+# ═══ SLIDE 12: 致谢 ═══════════════════════════════════════════
+
+s = new_slide(); set_bg(s)
+header(s, "致谢 Acknowledgements")
+
+# 左侧: 文字
+rect(s, Inches(0.5), Inches(1.4), Inches(6.0), Inches(5.3), LGRAY)
+rect(s, Inches(0.5), Inches(1.4), Inches(0.08), Inches(5.3), BLUE)
+thanks = [
+    ("课题组", "杨雪瑞实验室（Yang Lab）"),
+    ("指导", "博士生 陈旭 · 博士后 李润泽"),
+    ("协作", "博士生 曾圆袁"),
+    ("项目来源", "清华学堂生命科学实验班 · 科研训练课程"),
+]
+for i, (label, detail) in enumerate(thanks):
+    y = Inches(1.7) + Inches(0.9) * i
+    txt(s, Inches(0.8), y, Inches(5.5), Inches(0.35),
+        label, size=14, color=GRAY)
+    txt(s, Inches(0.8), y+Inches(0.3), Inches(5.5), Inches(0.4),
+        detail, size=18, color=BLACK, bold=True)
+
+rect(s, Inches(0.5), Inches(5.2), Inches(6.0), Inches(0.06), TEAL)
+txt(s, Inches(0.5), Inches(5.5), Inches(6.0), Inches(0.8),
+    "Thanks for listening! 🙏", size=28, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+
+# 右侧: 合照占位 (用户自行添加)
+rect(s, Inches(6.8), Inches(1.4), Inches(6.0), Inches(5.3), LGRAY, MID)
+txt(s, Inches(6.8), Inches(3.5), Inches(6.0), Inches(0.8),
+    "[ 合照 ]\n请插入实验室合照", size=18, color=GRAY, align=PP_ALIGN.CENTER)
 
 
 # ═══ Save ═════════════════════════════════════════════════════

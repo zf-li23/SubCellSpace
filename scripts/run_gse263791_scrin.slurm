@@ -4,7 +4,8 @@
 #SBATCH --error=/Share/home/yangxr002/zf-li23/subcellspace/logs/gse263791_scrin_%j.err
 #SBATCH --time=48:00:00
 #SBATCH --partition=Yangxrlab
-#SBATCH --cpus-per-task=16
+#SBATCH --ntasks=2
+#SBATCH --cpus-per-task=8
 
 # SubCellSpace 完整流程 — GSE263791 AD 小鼠脑 + SCRIN
 # 提交: sbatch scripts/run_gse263791_scrin.slurm
@@ -17,12 +18,12 @@ echo "=== GSE263791 Full Pipeline + SCRIN ==="
 echo "Start: $(date)"
 echo "Host: $(hostname)"
 echo "Data: $DATADIR"
+echo "SLURM_NTASKS=$SLURM_NTASKS SLURM_CPUS_PER_TASK=$SLURM_CPUS_PER_TASK"
 
-$PY -c "
+srun --ntasks=1 --cpus-per-task=$SLURM_CPUS_PER_TASK $PY -c "
 import sys; sys.path.insert(0,'.')
 from src.cli import build_parser, _cmd_run
 p = build_parser()
-# Full pipeline with SCRIN
 args = p.parse_args(['run', '${DATADIR}',
     '--segmentation-backend', 'fov_cell_id',
     '--spatial-analysis-backend', 'none',
