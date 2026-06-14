@@ -1,104 +1,17 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import AdaptiveScatterPlot from '../components/AdaptiveScatterPlot'
-import LoadingSkeleton from '../components/LoadingSkeleton'
-import CellDetailPanel from '../components/CellDetailPanel'
-import DonutChart from '../components/DonutChart'
-import {
-  type BackendConfig,
-} from '../api'
-import { useRuns, useRunReport, useRunPlots } from '../hooks/useQueries'
 
-function fmtNum(n: number | undefined): string {
+function fmtNum(n: number | null | undefined): string {
   if (n == null) return '—'
   if (n >= 1_000_000) return (n/1_000_000).toFixed(1)+'M'
   if (n >= 1_000) return (n/1_000).toFixed(1)+'K'
   return String(n)
 }
 
-function fmtPct(v: number | undefined): string {
-  if (v == null) return '—'
-  return (v * 100).toFixed(1) + '%'
-}
-
-function ElapsedBadge({ seconds }: { seconds: number }) {
-  if (seconds < 1) return <span className="elapsed-badge elapsed-fast">{seconds.toFixed(2)}s</span>
-  if (seconds < 10) return <span className="elapsed-badge">{seconds.toFixed(2)}s</span>
-  return <span className="elapsed-badge elapsed-slow">{(seconds/60).toFixed(1)}min</span>
-}
-
-// ── Step metric helpers ──────────────────────────────────────────────
-
-type StepInfo = {
-  label: string; backend: string; metrics: Array<{ label: string; value: string }>; elapsed?: number
-}
-
-function extractSteps(ss: Record<string, Record<string, unknown>> | undefined): StepInfo[] {
-  if (!ss) return []
-  const order = ['denoise','patchify','segmentation','spatial_domain','subcellular_spatial_domain','analysis','annotation','spatial_analysis','subcellular_analysis']
-  const labels: Record<string, string> = {
-    denoise:'Denoise', patchify:'Patchify', segmentation:'Segmentation',
-    spatial_domain:'Spatial Domain', subcellular_spatial_domain:'Subcellular Domain',
-    analysis:'Clustering', annotation:'Annotation',
-    spatial_analysis:'Spatial Analysis', subcellular_analysis:'Subcellular Analysis',
-  }
-  const result: StepInfo[] = []
-  for (const key of order) {
-    const step = ss[key]
-    if (!step) continue
-    const backend = Object.entries(step).find(([k]) => k.endsWith('_backend') || k.endsWith('_backend_used'))?.[1] as string | undefined
-    const elapsed = step.__elapsed_seconds__ as number | undefined
-    // Skip trivial steps
-    if (backend === 'none' && step.skipped) continue
-
-    const metrics: Array<{ label: string; value: string }> = []
-    for (const [k, v] of Object.entries(step)) {
-      if (k.startsWith('__') || k.endsWith('_backend') || k.endsWith('_backend_used') || k.endsWith('_backend_requested') || k === 'skipped' || k.endsWith('_distribution')) continue
-      if (typeof v === 'number') metrics.push({ label: k.replace(/_/g, ' '), value: fmtNum(v) })
-      else if (typeof v === 'string') metrics.push({ label: k.replace(/_/g, ' '), value: v })
-    }
-    result.push({ label: labels[key] ?? key, backend: backend ?? '—', metrics, elapsed })
-  }
-  return result
-}
-
-// ── Layer evaluation helpers ─────────────────────────────────────────
-
-type LayerMetric = { key: string; label: string; value: string }
-function extractLayerMetrics(le: Record<string, Record<string, unknown>> | undefined): Array<{ layer: string; metrics: LayerMetric[] }> {
-  if (!le) return []
-  const order = ['ingestion','denoise','segmentation','expression','clustering','annotation','spatial_domain','subcellular_spatial_domain','spatial']
-  const labels: Record<string, string> = {
-    ingestion:'Ingestion', denoise:'Denoise', segmentation:'Segmentation',
-    expression:'Expression', clustering:'Clustering', annotation:'Annotation',
-    spatial_domain:'Spatial Domain', subcellular_spatial_domain:'Subcellular Domain', spatial:'Spatial Graph',
-  }
-  const result: Array<{ layer: string; metrics: LayerMetric[] }> = []
-  for (const key of order) {
-    const layer = le[key]
-    if (!layer) continue
-    const metrics: LayerMetric[] = []
-    for (const [k, v] of Object.entries(layer)) {
-      if (k.endsWith('_distribution') || k === 'cellcomp_distribution' || k === 'cellcomp_distribution_after') continue
-      if (typeof v === 'number') metrics.push({ key: k, label: k.replace(/_/g, ' '), value: k.includes('ratio') || k.includes('fraction') ? fmtPct(v) : fmtNum(v) })
-      else if (typeof v === 'string') metrics.push({ key: k, label: k.replace(/_/g, ' '), value: v })
-    }
-    result.push({ layer: labels[key] ?? key, metrics })
-  }
-  return result
-}
-
-// ── Main Component ────────────────────────────────────────────────────
-
 export default function ReportPage() {
-  const { runName: urlRunName, gseId } = useParams<{ runName?: string; gseId?: string }>()
+  const { gseId } = useParams<{ gseId?: string }>()
   const navigate = useNavigate()
 
-  const { data: allRuns = [] } = useRuns()
-  const [selectedRun, setSelectedRun] = useState<string | null>(urlRunName ?? null)
-  const effectiveRun = selectedRun ?? allRuns[0]?.run_name ?? null
-
-  // ── GSE 搜索 ──
   const [gseSearch, setGseSearch] = useState(gseId ?? '')
   const [gseData, setGseData] = useState<any>(null)
   const [gseLoading, setGseLoading] = useState(false)
@@ -107,262 +20,75 @@ export default function ReportPage() {
   const handleGseSearch = async () => {
     const q = gseSearch.trim()
     if (!q) return
-    setGseLoading(true); setGseError(null)
+    setGseLoading(true); setGseError(null); setGseData(null)
     try {
       const r = await fetch(`/api/dataset?gse=${encodeURIComponent(q)}`)
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      if (!r.ok) throw new Error(`HTTP ${r.status} — not found`)
       const j = await r.json()
       setGseData(j)
+      navigate(`/report/${encodeURIComponent(q)}`, { replace: true })
     } catch (e: any) {
       setGseError(e.message ?? 'Failed to load dataset')
-      setGseData(null)
     }
     setGseLoading(false)
   }
 
-  const { data: report, isLoading: reportLoading, error: reportError } = useRunReport(effectiveRun)
-  const { data: plots } = useRunPlots(effectiveRun)
-  const [selectedCellId, setSelectedCellId] = useState<string | null>(null)
-
-  const ss = report?.step_summary as Record<string, Record<string, unknown>> | undefined
-  const le = report?.layer_evaluation as Record<string, Record<string, unknown>> | undefined
-  const summary = report?.summary as Record<string, unknown> | undefined
-
-  const steps = extractSteps(ss)
-  const layerMetrics = extractLayerMetrics(le)
-
-  const handleSelectRun = (name: string) => {
-    setSelectedRun(name)
-    navigate(`/report/${encodeURIComponent(name)}`, { replace: true })
-  }
-
   return (
     <div className="container">
-      {/* GSE 搜索 */}
-      <section className="card report-control-bar" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <div className="eyebrow">Dataset Search</div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input type="text" value={gseSearch} onChange={e => setGseSearch(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleGseSearch()}
-                placeholder="GSE ID or sample name..."
-                style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(22,50,63,0.15)', fontSize: 14, width: 260 }} />
-              <button className="btn" onClick={handleGseSearch} disabled={gseLoading}>🔍 Search</button>
-            </div>
-            {gseLoading && <small style={{ color: '#888' }}>Loading...</small>}
-            {gseError && <small style={{ color: '#e74c3c' }}>{gseError}</small>}
-            {gseData && <small style={{ color: '#27ae60' }}>Found: {gseData.GSE}/{gseData.sample_name}</small>}
-          </div>
-          <div style={{ flex: 1 }} />
-          <div>
-            <div className="eyebrow">Pipeline Run</div>
-            <select value={effectiveRun ?? ''} onChange={(e) => handleSelectRun(e.target.value)}
-              style={{ fontSize: 18, fontWeight: 600, padding: '4px 8px', border: '1px solid var(--border-color,#ddd)', borderRadius: 6 }}>
-              {allRuns.map(r => r.run_name).map(name => <option key={name} value={name}>{name}</option>)}
-              {allRuns.length === 0 && <option value="">No runs</option>}
-            </select>
-          </div>
+      <section className="card" style={{ padding: '16px 24px', marginBottom: 16 }}>
+        <div className="eyebrow">Dataset Search</div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <input type="text" value={gseSearch} onChange={e => setGseSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleGseSearch()}
+            placeholder="GSE ID or sample name..."
+            style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(22,50,63,0.15)', fontSize: 14, width: 320 }} />
+          <button className="btn" onClick={handleGseSearch} disabled={gseLoading}>🔍 Search</button>
         </div>
+        {gseLoading && <small style={{ color: '#888' }}>Loading...</small>}
+        {gseError && <small style={{ color: '#e74c3c' }}>{gseError}</small>}
       </section>
 
       {gseData && (
-        <section className="card" style={{ marginTop: 16, padding: '12px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <span><strong>GSE:</strong> {gseData.GSE}</span>
-            <span><strong>Sample:</strong> {gseData.sample_name || gseData.GSM}</span>
-            <span><strong>Platform:</strong> {gseData.platform || gseData.Platform}</span>
-            <span><strong>Status:</strong> {gseData.status}</span>
-            {gseData.tissue && <span><strong>Tissue:</strong> {gseData.tissue}</span>}
-            {gseData.disease_state && <span><strong>Disease:</strong> {gseData.disease_state}</span>}
-            {gseData.n_cells && <span><strong>Cells:</strong> {fmtNum(gseData.n_cells)}</span>}
-            {gseData.n_transcripts && <span><strong>Transcripts:</strong> {fmtNum(gseData.n_transcripts)}</span>}
+        <section className="card" style={{ padding: '20px 24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.3rem' }}>{gseData.name || gseData.GSE}</h2>
+              <p style={{ margin: '4px 0 0', color: 'var(--text-secondary,#666)', fontSize: 13 }}>
+                {gseData.GSE} / {gseData.sample_name || gseData.GSM}
+              </p>
+            </div>
+            <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${gseData.GSE}`}
+              target="_blank" rel="noopener noreferrer" className="pubmed-btn">
+              View on GEO ↗
+            </a>
           </div>
+          <div className="detail-grid">
+            {Object.entries(gseData).filter(([k]) => !['file_names','summary'].includes(k)).map(([k, v]) => (
+              <div key={k} className="detail-item">
+                <span className="detail-label">{k.replace(/_/g, ' ')}</span>
+                <span className="detail-value">
+                  {['GSE','GSM','sample_name'].includes(k)
+                    ? <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${v}`} target="_blank" rel="noopener noreferrer" className="url-link">{String(v)}</a>
+                    : typeof v === 'number' ? fmtNum(v) : String(v)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {gseData.summary && (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border,#e2e8f0)' }}>
+              <strong style={{ fontSize: 13, color: '#666' }}>Summary</strong>
+              <p style={{ fontSize: 14, lineHeight: 1.6, marginTop: 6 }}>{gseData.summary}</p>
+            </div>
+          )}
         </section>
       )}
-      {reportLoading && <LoadingSkeleton />}
-      {reportError && <div className="alert alert-error">Failed to load report. Network error.</div>}
 
-      {report && (
-        <>
-          {/* Summary metrics */}
-          <section className="metrics-grid" style={{ marginTop: 16 }}>
-            <div className="metric-tile"><span>Cells</span><strong>{fmtNum(report.n_obs)}</strong></div>
-            <div className="metric-tile"><span>Genes</span><strong>{fmtNum(report.n_vars)}</strong></div>
-            <div className="metric-tile"><span>Clusters</span><strong>{report.clusters ? Object.keys(report.clusters).length : '—'}</strong></div>
-            <div className="metric-tile"><span>Transcripts</span><strong>{fmtNum(summary?.n_transcripts as number)}</strong></div>
-            <div className="metric-tile"><span>FOVs</span><strong>{fmtNum(summary?.n_fovs as number)}</strong></div>
-            <div className="metric-tile"><span>Platform</span><strong>{summary?.platform as string ?? report.pipeline_name ?? '—'}</strong></div>
-          </section>
-
-          {/* Pipeline Steps */}
-          <section className="card" style={{ marginTop: 16 }}>
-            <h3>Pipeline Steps</h3>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead><tr><th>Step</th><th>Backend</th><th>Key Metrics</th><th style={{textAlign:'right'}}>Time</th></tr></thead>
-                <tbody>
-                  {steps.map((step) => (
-                    <tr key={step.label}>
-                      <td style={{fontWeight:600}}>{step.label}</td>
-                      <td><code className="backend-code">{step.backend}</code></td>
-                      <td className="step-metrics-cell">
-                        {step.metrics.slice(0, 3).map((m, i) => (
-                          <span key={i} className="step-metric-chip"><em>{m.label}</em> {m.value}</span>
-                        ))}
-                      </td>
-                      <td style={{textAlign:'right'}}>
-                        {step.elapsed != null ? <ElapsedBadge seconds={step.elapsed} /> : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Cluster + Annotation side by side */}
-          <div className="two-column-grid" style={{ marginTop: 16 }}>
-            {report.clusters && Object.keys(report.clusters).length > 0 && (
-              <section className="card">
-                <h3>Cluster Distribution</h3>
-                <div className="cluster-donut-section">
-                  <DonutChart
-                    data={Object.entries(report.clusters).map(([k, v]) => ({ label: `C${k}`, count: v as number }))}
-                    maxSlices={8}
-                    size={200}
-                    title={`${Object.keys(report.clusters).length} clusters`}
-                  />
-                </div>
-              </section>
-            )}
-            {ss?.annotation?.cell_type_distribution && (
-              <section className="card">
-                <h3>Cell Type Annotation</h3>
-                <div className="cluster-donut-section">
-                  <DonutChart
-                    data={Object.entries(ss.annotation.cell_type_distribution as Record<string,number>)
-                      .map(([k, v]) => ({ label: k.replace('CT_',''), count: v }))}
-                    maxSlices={8}
-                    size={200}
-                    title={`${ss.annotation.n_cell_types ?? '?'} types`}
-                  />
-                </div>
-              </section>
-            )}
-          </div>
-
-          {/* Layer evaluation — compact table */}
-          {layerMetrics.length > 0 && (
-            <section className="card" style={{ marginTop: 16 }}>
-              <h3>Layer Evaluation</h3>
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead><tr><th>Layer</th><th>Metric</th><th>Value</th></tr></thead>
-                  <tbody>
-                    {layerMetrics.map(({ layer, metrics }) =>
-                      metrics.map((m, i) => (
-                        <tr key={`${layer}-${m.key}`}>
-                          {i === 0 && <td rowSpan={metrics.length} style={{fontWeight:600,verticalAlign:'top'}}>{layer}</td>}
-                          <td>{m.label}</td>
-                          <td style={{fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{m.value}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {/* Plots */}
-          <section className="card" style={{ marginTop: 16 }}>
-            <h3>Visualization</h3>
-            {plots?.points ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                {plots.points.spatial && (
-                  <div>
-                    <h4 style={{ marginBottom: 8 }}>Spatial (colored by domain)</h4>
-                    <AdaptiveScatterPlot
-                      series={plots.points.spatial as any}
-                      onCellClick={(id) => setSelectedCellId(id)}
-                    />
-                  </div>
-                )}
-                {plots.points.umap && (
-                  <div>
-                    <h4 style={{ marginBottom: 8 }}>UMAP (colored by cluster)</h4>
-                    <AdaptiveScatterPlot
-                      series={plots.points.umap as any}
-                      onCellClick={(id) => setSelectedCellId(id)}
-                    />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="empty-state">No plot data available for this run.</div>
-            )}
-          </section>
-
-          {/* Spatial analysis details */}
-          {ss?.spatial_analysis && (
-            <section className="card" style={{ marginTop: 16 }}>
-              <h3>Spatial Analysis Details</h3>
-              <div className="detail-meta-grid">
-                {Object.entries(ss.spatial_analysis as Record<string,unknown>)
-                  .filter(([k]) => !k.startsWith('__') && !k.endsWith('_backend') && !k.endsWith('_backend_used') && !k.endsWith('_backend_requested'))
-                  .map(([k, v]) => (
-                    <MetaItem key={k} label={k.replace(/_/g, ' ')} value={typeof v === 'number' ? fmtNum(v) : String(v)} />
-                  ))}
-              </div>
-            </section>
-          )}
-
-          {/* Subcellular analysis details */}
-          {ss?.subcellular_analysis && (
-            <section className="card" style={{ marginTop: 16 }}>
-              <h3>Subcellular Analysis</h3>
-              <div className="detail-meta-grid">
-                {Object.entries(ss.subcellular_analysis as Record<string,unknown>)
-                  .filter(([k]) => !k.startsWith('__') && !k.endsWith('_backend'))
-                  .map(([k, v]) => {
-                    // Use fmtNum for counts/integers, only use fmtPct for ratio/metrics ending in _ratio/_fraction
-                    const isPct = typeof k === 'string' && (k.endsWith('_ratio') || k.endsWith('_fraction') || k.endsWith('_pct'))
-                    return <MetaItem key={k} label={k.replace(/_/g, ' ')} value={typeof v === 'number' ? (isPct ? fmtPct(v) : fmtNum(v)) : String(v)} />
-                  })}
-              </div>
-            </section>
-          )}
-
-          {/* Outputs */}
-          {report.outputs && (
-            <section className="card" style={{ marginTop: 16 }}>
-              <h3>Output Files</h3>
-              <div style={{ fontSize: 12, color: '#4c6774', lineHeight: 1.8 }}>
-                <div>📁 h5ad: <code>{report.outputs.adata ?? '—'}</code></div>
-                <div>📄 Report JSON: <code>{report.outputs.report ?? '—'}</code></div>
-                <div>📊 Transcripts: <code>{report.outputs.transcripts ?? '—'}</code></div>
-              </div>
-            </section>
-          )}
-        </>
-      )}
-
-      {!reportLoading && !reportError && !report && effectiveRun && (
-        <div className="empty-state">Select a run to view its report.</div>
-      )}
-
-      {!effectiveRun && (
-        <div className="empty-state">No pipeline runs found. Run <code>subcellspace ingest ... && subcellspace run ...</code> first.</div>
-      )}
-
-      {selectedCellId && effectiveRun && (
-        <CellDetailPanel cellId={selectedCellId} runName={effectiveRun} onClose={() => setSelectedCellId(null)} />
+      {!gseData && !gseLoading && !gseError && (
+        <div className="empty-state">
+          <p>Enter a GSE ID or sample name to view dataset details.</p>
+          <p className="empty-hint">Examples: GSE263791, GSM9046089</p>
+        </div>
       )}
     </div>
   )
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return <div className="meta-item"><span className="meta-label">{label}</span><span className="meta-value">{value}</span></div>
 }
