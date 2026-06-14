@@ -95,17 +95,17 @@ def header(slide, title, sub=None):
 s = new_slide(); set_bg(s)
 rect(s, 0, 0, W, Inches(4.5), NAVY)
 rect(s, 0, Inches(4.5), W, Inches(0.06), TEAL)
-txt(s, Inches(0.8), Inches(0.8), Inches(11), Inches(1.0), "SubCellSpace", size=44, color=WHITE, bold=True)
-txt(s, Inches(0.8), Inches(1.6), Inches(11), Inches(0.7),
-    "scverse-native 亚细胞空间转录组学分析平台", size=24, color=MID)
-txt(s, Inches(0.8), Inches(2.5), Inches(11), Inches(0.5),
-    "支持 CosMx / Xenium / MERFISH · 统一 6 步分析流程", size=16, color=RGBColor(0x88,0xBB,0xDD))
-txt(s, Inches(0.8), Inches(5.0), Inches(11), Inches(0.5),
-    "李哲夫 · 清华大学 生命科学学院", size=20, color=BLUE, bold=True)
-txt(s, Inches(0.8), Inches(5.6), Inches(11), Inches(0.4),
-    "github.com/zf-li23/SubCellSpace", size=14, color=GRAY)
-txt(s, Inches(0.8), Inches(6.2), Inches(11), Inches(0.4),
-    "2026 年 6 月", size=14, color=GRAY)
+txt(s, Inches(0.8), Inches(0.6), Inches(11), Inches(1.2), "SubCellSpace", size=56, color=WHITE, bold=True)
+txt(s, Inches(0.8), Inches(1.7), Inches(11), Inches(0.8),
+    "scverse-native 亚细胞空间转录组学分析平台", size=28, color=MID)
+txt(s, Inches(0.8), Inches(2.7), Inches(11), Inches(0.6),
+    "支持 CosMx / Xenium / MERFISH · 统一 6 步分析流程", size=18, color=RGBColor(0x88,0xBB,0xDD))
+txt(s, Inches(0.8), Inches(5.0), Inches(11), Inches(0.6),
+    "李哲夫 · 清华大学 生命科学学院", size=24, color=BLUE, bold=True)
+txt(s, Inches(0.8), Inches(5.7), Inches(11), Inches(0.5),
+    "github.com/zf-li23/SubCellSpace", size=16, color=GRAY)
+txt(s, Inches(0.8), Inches(6.3), Inches(11), Inches(0.4),
+    "2026 年 6 月", size=16, color=GRAY)
 
 
 # ═══ SLIDE 2: Agenda ══════════════════════════════════════════
@@ -113,9 +113,9 @@ txt(s, Inches(0.8), Inches(6.2), Inches(11), Inches(0.4),
 s = new_slide(); set_bg(s)
 header(s, "汇报提纲")
 items = [
-    ("01", "项目背景与动机"), ("02", "平台架构与 Pipeline"),
-    ("03", "数据库建设成果"), ("04", "数据质量与生物学覆盖"),
-    ("05", "案例验证"), ("06", "总结与展望"),
+    ("1", "项目背景与动机"), ("2", "平台架构与 Pipeline"),
+    ("3", "数据库建设成果"), ("4", "数据质量与生物学覆盖"),
+    ("5", "案例验证"), ("6", "总结与展望"),
 ]
 for i, (num, label) in enumerate(items):
     y = Inches(1.5) + Inches(0.9) * i
