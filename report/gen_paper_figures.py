@@ -640,68 +640,91 @@ def fig4():
     fig.savefig(OUT / 'small' / 'fig4_pipeline.png', dpi=300)
     plt.close(fig)
 
-    # ── 大图: Pipeline + per-step backend 矩阵 ──────────────────
-    fig = plt.figure(figsize=(18, 8))
-    gs = fig.add_gridspec(1, 2, wspace=0.15, width_ratios=[1, 1.5])
+    # ── 大图: 完整复刻海报 fig1_platform_pipeline ───────────────
+    fig, ax = plt.subplots(figsize=(16, 10))
+    ax.set_xlim(0, 16); ax.set_ylim(0, 10)
+    ax.axis('off')
 
-    # 左: Pipeline
-    ax_l = fig.add_subplot(gs[0, 0])
-    ax_l.set_xlim(0, 8); ax_l.set_ylim(0, 8)
-    ax_l.axis('off')
-    step_details = [
-        ('Denoise',     'basic / sparc',                      C['cosmx']),
-        ('Patchify',    'grid / hex',                         C['xenium']),
-        ('Segment',     'fov_cell_id\ncellpose / baysor',     C['ready']),
-        ('Spatial\nDomain', 'spatial_leiden\nkmeans',         C['pending']),
-        ('Annotation',  'celltypist\nscrin',                  C['error']),
-        ('Spatial\nAnalysis', "Moran's I\nGeary's C",        '#1abc9c'),
-        ('Subcellular', 'scrin\nhdbscan / phenograph',        '#8e44ad'),
+    BOX_W, GAP, OFF = 1.8, 0.3, 0.55
+    DIV1 = OFF + 2*2.1 + BOX_W + GAP/2
+    DIV2 = OFF + 4*2.1 + BOX_W + GAP/2
+
+    # ── 上段: 平台搭建 Pipeline ────────────────────────────────
+    phases = [
+        (0, DIV1, 'Data Acquisition', '#e8f4f8', '#2980b9'),
+        (DIV1, DIV2, 'Data Processing', '#fef9e7', '#f39c12'),
+        (DIV2, 16, 'Output & Analysis', '#eafaf1', '#27ae60'),
     ]
-    for i, (name, desc, color) in enumerate(step_details):
-        y = 7.3 - i * 1.0
-        rect = plt.Rectangle((0.5, y-0.35), 3.0, 0.7, facecolor=color, alpha=0.15,
-                             edgecolor=color, lw=2, zorder=2)
-        ax_l.add_patch(rect)
-        ax_l.text(2.0, y+0.05, name, ha='center', va='center', fontsize=12, fontweight='bold', color=color)
-        ax_l.text(2.0, y-0.2, desc, ha='center', va='center', fontsize=8, color='#555')
-        if i < len(step_details)-1:
-            ax_l.annotate('', xy=(2.0, y-0.45), xytext=(2.0, y+0.35),
-                         arrowprops=dict(arrowstyle='->', color='#ccc', lw=1.5))
-    ax_l.set_title('A  7-Step Pipeline', fontsize=14, fontweight='bold', loc='left')
+    for x0, x1, label, bg, edge in phases:
+        rect = plt.Rectangle((x0, 5.15), x1-x0, 4.5,
+                             facecolor=bg, edgecolor=edge, linewidth=2, alpha=0.5, zorder=0)
+        ax.add_patch(rect)
+        ax.text((x0+x1)/2, 9.4, label, ha='center', va='top', fontsize=13,
+                fontweight='bold', color=edge, style='italic')
 
-    # 右: Backend 支持表
-    ax_r = fig.add_subplot(gs[0, 1])
-    ax_r.axis('off')
-    table_data = []
-    row_labels = []
-    for name, backends, color in capabilities:
-        row_labels.append(name)
-        table_data.append([b.replace('_',' ').title() for b in backends])
-    col_labels = ['CosMx', 'Xenium', 'MERFISH']
-    # Build per-platform backend list
-    plat_backends = {p: [] for p in PLATFORMS}
-    for p in PLATFORMS:
-        plat_backends[p] = ['✓' if 'sparc' in ['basic','sparc'] else '—', '✓', '✓']
+    steps_upper = [
+        ('1', 'GEO\nDownload', 'NCBI GEO\n→ Cluster', '#2980b9'),
+        ('2', 'GEO\nMetadata', 'E-utilities\nGSM Expansion', '#3498db'),
+        ('3', 'LLM\nAnnotation', 'DeepSeek API\nTissue / Disease', '#5dade2'),
+        ('4', 'Touch\nIntegrity', 'File Scan\nNormalize', '#f39c12'),
+        ('5', 'Stats\nStreaming', 'Zero-I/O\nCounts → CSV', '#e67e22'),
+        ('6', 'Frontend\nBrowser', 'React Static\n3 Platform Tabs', '#27ae60'),
+        ('7', 'HTML\nReport', 'Publication\nFigures + PPTX', '#1abc9c'),
+    ]
 
-    # Actually let's do a simple table
-    table_data2 = []
-    for name, backends, _ in capabilities:
-        row = [name, ', '.join(backends)]
-        table_data2.append(row)
+    for i, (num, title, desc, color) in enumerate(steps_upper):
+        x = i * 2.1 + OFF
+        rect = plt.Rectangle((x, 5.7), BOX_W, 2.6, facecolor=color, alpha=0.10,
+                             edgecolor=color, linewidth=2.5, zorder=2)
+        ax.add_patch(rect)
+        ax.text(x + BOX_W/2, 7.9, num, ha='center', va='center', fontsize=16,
+                fontweight='bold', color='white',
+                bbox=dict(boxstyle='circle', facecolor=color, edgecolor='white',
+                          linewidth=1.5, pad=0.2))
+        ax.text(x + BOX_W/2, 7.05, title, ha='center', va='center', fontsize=11,
+                fontweight='bold', color=color)
+        ax.text(x + BOX_W/2, 6.15, desc, ha='center', va='center', fontsize=8,
+                color='#555')
+        if i < len(steps_upper) - 1:
+            ax.annotate('', xy=(x + BOX_W + GAP*0.85, 7.0),
+                        xytext=(x + BOX_W + GAP*0.15, 7.0),
+                        arrowprops=dict(arrowstyle='simple', color='#999', lw=0, mutation_scale=16))
 
-    table = ax_r.table(
-        cellText=table_data2,
-        colLabels=['Step', 'Available Backends'],
-        cellLoc='left', loc='center',
-        colWidths=[0.2, 0.6])
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2.0)
-    for i, (_, _, color) in enumerate(capabilities):
-        table[i+1, 0].set_text_props(fontweight='bold', color=color)
-    ax_r.set_title('B  Backend Options', fontsize=14, fontweight='bold', loc='left')
+    # ── 分隔标题 ──
+    ax.text(8, 4.55, 'Analysis Pipeline — scverse-native 7-step workflow',
+            ha='center', va='center', fontsize=13, color='#555', style='italic',
+            fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='#f5f5f5',
+                      edgecolor='#ccc', linewidth=1))
 
-    fig.tight_layout()
+    steps_lower = [
+        ('1', 'Denoise', 'basic / sparc', '#3498db'),
+        ('2', 'Patchify', 'grid / hex', '#2ecc71'),
+        ('3', 'Segment', 'fov_cell_id\n/ cellpose', '#e67e22'),
+        ('4', 'Domain', 'spatial_leiden\n/ kmeans', '#f39c12'),
+        ('5', 'Annotate', 'celltypist', '#9b59b6'),
+        ('6', 'Spatial', "Moran's I\n/ Geary's C", '#1abc9c'),
+        ('7', 'Subcellular', 'scrin', '#e74c3c'),
+    ]
+
+    for i, (num, title, desc, color) in enumerate(steps_lower):
+        x = i * 2.1 + OFF
+        rect = plt.Rectangle((x, 0.3), BOX_W, 3.0, facecolor=color, alpha=0.12,
+                             edgecolor=color, linewidth=2.5, zorder=2)
+        ax.add_patch(rect)
+        ax.text(x + BOX_W/2, 2.6, title, ha='center', va='center', fontsize=13,
+                fontweight='bold', color=color)
+        ax.text(x + BOX_W/2, 1.5, desc, ha='center', va='center', fontsize=9,
+                color='#555')
+        ax.text(x + BOX_W/2, 3.55, str(i+1), ha='center', va='center', fontsize=17,
+                fontweight='bold', color=color,
+                bbox=dict(boxstyle='circle', facecolor='white', edgecolor=color,
+                          linewidth=2.5, pad=0.28))
+        if i < len(steps_lower) - 1:
+            ax.annotate('', xy=(x + BOX_W + GAP*0.85, 1.85),
+                        xytext=(x + BOX_W + GAP*0.15, 1.85),
+                        arrowprops=dict(arrowstyle='simple', color='#aaa', lw=0, mutation_scale=16))
+
     fig.savefig(OUT / 'big' / 'fig4_pipeline.png', dpi=300)
     plt.close(fig)
     print('  ✅ fig4 — Pipeline Capabilities')
