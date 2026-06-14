@@ -146,26 +146,43 @@ datasets.csv (legacy, non-GEO only):
 | **GEO CSV ready** | 171 | 103 | 1191 | **1465** |
 | **GEO CSV pending** | 1761 | 698 | 554 | **3013** |
 | **GEO CSV no_data** | 0 | 0 | 0 | **0** |
-| **GSEs** | 63 | 44 | 162 | **269** |
+| **GSEs (CSV)** | 63 | 44 | 162 | **269** |
+| **GSEs on disk** | 36 | 21 | 112 | **169** |
+| **Disk (GEO)** | 474 GB | 1.2 TB | 12 TB | **~14 TB** |
+| **Disk (non-GEO)** | 478 GB | 382 GB | 811 GB | **~1.6 TB** |
 
-### 4.6 Cluster Directory Layout
+### 4.6 Cluster Directory Layout & Disk Usage
+
+| Directory | Size | GSEs | Description |
+|-----------|:----:|:----:|-------------|
+| `CosMx_GEO/` | 474 GB | 36 | GEO datasets (171 ready) |
+| `Xenium_GEO/` | **12 TB** | 112 | GEO datasets (1,191 ready) — largest |
+| `MERFISH_GEO/` | 1.2 TB | 21 | GEO datasets (103 ready) |
+| `CosMx/` | 478 GB | — | Non-GEO (vendor) 8 projects |
+| `Xenium/` | 811 GB | — | Non-GEO (vendor) 6 projects |
+| `MERFISH/` | 382 GB | — | Non-GEO (vendor) 8 projects |
+| **Total** | **~15 TB** | 169 | — |
+
+**Cluster storage**: 218 TB NFS (`172.243.0.149:/data3`), 202 TB used (98% full), ~5 TB free.
 
 ```
 /data3/yangxr002/
-├── CosMx/              (8 projects, non-GEO only)
+├── CosMx/              (8 projects, non-GEO only, 478 GB)
 │   ├── P0001-D0010/    NanoString/Bruker public datasets
 │   └── P0011-D0011/    Zenodo (HGSOC)
-├── CosMx_GEO/          (63 GSEs, 171 ready samples)
+├── CosMx_GEO/          (36 GSEs, 171 ready samples, 474 GB)
 │   └── GSE*/{sample_name}/
-├── MERFISH/            (8 projects, non-GEO Vizgen)
+├── MERFISH/            (8 projects, non-GEO Vizgen, 382 GB)
 │   └── P2xxx/D2xxx/
-├── MERFISH_GEO/        (44 GSEs, sorted into GSM dirs)
+├── MERFISH_GEO/        (21 GSEs, 103 ready, 1.2 TB)
 │   └── GSE*/GSM*/
-├── Xenium/             (6 projects, non-GEO 10x Genomics)
+├── Xenium/             (6 projects, non-GEO 10x Genomics, 811 GB)
 │   └── P10xx/D10xx/
-└── Xenium_GEO/         (120 GSEs, 1195 samples)
+└── Xenium_GEO/         (112 GSEs, 1,191 ready, 12 TB)
     └── GSE*/GSM*/
 ```
+
+**Xenium_GEO top consumers**: GSE315644 (705 GB), GSE294466 (496 GB), GSE266689 (448 GB), GSE315435 (439 GB), GSE307404 (436 GB).
 
 ### 4.7 Frontend Pages
 
@@ -402,7 +419,7 @@ This ensures:
 
 ## 10. Cluster Pipeline Workflow
 
-The compute cluster (`a-cluster`, 192.168.1.2, 377 GB RAM, 20 CPUs) has **no internet access**. All Python packages must be transferred from the local machine. Data files live on `/data3/yangxr002/` (218 TB, 18T free) and do NOT need to be copied.
+The compute cluster (`a-cluster`, 192.168.1.2, 377 GB RAM, 20 CPUs) has **no internet access**. All Python packages must be transferred from the local machine. Data files live on `/data3/yangxr002/` (218 TB NFS, 202 TB used, **~5 TB free** — nearly full). Our project data is ~15 TB (see §4.6).
 
 ### Infrastructure
 
