@@ -479,9 +479,6 @@ def fig3():
     disease_counts = Counter(r.get('disease_state','').strip() for r in ready if r.get('disease_state','').strip())
     top_disease = disease_counts.most_common(12)
 
-    # Species
-    species_counts = Counter(r.get('taxon','').strip() for r in ready if r.get('taxon','').strip())
-
     # ── 小图 A: Tissue Top 12 ───────────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5.5))
     labels = [t[0][:28] for t in top_tissue]
@@ -518,17 +515,30 @@ def fig3():
     fig.savefig(OUT / 'small' / 'fig3B_disease.png', dpi=300)
     plt.close(fig)
 
-    # ── 小图 C: 物种分布 ────────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(7, 5))
-    labels = [s[0][:25] for s in species_counts.most_common(6)]
-    vals = [s[1] for s in species_counts.most_common(6)]
-    colors = plt.cm.tab10(np.linspace(0, 0.5, len(labels)))
-    wedges, texts, autotexts = ax.pie(
-        vals, labels=labels, colors=colors, autopct='%1.0f%%',
-        startangle=90, textprops={'fontsize': 10})
-    ax.set_title('Species Distribution', fontsize=14, fontweight='bold')
+    # ── 小图 C: Platform × Tissue 热图 ─────────────────────────
+    # Top 10 tissues × 3 platforms heatmap
+    top10_tissues = [t[0] for t in top_tissue[:10]]
+    pt_matrix = np.zeros((len(top10_tissues), 3))
+    for i, tissue in enumerate(top10_tissues):
+        for j, p in enumerate(PLATFORMS):
+            cnt = sum(1 for r in all_data[p] if r.get('tissue','').strip()==tissue)
+            pt_matrix[i, j] = cnt
+    fig, ax = plt.subplots(figsize=(7, 6))
+    im = ax.imshow(pt_matrix, aspect='auto', cmap='Blues')
+    for i in range(len(top10_tissues)):
+        for j in range(3):
+            v = int(pt_matrix[i, j])
+            ax.text(j, i, str(v) if v > 0 else '—', ha='center', va='center',
+                   fontsize=11, fontweight='bold' if v > 0 else 'normal',
+                   color='white' if v > pt_matrix.max()/2 else '#333')
+    ax.set_yticks(range(len(top10_tissues)))
+    ax.set_yticklabels([t[:20] for t in top10_tissues], fontsize=9)
+    ax.set_xticks(range(3))
+    ax.set_xticklabels(PLATFORMS, fontsize=11, fontweight='bold')
+    plt.colorbar(im, ax=ax, shrink=0.6, pad=0.02)
+    ax.set_title('Platform × Tissue Coverage', fontsize=13, fontweight='bold')
     fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'fig3C_species.png', dpi=300)
+    fig.savefig(OUT / 'small' / 'fig3C_platform_tissue.png', dpi=300)
     plt.close(fig)
 
     # ── 大图: 3 面板 ────────────────────────────────────────────
@@ -564,13 +574,26 @@ def fig3():
     ax_b.set_title('B  Disease States', fontsize=14, fontweight='bold', loc='left')
 
     ax_c = fig.add_subplot(gs[0, 2])
-    labels = [s[0][:25] for s in species_counts.most_common(6)]
-    vals = [s[1] for s in species_counts.most_common(6)]
-    colors = plt.cm.tab10(np.linspace(0, 0.5, len(labels)))
-    wedges, texts, autotexts = ax_c.pie(
-        vals, labels=labels, colors=colors, autopct='%1.0f%%',
-        startangle=90, textprops={'fontsize': 10})
-    ax_c.set_title('C  Species', fontsize=14, fontweight='bold', loc='left')
+    # Platform × Tissue heatmap
+    top10_tissues = [t[0] for t in top_tissue[:10]]
+    pt_matrix = np.zeros((len(top10_tissues), 3))
+    for i, tissue in enumerate(top10_tissues):
+        for j, p in enumerate(PLATFORMS):
+            cnt = sum(1 for r in all_data[p] if r.get('tissue','').strip()==tissue)
+            pt_matrix[i, j] = cnt
+    im = ax_c.imshow(pt_matrix, aspect='auto', cmap='Blues')
+    for i in range(len(top10_tissues)):
+        for j in range(3):
+            v = int(pt_matrix[i, j])
+            ax_c.text(j, i, str(v) if v > 0 else '—', ha='center', va='center',
+                     fontsize=10, fontweight='bold' if v > 0 else 'normal',
+                     color='white' if v > pt_matrix.max()/2 else '#333')
+    ax_c.set_yticks(range(len(top10_tissues)))
+    ax_c.set_yticklabels([t[:18] for t in top10_tissues], fontsize=8)
+    ax_c.set_xticks(range(3))
+    ax_c.set_xticklabels(PLATFORMS, fontsize=10, fontweight='bold')
+    plt.colorbar(im, ax=ax_c, shrink=0.6, pad=0.02)
+    ax_c.set_title('C  Platform × Tissue', fontsize=13, fontweight='bold', loc='left')
 
     fig.tight_layout()
     fig.savefig(OUT / 'big' / 'fig3_biological_coverage.png', dpi=300)
