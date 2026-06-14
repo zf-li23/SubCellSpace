@@ -1246,6 +1246,133 @@ select {
 	color: #16323f;
 }
 
+/* ===== DataBrowser: Detail Page (full page, not modal) ===== */
+.detail-page {
+  padding: 0;
+}
+
+.detail-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.detail-topbar-links {
+  display: flex;
+  gap: 8px;
+}
+
+.back-btn {
+  background: transparent;
+  border: 1px solid var(--btn-border, rgba(22,50,63,0.15));
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-primary, #16323f);
+  transition: background 0.15s;
+}
+
+.back-btn:hover {
+  background: var(--table-hover, rgba(11,76,110,0.08));
+}
+
+.pubmed-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  background: var(--btn-bg, #0b4c6e);
+  color: var(--btn-text, white);
+  transition: opacity 0.15s;
+}
+
+.pubmed-btn:hover {
+  opacity: 0.85;
+}
+
+.detail-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--text-primary, #16323f);
+  line-height: 1.3;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 2px 20px;
+  margin-top: 16px;
+  background: var(--card-bg, rgba(255,255,255,0.88));
+  border: 1px solid var(--table-border, rgba(22,50,63,0.08));
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--table-border, rgba(22,50,63,0.05));
+}
+
+.detail-item:nth-last-child(-n+2) {
+  border-bottom: none;
+}
+
+.detail-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #5c7886);
+  font-weight: 600;
+}
+
+.detail-value {
+  font-size: 14px;
+  color: var(--text-primary, #16323f);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Status badge in detail */
+.detail-value .status-badge {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status-badge-ready {
+  background: rgba(31, 138, 112, 0.14);
+  color: #1a7a62;
+}
+
+.status-badge-pending {
+  background: rgba(200, 160, 40, 0.16);
+  color: #8f7518;
+}
+
+.status-badge-error {
+  background: rgba(200, 60, 50, 0.12);
+  color: #a8322a;
+}
+
+/* Numeric value styling */
+.detail-value-num {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ===== DataBrowser: Filters ===== */
 .filter-card {
 	margin-bottom: 16px;

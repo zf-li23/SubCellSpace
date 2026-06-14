@@ -21,9 +21,36 @@ function getCellValue(row: GeoRow, colName: string): string {
   return String(val)
 }
 
-const PAGE_SIZES = [25, 50, 100, 0]
-
 // ── Row Detail View ─────────────────────────────────────────────
+
+function renderDetailValue(row: GeoRow, colName: string): React.ReactNode {
+  const raw = (row as Record<string, unknown>)[colName]
+  if (raw === null || raw === undefined) return <span className="detail-value-null">—</span>
+
+  // Status badges
+  if (colName === 'status' && typeof raw === 'string') {
+    const cls = raw === 'ready' ? 'status-badge-ready'
+      : raw === 'pending' ? 'status-badge-pending'
+      : raw === 'error' ? 'status-badge-error' : ''
+    return <span className={`status-badge ${cls}`}>{raw}</span>
+  }
+
+  // Numeric columns → formatted number
+  const numCols = ['n_transcripts','n_cells','n_genes','n_fovs','gene_panel_size',
+    'median_transcripts','median_genes','data_size']
+  if (typeof raw === 'number' || (typeof raw === 'string' && /^\d+(\.\d+)?$/.test(raw) && numCols.includes(colName))) {
+    const n = typeof raw === 'number' ? raw : Number(raw)
+    return <span className="detail-value-num">{fmtNum(n)}</span>
+  }
+
+  const s = String(raw)
+  // Links for GSE/GSM (plain text, not clickable — user wants text only)
+  if (colName === 'GSE' || colName === 'sample_name') {
+    return <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{s}</span>
+  }
+
+  return <span>{s}</span>
+}
 
 function RowDetailView({ row, columns, onBack }: { row: GeoRow; columns: ColumnMeta[]; onBack: () => void }) {
   return (
@@ -40,21 +67,16 @@ function RowDetailView({ row, columns, onBack }: { row: GeoRow; columns: ColumnM
         </div>
       </div>
       <h2 className="detail-title">{row.name}</h2>
-      <p style={{ color: 'var(--color-text-secondary,#666)', fontSize: 13, marginBottom: 20 }}>
+      <p style={{ color: 'var(--color-text-secondary,#666)', fontSize: 13, marginBottom: 20, fontFamily: 'monospace' }}>
         {row.GSE}/{row.sample_name}
       </p>
       <div className="detail-grid">
-        {columns.map(col => {
-          const val = getCellValue(row, col.name)
-          return (
-            <div key={col.name} className="detail-item">
-              <span className="detail-label">{col.label_zh}</span>
-              <span className="detail-value">
-                {val.length > 120 ? <span title={val}>{val.slice(0, 117)}...</span> : val}
-              </span>
-            </div>
-          )
-        })}
+        {columns.map(col => (
+          <div key={col.name} className="detail-item">
+            <span className="detail-label">{col.label_zh}</span>
+            <span className="detail-value">{renderDetailValue(row, col.name)}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
