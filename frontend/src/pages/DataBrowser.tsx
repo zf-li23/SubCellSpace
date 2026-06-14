@@ -44,9 +44,15 @@ function renderDetailValue(row: GeoRow, colName: string): React.ReactNode {
   }
 
   const s = String(raw)
-  // Links for GSE/GSM (plain text, not clickable — user wants text only)
+  // GSE / GSM → clickable GEO links
   if (colName === 'GSE' || colName === 'sample_name') {
-    return <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{s}</span>
+    const href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${s}`
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer"
+        style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--link-color,#0b4c6e)', textDecoration: 'none' }}>
+        {s} ↗
+      </a>
+    )
   }
 
   return <span>{s}</span>
