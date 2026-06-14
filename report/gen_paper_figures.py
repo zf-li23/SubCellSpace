@@ -735,51 +735,46 @@ def fig4():
 # ═════════════════════════════════════════════════════════════════
 
 def fig5():
-    """Case study: reuse poster fig6 + fig7 images with more annotation"""
+    """直接沿用 poster fig6 的 2x2 无缝拼接 (黑底图不适合加白色文字)"""
     poster_dir = OUT / 'poster'
-    example_imgs = [poster_dir / f'subcellspace_plot ({i}).png' for i in range(4)]
-    available = [p for p in example_imgs if p.exists()]
-
-    if not available:
+    paths = [poster_dir / f'subcellspace_plot ({i}).png' for i in range(4)]
+    paths = [p for p in paths if p.exists()]
+    if len(paths) < 4:
         print('  ⚠️ fig5 — poster example images not found, skipping')
         return
 
     from matplotlib.image import imread
-    step_labels = [
-        '(a) Cell positions (transcripts)',
-        '(b) UMAP (transcripts)',
-        '(c) Cell positions (cluster)',
-        '(d) UMAP (cluster)',
-    ]
+    imgs = [imread(p) for p in paths]
+    h, w = imgs[0].shape[:2]
 
-    # ── 小图: 4 面板 ────────────────────────────────────────────
-    fig, axes = plt.subplots(1, 4, figsize=(20, 4.5))
-    for ax, img_path, label in zip(axes, available, step_labels):
-        ax.imshow(imread(img_path))
+    # ── 小图: 单行 4 面板 ──────────────────────────────────────
+    fig, axes = plt.subplots(1, 4, figsize=(w/100*4, h/100))
+    fig.subplots_adjust(wspace=0, left=0, right=1, bottom=0, top=1)
+    for i, ax in enumerate(axes):
+        ax.imshow(imgs[i])
         ax.axis('off')
-        ax.set_title(label, fontsize=11, fontweight='bold', pad=6)
-    fig.suptitle('Pipeline Output: GSE263791 (Alzheimer Mouse Brain, CosMx)',
-                fontsize=16, fontweight='bold', y=1.02)
-    fig.tight_layout()
-    fig.savefig(OUT / 'small' / 'fig5_case_study.png', dpi=300)
+        labels = ['(a)', '(b)', '(c)', '(d)']
+        ax.text(0.03, 0.96, labels[i], transform=ax.transAxes,
+                fontsize=14, fontweight='bold', color='white',
+                va='top', ha='left',
+                bbox=dict(boxstyle='round,pad=0.15', facecolor='#222',
+                          edgecolor='none', alpha=0.6))
+    fig.savefig(OUT / 'small' / 'fig5_case_study.png', dpi=300, pad_inches=0)
     plt.close(fig)
 
-    # ── 大图: 2x2 + stats ───────────────────────────────────────
-    fig = plt.figure(figsize=(14, 14))
-    gs = fig.add_gridspec(2, 2, hspace=0.15, wspace=0.1)
-
-    for idx in range(4):
-        r, c = idx // 2, idx % 2
-        ax = fig.add_subplot(gs[r, c])
-        if idx < len(available):
-            ax.imshow(imread(available[idx]))
+    # ── 大图: 2x2 无缝拼接 ─────────────────────────────────────
+    fig, axes = plt.subplots(2, 2, figsize=(w/100*2, h/100*2))
+    fig.subplots_adjust(wspace=0, hspace=0, left=0, right=1, bottom=0, top=1)
+    for i, ax in enumerate(axes.flat):
+        ax.imshow(imgs[i])
         ax.axis('off')
-        ax.set_title(step_labels[idx], fontsize=13, fontweight='bold', pad=8)
-
-    fig.suptitle('SubCellSpace Case Study: Alzheimer Mouse Brain (GSE263791)',
-                fontsize=18, fontweight='bold', y=0.98)
-    fig.tight_layout()
-    fig.savefig(OUT / 'big' / 'fig5_case_study.png', dpi=300)
+        labels = ['(a)', '(b)', '(c)', '(d)']
+        ax.text(0.02, 0.97, labels[i], transform=ax.transAxes,
+                fontsize=22, fontweight='bold', color='white',
+                va='top', ha='left',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='#222',
+                          edgecolor='none', alpha=0.6))
+    fig.savefig(OUT / 'big' / 'fig5_case_study.png', dpi=300, pad_inches=0)
     plt.close(fig)
     print('  ✅ fig5 — Case Study')
 
