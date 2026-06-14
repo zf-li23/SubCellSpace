@@ -59,15 +59,29 @@ def txt(slide, l, t, w, h, text, size=18, color=BLACK, bold=False, align=PP_ALIG
     return tb
 
 def img(slide, path, l, t, w=None, h=None):
+    """Add image preserving aspect ratio. If both w and h given, fits within box."""
     p = str(path)
     if not os.path.exists(p):
         rect(slide, l, t, w or Inches(4), h or Inches(3), LGRAY, MID)
-        txt(slide, l, t, w or Inches(4), h or Inches(3), f"[{path.name}]", size=12, color=GRAY, align=PP_ALIGN.CENTER)
+        txt(slide, l, t, w or Inches(4), h or Inches(3), f"[{path.name}]",
+            size=12, color=GRAY, align=PP_ALIGN.CENTER)
         return
-    kw = {}
-    if w: kw['width'] = w
-    if h: kw['height'] = h
-    slide.shapes.add_picture(p, l, t, **kw)
+    from PIL import Image as PILImage
+    with PILImage.open(p) as im:
+        pw, ph = im.size
+    ar = pw / ph
+    if w and h:
+        # fit within box
+        box_ar = w / h
+        if ar > box_ar:
+            h = w / ar
+        else:
+            w = h * ar
+    elif w and not h:
+        h = w / ar
+    elif h and not w:
+        w = h * ar
+    slide.shapes.add_picture(p, int(l), int(t), int(w), int(h))
 
 def header(slide, title, sub=None):
     rect(slide, 0, 0, W, Inches(1.0), NAVY)
@@ -141,7 +155,7 @@ txt(s, Inches(0.5), Inches(5.6), Inches(12), Inches(0.6),
 
 s = new_slide(); set_bg(s)
 header(s, "平台架构与 Pipeline")
-img(s, FIG_BIG/"fig4_pipeline.png", Inches(0.3), Inches(1.2), w=Inches(12.7))
+img(s, FIG_BIG/"fig4_pipeline.png", Inches(0.3), Inches(1.2), w=Inches(12.7), h=Inches(6.0))
 txt(s, Inches(0.5), Inches(6.8), Inches(12), Inches(0.5),
     "上：7 步数据平台（GEO 下载 → 元数据 → LLM 注释 → Touch → Stats → 前端 → 报告）\n"
     "下：7 步 scverse-native 分析管线（降噪 → 分割 → 注释 → 空间 → 亚细胞）",
@@ -152,9 +166,9 @@ txt(s, Inches(0.5), Inches(6.8), Inches(12), Inches(0.5),
 
 s = new_slide(); set_bg(s)
 header(s, "数据库建设成果")
-img(s, FIG_SMALL/"fig1A_platform_counts.png", Inches(0.2), Inches(1.2), h=Inches(3.0))
-img(s, FIG_SMALL/"fig1C_gse_counts.png",   Inches(4.5), Inches(1.2), h=Inches(3.0))
-img(s, FIG_SMALL/"fig1B_growth.png",       Inches(8.8), Inches(1.2), h=Inches(3.0))
+img(s, FIG_SMALL/"fig1A_platform_counts.png", Inches(0.2), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
+img(s, FIG_SMALL/"fig1C_gse_counts.png",      Inches(4.5), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
+img(s, FIG_SMALL/"fig1B_growth.png",          Inches(8.8), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
 key = [("4,478", "GEO 记录"), ("269", "GSE 系列"), ("3 平台", "CosMx/Xenium/MERFISH"), ("~15 TB", "集群数据")]
 for i, (num, label) in enumerate(key):
     x = Inches(0.5) + Inches(3.2) * i
@@ -163,7 +177,7 @@ for i, (num, label) in enumerate(key):
     txt(s, x, Inches(4.8), Inches(2.8), Inches(0.8), num, size=36, color=BLUE, bold=True, align=PP_ALIGN.CENTER)
     txt(s, x, Inches(5.7), Inches(2.8), Inches(0.5), label, size=16, color=GRAY, align=PP_ALIGN.CENTER)
 txt(s, Inches(0.3), Inches(6.9), Inches(12.5), Inches(0.4),
-    "左：三平台数据集规模（Ready/Pending/Error） · 中：GSE 系列数 · 右：数据库增长趋势",
+    "左：三平台数据集规模 · 中：GSE 系列数 · 右：数据库增长趋势",
     size=12, color=GRAY, align=PP_ALIGN.CENTER)
 
 
@@ -171,17 +185,15 @@ txt(s, Inches(0.3), Inches(6.9), Inches(12.5), Inches(0.4),
 
 s = new_slide(); set_bg(s)
 header(s, "数据质量与完整度")
-img(s, FIG_SMALL/"fig2A_file_coverage.png", Inches(0.2), Inches(1.2), h=Inches(3.0))
-img(s, FIG_SMALL/"fig1D_stats_coverage.png", Inches(4.7), Inches(1.2), h=Inches(3.0))
-img(s, FIG_SMALL/"fig2B_metadata.png",      Inches(8.5), Inches(1.2), h=Inches(3.5))
-txt(s, Inches(0.5), Inches(4.5), Inches(3.8), Inches(0.4),
-    "文件覆盖率热图", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
-txt(s, Inches(4.7), Inches(4.5), Inches(3.5), Inches(0.4),
-    "统计覆盖度", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
-txt(s, Inches(8.5), Inches(5.0), Inches(4.5), Inches(0.4),
-    "元数据完整度热图", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
-hl = [("CosMx 99%", GREEN), ("Xenium 38%", ORANGE), ("MERFISH 73%", TEAL)]
-for i, (v, c) in enumerate(hl):
+img(s, FIG_SMALL/"fig2A_file_coverage.png",  Inches(0.2), Inches(1.2), w=Inches(6.2), h=Inches(3.0))
+img(s, FIG_SMALL/"fig1D_stats_coverage.png", Inches(6.9), Inches(1.2), w=Inches(6.2), h=Inches(3.0))
+img(s, FIG_SMALL/"fig2B_metadata.png",       Inches(0.2), Inches(4.5), w=Inches(12.9), h=Inches(2.8))
+txt(s, Inches(0.2), Inches(4.3), Inches(6.0), Inches(0.3),
+    "文件覆盖率热图", size=13, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+txt(s, Inches(6.9), Inches(4.3), Inches(6.0), Inches(0.3),
+    "统计覆盖度", size=13, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+ul = [("CosMx 99%", GREEN), ("Xenium 38%", ORANGE), ("MERFISH 73%", TEAL)]
+for i, (v, c) in enumerate(ul):
     txt(s, Inches(8.8)+Inches(1.4)*i, Inches(5.3), Inches(1.3), Inches(0.4),
         v, size=11, color=c, bold=True, align=PP_ALIGN.CENTER)
 
@@ -190,9 +202,9 @@ for i, (v, c) in enumerate(hl):
 
 s = new_slide(); set_bg(s)
 header(s, "跨平台统计量分布")
-img(s, FIG_SMALL/"fig2C_transcripts_violin.png", Inches(0.3), Inches(1.2), h=Inches(3.0))
-img(s, FIG_SMALL/"fig2D_cells_violin.png",      Inches(4.8), Inches(1.2), h=Inches(3.0))
-img(s, FIG_SMALL/"fig2E_genes_violin.png",      Inches(9.3), Inches(1.2), h=Inches(3.0))
+img(s, FIG_SMALL/"fig2C_transcripts_violin.png", Inches(0.3), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
+img(s, FIG_SMALL/"fig2D_cells_violin.png",      Inches(4.8), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
+img(s, FIG_SMALL/"fig2E_genes_violin.png",      Inches(9.3), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
 txt(s, Inches(0.3), Inches(4.3), Inches(4.3), Inches(0.4),
     "log₁₀(转录本数/数据集)", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
 txt(s, Inches(4.8), Inches(4.3), Inches(4.3), Inches(0.4),
@@ -214,9 +226,9 @@ for i, line in enumerate(notes):
 
 s = new_slide(); set_bg(s)
 header(s, "生物学覆盖")
-img(s, FIG_SMALL/"fig3A_tissue.png",          Inches(0.2), Inches(1.2), h=Inches(3.0))
-img(s, FIG_SMALL/"fig3B_disease.png",         Inches(4.5), Inches(1.2), h=Inches(3.0))
-img(s, FIG_SMALL/"fig3C_platform_tissue.png", Inches(8.8), Inches(1.2), h=Inches(3.5))
+img(s, FIG_SMALL/"fig3A_tissue.png",          Inches(0.2), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
+img(s, FIG_SMALL/"fig3B_disease.png",         Inches(4.5), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
+img(s, FIG_SMALL/"fig3C_platform_tissue.png", Inches(8.8), Inches(1.2), w=Inches(4.0), h=Inches(3.5))
 txt(s, Inches(0.2), Inches(4.3), Inches(4.2), Inches(0.4),
     "组织类型 Top 12", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
 txt(s, Inches(4.5), Inches(4.3), Inches(4.2), Inches(0.4),
@@ -238,7 +250,7 @@ for i, line in enumerate(bio):
 
 s = new_slide(); set_bg(s)
 header(s, "案例验证：GSE263791 AD 小鼠脑")
-img(s, FIG_BIG/"fig5_case_study.png", Inches(0.5), Inches(1.2), w=Inches(12.3))
+img(s, FIG_BIG/"fig5_case_study.png", Inches(0.3), Inches(1.2), w=Inches(12.7), h=Inches(5.5))
 txt(s, Inches(0.3), Inches(6.8), Inches(12.5), Inches(0.5),
     "阿尔茨海默病小鼠脑 · CosMx · 2.4M tx · 8,726 cells · 999 genes · 30 min 全流程",
     size=14, color=GRAY, align=PP_ALIGN.CENTER)
@@ -248,7 +260,7 @@ txt(s, Inches(0.3), Inches(6.8), Inches(12.5), Inches(0.5),
 
 s = new_slide(); set_bg(s)
 header(s, "亚细胞分析概念图")
-img(s, FIG_POSTER/"fig7_concept.png", Inches(1.5), Inches(1.2), h=Inches(5.5))
+img(s, FIG_POSTER/"fig7_concept.png", Inches(1.5), Inches(1.2), w=Inches(10.3), h=Inches(5.5))
 txt(s, Inches(0.3), Inches(6.9), Inches(12.5), Inches(0.4),
     "(a) SCRIN 基因调控网络 · (b) 亚细胞域识别 · (c) 空间可变基因 · (d) 虚拟细胞模型",
     size=13, color=GRAY, align=PP_ALIGN.CENTER)
