@@ -151,11 +151,11 @@ txt(s, Inches(0.5), Inches(5.6), Inches(12), Inches(0.6),
     size=18, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
 
 
-# ═══ SLIDE 4: Pipeline ════════════════════════════════════════
+# ═══ SLIDE 4: Pipeline (居中) ══════════════════════════════
 
 s = new_slide(); set_bg(s)
 header(s, "平台架构与 Pipeline")
-img(s, FIG_BIG/"fig4_pipeline.png", Inches(0.3), Inches(1.2), w=Inches(12.7), h=Inches(6.0))
+img(s, FIG_BIG/"fig4_pipeline.png", Inches(1.9), Inches(1.2), w=Inches(9.5), h=Inches(6.0))
 txt(s, Inches(0.5), Inches(6.8), Inches(12), Inches(0.5),
     "上：7 步数据平台（GEO 下载 → 元数据 → LLM 注释 → Touch → Stats → 前端 → 报告）\n"
     "下：7 步 scverse-native 分析管线（降噪 → 分割 → 注释 → 空间 → 亚细胞）",
@@ -166,9 +166,10 @@ txt(s, Inches(0.5), Inches(6.8), Inches(12), Inches(0.5),
 
 s = new_slide(); set_bg(s)
 header(s, "数据库建设成果")
-img(s, FIG_SMALL/"fig1A_platform_counts.png", Inches(0.2), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
-img(s, FIG_SMALL/"fig1C_gse_counts.png",      Inches(4.5), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
-img(s, FIG_SMALL/"fig1B_growth.png",          Inches(8.8), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
+# 增长曲线宽高比大，分配更多宽度；另两张略缩小
+img(s, FIG_SMALL/"fig1A_platform_counts.png", Inches(0.3),  Inches(1.2), w=Inches(3.8), h=Inches(3.0))
+img(s, FIG_SMALL/"fig1C_gse_counts.png",      Inches(4.4), Inches(1.2), w=Inches(3.8), h=Inches(3.0))
+img(s, FIG_SMALL/"fig1B_growth.png",          Inches(8.5), Inches(1.2), w=Inches(4.8), h=Inches(3.0))
 key = [("4,478", "GEO 记录"), ("269", "GSE 系列"), ("3 平台", "CosMx/Xenium/MERFISH"), ("~15 TB", "集群数据")]
 for i, (num, label) in enumerate(key):
     x = Inches(0.5) + Inches(3.2) * i
@@ -188,14 +189,23 @@ header(s, "数据质量与完整度")
 img(s, FIG_SMALL/"fig2A_file_coverage.png",  Inches(0.2), Inches(1.2), w=Inches(6.2), h=Inches(3.0))
 img(s, FIG_SMALL/"fig1D_stats_coverage.png", Inches(6.9), Inches(1.2), w=Inches(6.2), h=Inches(3.0))
 img(s, FIG_SMALL/"fig2B_metadata.png",       Inches(0.2), Inches(4.5), w=Inches(12.9), h=Inches(2.8))
+# ── 上排图注 ──
 txt(s, Inches(0.2), Inches(4.3), Inches(6.0), Inches(0.3),
     "文件覆盖率热图", size=13, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
-txt(s, Inches(6.9), Inches(4.3), Inches(6.0), Inches(0.3),
-    "统计覆盖度", size=13, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
-ul = [("CosMx 99%", GREEN), ("Xenium 38%", ORANGE), ("MERFISH 73%", TEAL)]
-for i, (v, c) in enumerate(ul):
-    txt(s, Inches(8.8)+Inches(1.4)*i, Inches(5.3), Inches(1.3), Inches(0.4),
-        v, size=11, color=c, bold=True, align=PP_ALIGN.CENTER)
+txt(s, Inches(7.0), Inches(4.3), Inches(6.0), Inches(0.3),
+    "统计覆盖度（Ready 数据集中有值的比例）", size=13, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+# ── 下排: 文字说明 ──
+rect(s, Inches(0.2), Inches(5.8), Inches(12.9), Inches(1.4), LGRAY)
+rect(s, Inches(0.2), Inches(5.8), Inches(0.06), Inches(1.4), BLUE)
+txt(s, Inches(0.4), Inches(5.9), Inches(12.5), Inches(0.35),
+    "▸  CosMx 文件最完整：Polygons + Expr Matrix + Cell Metadata + FOV Positions 均 >90%",
+    size=13, color=BLACK)
+txt(s, Inches(0.4), Inches(6.25), Inches(12.5), Inches(0.35),
+    "▸  Xenium 特有 Cell/Nucleus Boundary 文件，但统计覆盖仅 38%（多数文件尚未下载到集群）",
+    size=13, color=BLACK)
+txt(s, Inches(0.4), Inches(6.6), Inches(12.5), Inches(0.35),
+    "▸  MERFISH 基础文件完备，统计覆盖 73%，缺少 Gene Panel 元数据",
+    size=13, color=BLACK)
 
 
 # ═══ SLIDE 7: Violins ═════════════════════════════════════════
@@ -206,11 +216,11 @@ img(s, FIG_SMALL/"fig2C_transcripts_violin.png", Inches(0.3), Inches(1.2), w=Inc
 img(s, FIG_SMALL/"fig2D_cells_violin.png",      Inches(4.8), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
 img(s, FIG_SMALL/"fig2E_genes_violin.png",      Inches(9.3), Inches(1.2), w=Inches(4.0), h=Inches(3.0))
 txt(s, Inches(0.3), Inches(4.3), Inches(4.3), Inches(0.4),
-    "log₁₀(转录本数/数据集)", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+    "log10(转录本数/数据集)", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
 txt(s, Inches(4.8), Inches(4.3), Inches(4.3), Inches(0.4),
-    "log₁₀(细胞数/数据集)", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+    "log10(细胞数/数据集)", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
 txt(s, Inches(9.3), Inches(4.3), Inches(3.8), Inches(0.4),
-    "log₁₀(基因数/数据集)", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+    "log10(基因数/数据集)", size=14, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
 rect(s, Inches(0.5), Inches(5.0), Inches(12.3), Inches(1.8), LGRAY)
 rect(s, Inches(0.5), Inches(5.0), Inches(12.3), Inches(0.06), TEAL)
 notes = [
@@ -240,27 +250,27 @@ rect(s, Inches(0.5), Inches(5.0), Inches(12.3), Inches(0.06), GREEN)
 bio = [
     "🧬  2 个物种：Homo sapiens（~66%）/ Mus musculus（~42%）",
     "🧫  30+ 组织类型：脑、肾脏、肿瘤、结肠等",
-    "🩺  涵盖疾病：癌症、纤维化、炎症、神经退行性疾病",
+    "📋  涵盖疾病：癌症、纤维化、炎症、神经退行性疾病",
 ]
 for i, line in enumerate(bio):
     txt(s, Inches(0.7), Inches(5.2)+Inches(0.5)*i, Inches(11.8), Inches(0.4), line, size=16, color=BLACK)
 
 
-# ═══ SLIDE 9: Case Study ══════════════════════════════════════
+# ═══ SLIDE 9: Case Study (居中) ═════════════════════════════
 
 s = new_slide(); set_bg(s)
 header(s, "案例验证：GSE263791 AD 小鼠脑")
-img(s, FIG_BIG/"fig5_case_study.png", Inches(0.3), Inches(1.2), w=Inches(12.7), h=Inches(5.5))
+img(s, FIG_BIG/"fig5_case_study.png", Inches(3.6), Inches(1.2), w=Inches(6.2), h=Inches(5.5))
 txt(s, Inches(0.3), Inches(6.8), Inches(12.5), Inches(0.5),
     "阿尔茨海默病小鼠脑 · CosMx · 2.4M tx · 8,726 cells · 999 genes · 30 min 全流程",
     size=14, color=GRAY, align=PP_ALIGN.CENTER)
 
 
-# ═══ SLIDE 10: Concept ════════════════════════════════════════
+# ═══ SLIDE 10: Concept (居中) ═══════════════════════════════
 
 s = new_slide(); set_bg(s)
 header(s, "亚细胞分析概念图")
-img(s, FIG_POSTER/"fig7_concept.png", Inches(1.5), Inches(1.2), w=Inches(10.3), h=Inches(5.5))
+img(s, FIG_POSTER/"fig7_concept.png", Inches(3.8), Inches(1.2), w=Inches(5.7), h=Inches(5.5))
 txt(s, Inches(0.3), Inches(6.9), Inches(12.5), Inches(0.4),
     "(a) SCRIN 基因调控网络 · (b) 亚细胞域识别 · (c) 空间可变基因 · (d) 虚拟细胞模型",
     size=13, color=GRAY, align=PP_ALIGN.CENTER)
