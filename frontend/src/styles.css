@@ -1418,6 +1418,45 @@ select {
 	padding-right: 16px;
 }
 
+/* ── Div-based table (DataBrowser) ── */
+.tr {
+	display: flex;
+	border-bottom: 1px solid #f1f5f9;
+	min-width: fit-content;
+}
+.tr.th {
+	background: #f1f5f9;
+	border-bottom: 2px solid var(--border, #e2e8f0);
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+.tr:hover { background: #f8fafc; }
+.td {
+	padding: 8px 12px;
+	font-size: 0.85rem;
+	line-height: 1.4;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+	flex-shrink: 0;
+}
+.thd {
+	font-weight: 600;
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-secondary, #64748b);
+	white-space: nowrap;
+	cursor: pointer;
+	user-select: none;
+}
+.thd:hover { color: var(--accent, #2a7de1); }
+.th-sorted { color: var(--accent, #2a7de1); }
+.td-sorted { background: #f0f7ff; }
+.tr-scrolling { opacity: 0.85; }
+
 .schema-info {
 	font-size: 13px;
 	color: #4c6774;
