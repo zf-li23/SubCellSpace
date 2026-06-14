@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FixedSizeList as List } from 'react-window'
 import type { GeoJSON, GeoRow, ColumnMeta } from '../types/datasets'
 import { PLATFORMS } from '../constants/platforms'
 import { fetchPlatformData } from '../services/geoData'
@@ -111,20 +110,6 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
 }
 
 // ── Table Row (virtualizable) ────────────────────────────────────────
-
-const ROW_HEIGHT = 38
-const TableRow = React.memo(({ data, style, isScrolling }: any) => {
-  const { row, columns, sortKey, onExpand } = data
-  return (
-    <div style={style} className={`tr ${isScrolling ? 'tr-scrolling' : ''}`} onClick={() => onExpand(row)}>
-      {columns.map(col => (
-        <span key={col.name} className={`td ${col.name === sortKey ? 'td-sorted' : ''}`}>
-          {fmtNumCol(row, col.name)}
-        </span>
-      ))}
-    </div>
-  )
-})
 
 function fmtNumCol(row: GeoRow, name: string): string {
   const val = (row as Record<string, unknown>)[name]
@@ -273,43 +258,30 @@ export default function DataBrowser() {
       ) : (
         <>
           <div className="table-wrap">
-            <div className="table-scroll">
-              {/* Header */}
-              <div className="tr th">
-                {visibleColumns.map(col => (
-                  <span key={col.name}
-                    className={`td thd td-${col.name} ${col.name === sortKey ? 'th-sorted' : ''}`}
-                    onClick={() => toggleSort(col.name)} style={{ cursor: 'pointer' }}>
-                    {col.label_zh} {col.name === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-                  </span>
+            <table className="data-tbl">
+              <thead>
+                <tr>
+                  {visibleColumns.map(col => (
+                    <th key={col.name}
+                      className={`col-${col.name} ${col.name === sortKey ? 'sorted' : ''}`}
+                      onClick={() => toggleSort(col.name)}>
+                      {col.label_zh} {col.name === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((row, i) => (
+                  <tr key={i} onClick={() => setExpandedRow(row)}>
+                    {visibleColumns.map(col => (
+                      <td key={col.name} className={col.name === sortKey ? 'num' : ''}>
+                        {fmtNumCol(row, col.name)}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </div>
-              {/* Virtual List */}
-              <div style={{ height: Math.min(pageRows.length * ROW_HEIGHT, 600) }}>
-                <List
-                  height={Math.min(pageRows.length * ROW_HEIGHT, 600)}
-                  itemCount={pageRows.length}
-                  itemSize={ROW_HEIGHT}
-                  width="100%"
-                  itemData={{ rows: pageRows, columns: visibleColumns, sortKey, onExpand: setExpandedRow }}
-                >
-                  {({ index, style, data, isScrolling }) => {
-                    const row = data.rows[index]
-                    return (
-                      <div style={style} className={`tr ${isScrolling ? 'tr-scrolling' : ''}`}
-                        onClick={() => setExpandedRow(row)}>
-                        {data.columns.map((col: ColumnMeta) => (
-                          <span key={col.name}
-                            className={`td td-${col.name} ${col.name === data.sortKey ? 'td-sorted' : ''}`}>
-                            {fmtNumCol(row, col.name)}
-                          </span>
-                        ))}
-                      </div>
-                    )
-                  }}
-                </List>
-              </div>
-            </div>
+              </tbody>
+            </table>
           </div>
 
           {/* Pagination + Page size */}

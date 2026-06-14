@@ -141,70 +141,22 @@ main { padding: 20px; }
 }
 
 /* ===== Data Table (Data Browser) ===== */
-/* ===== Flex Table (Data Browser with virtual scroll) ===== */
-.table-wrap {
-  overflow-x: auto;
-  border-radius: 12px;
-  border: 1px solid var(--table-border, rgba(22,50,63,0.08));
-  background: var(--card-bg, rgba(255,255,255,0.88));
-}
+/* ===== Data Table (real <table> — guarantees perfect alignment) ===== */
 
-.table-scroll {
-  min-width: 700px;
-}
-
-.tr {
-  display: flex;
-  border-bottom: 1px solid var(--table-border, rgba(22,50,63,0.06));
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.tr:hover {
-  background: var(--table-hover, rgba(11,76,110,0.04));
-}
-
-.tr:last-child {
-  border-bottom: none;
-}
-
-.td {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 8px 10px;
+.data-tbl {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 13px;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary, #16323f);
+  table-layout: fixed;
 }
 
-/* Narrower columns get less flex */
-.td.td-gse,
-.td.td-sample_name,
-.td.td-status {
-  flex: 0.6 0.6 0;
+.data-tbl thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
-.td.td-name,
-.td.td-title,
-.td.td-summary {
-  flex: 1.6 1.6 0;
-}
-
-/* Header row */
-.tr.th {
-  cursor: default;
-  border-bottom: 2px solid var(--table-border, rgba(22,50,63,0.12));
-  background: rgba(11,76,110,0.04);
-}
-
-.tr.th:hover {
-  background: rgba(11,76,110,0.04);
-}
-
-.thd {
+.data-tbl th {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -212,19 +164,59 @@ main { padding: 20px; }
   font-weight: 700;
   white-space: nowrap;
   user-select: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--table-border, rgba(22,50,63,0.12));
+  background: rgba(11,76,110,0.04);
 }
 
-.th-sorted {
+.data-tbl th:hover {
+  background: rgba(11,76,110,0.08);
+}
+
+.data-tbl th.sorted {
   color: var(--link-color, #0b4c6e);
 }
 
-.td-sorted {
-  font-weight: 600;
+.data-tbl td {
+  padding: 8px 10px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary, #16323f);
+  border-bottom: 1px solid var(--table-border, rgba(22,50,63,0.06));
 }
 
-.tr-scrolling {
-  opacity: 0.85;
+.data-tbl tbody tr {
+  cursor: pointer;
 }
+
+.data-tbl tbody tr:hover {
+  background: var(--table-hover, rgba(11,76,110,0.04));
+}
+
+.data-tbl tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-tbl .num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Column widths (approximate, table-layout: fixed distributes remaining space) */
+.data-tbl .col-gse           { width: 7%; }
+.data-tbl .col-name          { width: 18%; }
+.data-tbl .col-sample_name   { width: 8%; }
+.data-tbl .col-status        { width: 6%; }
+.data-tbl .col-tissue        { width: 8%; }
+.data-tbl .col-disease_state { width: 8%; }
+.data-tbl .col-data_size     { width: 7%; }
+.data-tbl .col-n_transcripts { width: 8%; }
+.data-tbl .col-n_cells       { width: 8%; }
+.data-tbl .col-n_genes       { width: 6%; }
+/* Remaining columns get equal share */
 
 /* Link inside td */
 .td a {
