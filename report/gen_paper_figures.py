@@ -208,19 +208,29 @@ def fig1():
     ax_b.tick_params(axis='y', labelsize=10)
     ax_b.set_title('B  GSE Count', fontsize=13, fontweight='bold', loc='left')
 
-    # (c) Status pie chart
+    # (c) 统计覆盖度 — 各平台 ready 中有统计值的比例
     ax_c = fig.add_subplot(gs[0, 2])
-    all_status = {'Ready': 0, 'Pending': 0, 'Error': 0}
-    for p in PLATFORMS:
-        all_status['Ready'] += status_counts[p]['ready']
-        all_status['Pending'] += status_counts[p]['pending']
-        all_status['Error'] += status_counts[p]['error']
-    wedges, texts, autotexts = ax_c.pie(
-        all_status.values(), labels=all_status.keys(),
-        colors=['#27ae60','#f39c12','#e74c3c'],
-        autopct='%1.0f%%', startangle=90, explode=(0.02, 0.02, 0.02),
-        textprops={'fontsize': 11, 'fontweight': 'bold'})
-    ax_c.set_title('C  Overall Status', fontsize=13, fontweight='bold', loc='left')
+    metrics = [('n_cells', '# Cells'), ('n_transcripts', '# Tx'), ('n_genes', '# Genes')]
+    x = np.arange(len(metrics))
+    w = 0.22
+    for i, p in enumerate(PLATFORMS):
+        ready = [r for r in all_data[p] if r.get('status','').strip()=='ready']
+        n = max(len(ready), 1)
+        vals = []
+        for mkey, _ in metrics:
+            filled = sum(1 for r in ready if r.get(mkey,'').strip())
+            vals.append(filled / n * 100)
+        bars = ax_c.bar(x + (i-1)*w, vals, w, label=p, color=PLAT_COLORS[i],
+                       edgecolor='white', lw=0.5, alpha=0.85)
+        for bar, v in zip(bars, vals):
+            ax_c.text(bar.get_x()+w/2, bar.get_y()+v/2, f'{v:.0f}%',
+                     ha='center', va='center', fontsize=8, fontweight='bold', color='white')
+    ax_c.set_xticks(x)
+    ax_c.set_xticklabels(['# Cells', '# Transcripts', '# Genes'], fontsize=10)
+    ax_c.set_ylabel('Coverage (%)', fontsize=11)
+    ax_c.set_ylim(0, 110)
+    ax_c.set_title('C  Stats Coverage (Ready Only)', fontsize=11, fontweight='bold', loc='left')
+    ax_c.legend(fontsize=7, loc='lower right', framealpha=0.9)
 
     # (d) 增长曲线 (下半)
     ax_d = fig.add_subplot(gs[1, :])
