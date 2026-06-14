@@ -1,5 +1,6 @@
 import React, { Suspense, lazy } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingSkeleton from './components/LoadingSkeleton'
 
@@ -15,11 +16,22 @@ const NAV_ITEMS = [
   { path: '/benchmark',label: 'Benchmark', icon: '⚡' },
 ]
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,     // 5 min cache
+      gcTime: 30 * 60 * 1000,        // keep unused data 30 min
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
 function PageLoading() {
   return <div style={{ padding: 20 }}><LoadingSkeleton count={3} /></div>
 }
 
-export default function App() {
+function AppContent() {
   const location = useLocation()
 
   return (
@@ -59,5 +71,13 @@ export default function App() {
         </ErrorBoundary>
       </main>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
+    </QueryClientProvider>
   )
 }

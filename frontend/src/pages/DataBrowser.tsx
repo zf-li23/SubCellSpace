@@ -1,5 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { FixedSizeList as List } from 'react-window'
 import type { GeoJSON, GeoRow, ColumnMeta } from '../types/datasets'
+import { PLATFORMS } from '../constants/platforms'
+import { fetchPlatformData } from '../services/geoData'
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -17,19 +21,9 @@ function getCellValue(row: GeoRow, colName: string): string {
   return String(val)
 }
 
-function statusBadge(status: string): string {
-  switch (status) { case 'ready': return '🟢'; case 'pending': return '🟡'; case 'error': return '🔴'; default: return '⚪' }
-}
-
 const PAGE_SIZES = [25, 50, 100, 0]
 
-const PLATFORMS = [
-  { key: 'cosmx',  label: 'CosMx',  file: '/cosmx.json' },
-  { key: 'xenium', label: 'Xenium', file: '/xenium.json' },
-  { key: 'merfish',label: 'MERFISH',file: '/merfish.json' },
-]
-
-// ── Row Detail ───────────────────────────────────────────────────────
+// ── Row Detail Modal ─────────────────────────────────────────────────
 
 function RowDetail({ row, columns, onClose }: { row: GeoRow; columns: ColumnMeta[]; onClose: () => void }) {
   return (
@@ -45,14 +39,13 @@ function RowDetail({ row, columns, onClose }: { row: GeoRow; columns: ColumnMeta
             const val = getCellValue(row, col.name)
             const isGseLink = col.name === 'GSE' && val !== '—'
             const isGsmLink = col.name === 'sample_name' && val !== '—'
-            let href = ''
-            if (isGseLink) href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
-            if (isGsmLink) href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
+            const href = isGseLink ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
+              : isGsmLink ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}` : ''
             return (
               <div key={col.name} className="detail-item">
                 <span className="detail-label">{col.label_zh}</span>
                 <span className="detail-value">
-                  {isGseLink || isGsmLink
+                  {href
                     ? <a href={href} target="_blank" rel="noopener noreferrer" className="url-link">{val}</a>
                     : val.length > 120 ? <span title={val}>{val.slice(0, 117)}...</span> : val}
                 </span>
@@ -65,7 +58,7 @@ function RowDetail({ row, columns, onClose }: { row: GeoRow; columns: ColumnMeta
   )
 }
 
-// ── Pagination Controls ──────────────────────────────────────────────
+// ── Pagination ──────────────────────────────────────────────────────
 
 function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
   if (totalPages <= 1) return null
@@ -87,12 +80,38 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
   )
 }
 
+// ── Table Row (virtualizable) ────────────────────────────────────────
+
+const ROW_HEIGHT = 38
+const TableRow = React.memo(({ data, style, isScrolling }: any) => {
+  const { row, columns, sortKey, onExpand } = data
+  return (
+    <div style={style} className={`tr ${isScrolling ? 'tr-scrolling' : ''}`} onClick={() => onExpand(row)}>
+      {columns.map(col => (
+        <span key={col.name} className={`td ${col.name === sortKey ? 'td-sorted' : ''}`}>
+          {fmtNumCol(row, col.name)}
+        </span>
+      ))}
+    </div>
+  )
+})
+
+function fmtNumCol(row: GeoRow, name: string): string {
+  const val = (row as Record<string, unknown>)[name]
+  if (val === null || val === undefined) return '—'
+  if (typeof val === 'number') return fmtNum(val)
+  const s = String(val)
+  if (['ready','pending','error'].includes(s)) {
+    return (s === 'ready' ? '🟢 ' : s === 'pending' ? '🟡 ' : '🔴 ') + s
+  }
+  return s.length > 60 ? s.slice(0, 57) + '...' : s
+}
+
 // ── Main ─────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 40
+
 export default function DataBrowser() {
-  const [data, setData] = useState<GeoJSON | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [platform, setPlatform] = useState('cosmx')
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -100,34 +119,23 @@ export default function DataBrowser() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [showAllColumns, setShowAllColumns] = useState(false)
   const [expandedRow, setExpandedRow] = useState<GeoRow | null>(null)
-  const [pageSize, setPageSize] = useState(25)
   const [page, setPage] = useState(1)
 
-  // 加载平台数据
-  useEffect(() => {
-    setLoading(true)
-    setError(null)
-    const pf = PLATFORMS.find(p => p.key === platform)
-    if (!pf) return
-    fetch(pf.file)
-      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-      .then((j: GeoJSON) => { setData(j); setLoading(false) })
-      .catch(e => { setError(e.message ?? String(e)); setLoading(false) })
-  }, [platform])
+  const { data, isLoading, error } = useQuery<GeoJSON>({
+    queryKey: ['platformData', platform],
+    queryFn: () => fetchPlatformData(platform),
+    placeholderData: (prev) => prev,
+  })
 
   const columns = data?.meta.columns ?? []
-  const categories = data?.meta.categories ?? []
   const priorityCols = data?.meta.priority_columns ?? []
 
-  const visibleColumns = useMemo(() => {
-    return showAllColumns ? columns : columns.filter(c => priorityCols.includes(c.name))
-  }, [columns, priorityCols, showAllColumns])
+  const visibleColumns = useMemo(
+    () => showAllColumns ? columns : columns.filter(c => priorityCols.includes(c.name)),
+    [columns, priorityCols, showAllColumns]
+  )
 
-  const visibleCategories = useMemo(() => {
-    const names = new Set(visibleColumns.map(c => c.name))
-    return categories.map(cat => ({ ...cat, visibleCols: cat.columns.filter(n => names.has(n)) })).filter(c => c.visibleCols.length > 0)
-  }, [categories, visibleColumns])
-
+  // 筛选 + 排序
   const filteredRows = useMemo(() => {
     if (!data) return []
     let rows = data.rows
@@ -148,17 +156,16 @@ export default function DataBrowser() {
     })
   }, [data, search, filterStatus, sortKey, sortDir, columns])
 
-  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(filteredRows.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
-  const pageRows = pageSize === 0 ? filteredRows : filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize)
+  const pageRows = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  const toggleSort = (key: string) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('asc') }
-  }
+  const toggleSort = useCallback((key: string) => {
+    setSortKey(prev => { if (prev === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return prev } else { setSortDir('asc'); return key } })
+  }, [])
 
-  if (loading) return <div className="container"><div className="empty-state">Loading {platform} database...</div></div>
-  if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed: {error}<br/><small>Run <code>python3 scripts/export_frontend_json.py</code> to regenerate</small></div></div>
+  if (isLoading && !data) return <div className="container"><div className="empty-state">Loading {platform} database...</div></div>
+  if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed to load {platform}.<br/><small>Run <code>python3 scripts/export_frontend_json.py</code> to regenerate.</small></div></div>
 
   const hasFilters = search || filterStatus !== 'all'
 
@@ -169,7 +176,7 @@ export default function DataBrowser() {
         <span className="eyebrow">{filteredRows.length} of {data?.meta.total_rows ?? 0} datasets</span>
       </section>
 
-      {/* Platform Tabs */}
+      {/* Platform Tabs + Filters */}
       <div className="card filter-card" style={{ marginBottom: 12, padding: '8px 18px' }}>
         <div className="filter-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {PLATFORMS.map(p => (
@@ -208,58 +215,48 @@ export default function DataBrowser() {
         <div className="empty-state">{data && data.rows.length === 0 ? 'Database empty.' : 'No matches.'}</div>
       ) : (
         <>
-          <div className="table-wrap" style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead>
-                <tr className="category-header-row">
-                  {visibleCategories.map(cat => <th key={cat.key} colSpan={cat.visibleCols.length} className="category-header">{cat.label_zh}</th>)}
-                </tr>
-                <tr>
-                  {visibleColumns.map(col => (
-                    <th key={col.name} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => toggleSort(col.name)}>
-                      {col.label_zh}{sortKey === col.name ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((row, idx) => {
-                  const key = `${row.GSE}-${row.sample_name}-${idx}`
-                  return (
-                    <tr key={key} onClick={() => setExpandedRow(row)} style={{ cursor: 'pointer' }}>
-                      {visibleColumns.map(col => {
-                        const val = getCellValue(row, col.name)
-                        if (col.name === 'status') return <td key={col.name}><span>{statusBadge(row.status ?? '')} {row.status}</span></td>
-                        if (col.name === 'GSE') {
-                          const href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
-                          return <td key={col.name}><a href={href} target="_blank" rel="noopener noreferrer" className="url-link" onClick={e => e.stopPropagation()}>{val}</a></td>
-                        }
-                        if (col.name === 'sample_name') {
-                          const href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
-                          return <td key={col.name}><a href={href} target="_blank" rel="noopener noreferrer" className="url-link" onClick={e => e.stopPropagation()}>{val}</a></td>
-                        }
-                        if (col.type === 'number' && val !== '—') return <td key={col.name} style={{ textAlign: 'right' }}>{fmtNum(Number(val))}</td>
-                        return <td key={col.name}>{val}</td>
-                      })}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="table-wrap">
+            <div className="table-scroll">
+              {/* Header */}
+              <div className="tr th">
+                {visibleColumns.map(col => (
+                  <span key={col.name} className={`td thd ${col.name === sortKey ? 'th-sorted' : ''}`}
+                    onClick={() => toggleSort(col.name)} style={{ cursor: 'pointer' }}>
+                    {col.label_zh} {col.name === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </span>
+                ))}
+              </div>
+              {/* Virtual List */}
+              <div style={{ height: Math.min(pageRows.length * ROW_HEIGHT, 600) }}>
+                <List
+                  height={Math.min(pageRows.length * ROW_HEIGHT, 600)}
+                  itemCount={pageRows.length}
+                  itemSize={ROW_HEIGHT}
+                  width="100%"
+                  itemData={{ rows: pageRows, columns: visibleColumns, sortKey, onExpand: setExpandedRow }}
+                >
+                  {({ index, style, data, isScrolling }) => {
+                    const row = data.rows[index]
+                    return (
+                      <div style={style} className={`tr ${isScrolling ? 'tr-scrolling' : ''}`}
+                        onClick={() => setExpandedRow(row)}>
+                        {data.columns.map((col: ColumnMeta) => (
+                          <span key={col.name} className={`td ${col.name === data.sortKey ? 'td-sorted' : ''}`}>
+                            {fmtNumCol(row, col.name)}
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  }}
+                </List>
+              </div>
+            </div>
           </div>
 
-          {/* Pagination bar */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 13 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Rows/page:</span>
-              {PAGE_SIZES.map(s => (
-                <button key={s} onClick={() => { setPageSize(s); setPage(1) }}
-                  className={pageSize === s ? 'page-btn page-active' : 'page-btn'}>
-                  {s === 0 ? 'All' : s}
-                </button>
-              ))}
-            </div>
+          {/* Pagination + Page size */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
             <Pagination page={safePage} totalPages={totalPages} onPage={setPage} />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{filteredRows.length} results</span>
           </div>
         </>
       )}

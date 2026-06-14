@@ -1,47 +1,27 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { GeoJSON } from '../types/datasets'
-
-const PLATFORMS = [
-  { key: 'cosmx',  label: 'CosMx',  file: '/cosmx.json',  icon: '🧬' },
-  { key: 'xenium', label: 'Xenium', file: '/xenium.json', icon: '🔬' },
-  { key: 'merfish',label: 'MERFISH',file: '/merfish.json',icon: '🧪' },
-]
-
-interface PlatformStat {
-  key: string
-  label: string
-  icon: string
-  total: number
-  ready: number
-  pending: number
-  error: number
-}
+import { useQuery } from '@tanstack/react-query'
+import { fetchAllStats } from '../services/geoData'
+import type { PlatformStat } from '../services/geoData'
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const [stats, setStats] = useState<PlatformStat[]>([])
-
-  useEffect(() => {
-    Promise.all(PLATFORMS.map(async (p) => {
-      try {
-        const r = await fetch(p.file)
-        const j: GeoJSON = await r.json()
-        const rows = j.rows
-        return {
-          key: p.key, label: p.label, icon: p.icon,
-          total: rows.length,
-          ready: rows.filter(r => r.status === 'ready').length,
-          pending: rows.filter(r => r.status === 'pending').length,
-          error: rows.filter(r => r.status === 'error').length,
-        }
-      } catch {
-        return { key: p.key, label: p.label, icon: p.icon, total: 0, ready: 0, pending: 0, error: 0 }
-      }
-    })).then(setStats)
-  }, [])
+  const { data: stats = [], isLoading } = useQuery<PlatformStat[]>({
+    queryKey: ['platformStats'],
+    queryFn: fetchAllStats,
+  })
 
   const total = stats.reduce((s, p) => s + p.total, 0)
+
+  if (isLoading) {
+    return (
+      <div className="container">
+        <div className="home-cards" style={{ opacity: 0.4 }}>
+          {[1,2,3].map(i => <div key={i} className="card card-loading"><div className="skeleton-line" style={{width:'60%'}}/><div className="skeleton-line"/><div className="skeleton-line" style={{width:'40%'}}/></div>)}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container">
