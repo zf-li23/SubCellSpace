@@ -164,6 +164,24 @@ export default function DataBrowser() {
     setSortKey(prev => { if (prev === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return prev } else { setSortDir('asc'); return key } })
   }, [])
 
+  // Export filtered rows as CSV
+  const exportCsv = useCallback(() => {
+    const cols = visibleColumns.map(c => c.name)
+    const header = cols.join(',')
+    const rows = filteredRows.map(r =>
+      cols.map(c => {
+        let v = getCellValue(r, c)
+        if (v.includes(',') || v.includes('"')) v = `"${v.replace(/"/g, '""')}"`
+        return v
+      }).join(',')
+    )
+    const blob = new Blob([header + '\n' + rows.join('\n')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `subcellspace_${platform}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }, [filteredRows, visibleColumns, platform])
+
   if (isLoading && !data) return <div className="container"><div className="empty-state">Loading {platform} database...</div></div>
   if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed to load {platform}.<br/><small>Run <code>python3 scripts/export_frontend_json.py</code> to regenerate.</small></div></div>
 
@@ -207,6 +225,7 @@ export default function DataBrowser() {
             <input type="checkbox" checked={showAllColumns} onChange={e => setShowAllColumns(e.target.checked)} />
             All cols
           </label>
+          <button className="filter-reset" onClick={exportCsv} title="Export filtered rows as CSV">📥 CSV</button>
         </div>
       </div>
 
