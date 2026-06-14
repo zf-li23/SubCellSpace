@@ -255,7 +255,8 @@ export default function DataBrowser() {
               {/* Header */}
               <div className="tr th">
                 {visibleColumns.map(col => (
-                  <span key={col.name} className={`td thd ${col.name === sortKey ? 'th-sorted' : ''}`}
+                  <span key={col.name}
+                    className={`td thd td-${col.name} ${col.name === sortKey ? 'th-sorted' : ''}`}
                     onClick={() => toggleSort(col.name)} style={{ cursor: 'pointer' }}>
                     {col.label_zh} {col.name === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </span>
@@ -275,11 +276,21 @@ export default function DataBrowser() {
                     return (
                       <div style={style} className={`tr ${isScrolling ? 'tr-scrolling' : ''}`}
                         onClick={() => setExpandedRow(row)}>
-                        {data.columns.map((col: ColumnMeta) => (
-                          <span key={col.name} className={`td ${col.name === data.sortKey ? 'td-sorted' : ''}`}>
-                            {fmtNumCol(row, col.name)}
-                          </span>
-                        ))}
+                        {data.columns.map((col: ColumnMeta) => {
+                          const isGsm = col.name === 'sample_name'
+                          const href = isGsm ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${(row as Record<string, unknown>)[col.name]}` : ''
+                          return (
+                            <span key={col.name}
+                              className={`td td-${col.name} ${col.name === data.sortKey ? 'td-sorted' : ''}`}>
+                              {isGsm && (row as Record<string, unknown>)[col.name]
+                                ? <a href={href} target="_blank" rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}>
+                                    {(row as Record<string, unknown>)[col.name] as string}
+                                  </a>
+                                : fmtNumCol(row, col.name)}
+                            </span>
+                          )
+                        })}
                       </div>
                     )
                   }}
