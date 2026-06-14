@@ -234,6 +234,54 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# ── GEO Dataset Lookup ────────────────────────────────────────────────────
+
+import csv as csv_module
+
+GEO_CSV_DIR = REPO_ROOT / "data"
+
+@app.get("/api/dataset")
+def geo_dataset_lookup(gse: str = Query(..., description="GSE ID, GSM ID, or dataset name keyword")):
+    """Search across all platform GEO CSV files for a matching dataset."""
+    q = gse.strip().upper()
+    results: list[dict[str, Any]] = []
+    for fname in ["cosmx_geo.csv", "xenium_geo.csv", "merfish_geo.csv"]:
+        fpath = GEO_CSV_DIR / fname
+        if not fpath.exists():
+            continue
+        platform = fname.replace("_geo.csv", "")
+        with open(fpath, newline="", encoding="utf-8") as f:
+            reader = csv_module.DictReader(f)
+            for row in reader:
+                row["platform"] = platform
+                gse_val = (row.get("GSE") or "").strip().upper()
+                gsm_val = (row.get("sample_name") or "").strip().upper()
+                name_val = (row.get("name") or "").strip().lower()
+                if gse_val == q or gsm_val == q or q in name_val:
+                    # Clean row: strip whitespace, convert numeric strings
+                    cleaned: dict[str, Any] = {}
+                    for k, v in row.items():
+                        if v is not None:
+                            v = v.strip()
+                            # Attempt numeric conversion for count columns
+                            if k in ("n_transcripts","n_cells","n_genes","n_fovs",
+                                     "gene_panel_size","median_transcripts","median_genes",
+                                     "data_size") and v:
+                                try:
+                                    cleaned[k] = int(float(v)) if "." in v else int(v)
+                                except ValueError:
+                                    cleaned[k] = v
+                            else:
+                                cleaned[k] = v
+                        else:
+                            cleaned[k] = None
+                    results.append(cleaned)
+    if not results:
+        raise HTTPException(status_code=404, detail=f"Dataset '{gse}' not found in any GEO CSV")
+    # If multiple matches, return the first; caller can refine
+    return results[0] if len(results) == 1 else results
+
+
 @app.get("/api/meta/backends")
 def backends() -> dict[str, Any]:
     """Return all backends with capabilities."""

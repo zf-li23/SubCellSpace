@@ -33,6 +33,45 @@ export default function ReportPage() {
     setGseLoading(false)
   }
 
+  // ── Sub-components ────────────────────────────────────
+
+  function DatasetCard({ d }: { d: any }) {
+    return (
+      <section className="card" style={{ padding: '20px 24px', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.3rem' }}>{d.name || d.GSE}</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary,#666)', fontSize: 13, fontFamily: 'monospace' }}>
+              {d.GSE} / {d.sample_name || d.GSM}
+            </p>
+          </div>
+          <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${d.GSE}`}
+            target="_blank" rel="noopener noreferrer" className="pubmed-btn">
+            View on GEO ↗
+          </a>
+        </div>
+        <div className="detail-grid">
+          {Object.entries(d).filter(([k]) => !['file_names','summary'].includes(k)).map(([k, v]) => (
+            <div key={k} className="detail-item">
+              <span className="detail-label">{k.replace(/_/g, ' ')}</span>
+              <span className="detail-value">
+                {['GSE','GSM','sample_name'].includes(k)
+                  ? <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${v}`} target="_blank" rel="noopener noreferrer" className="url-link">{String(v)} ↗</a>
+                  : typeof v === 'number' ? fmtNum(v) : String(v)}
+              </span>
+            </div>
+          ))}
+        </div>
+        {d.summary && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border,#e2e8f0)' }}>
+            <strong style={{ fontSize: 13, color: '#666' }}>Summary</strong>
+            <p style={{ fontSize: 14, lineHeight: 1.6, marginTop: 6 }}>{d.summary}</p>
+          </div>
+        )}
+      </section>
+    )
+  }
+
   return (
     <div className="container">
       <section className="card" style={{ padding: '16px 24px', marginBottom: 16 }}>
@@ -48,40 +87,16 @@ export default function ReportPage() {
         {gseError && <small style={{ color: '#e74c3c' }}>{gseError}</small>}
       </section>
 
-      {gseData && (
-        <section className="card" style={{ padding: '20px 24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.3rem' }}>{gseData.name || gseData.GSE}</h2>
-              <p style={{ margin: '4px 0 0', color: 'var(--text-secondary,#666)', fontSize: 13 }}>
-                {gseData.GSE} / {gseData.sample_name || gseData.GSM}
-              </p>
-            </div>
-            <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${gseData.GSE}`}
-              target="_blank" rel="noopener noreferrer" className="pubmed-btn">
-              View on GEO ↗
-            </a>
-          </div>
-          <div className="detail-grid">
-            {Object.entries(gseData).filter(([k]) => !['file_names','summary'].includes(k)).map(([k, v]) => (
-              <div key={k} className="detail-item">
-                <span className="detail-label">{k.replace(/_/g, ' ')}</span>
-                <span className="detail-value">
-                  {['GSE','GSM','sample_name'].includes(k)
-                    ? <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${v}`} target="_blank" rel="noopener noreferrer" className="url-link">{String(v)}</a>
-                    : typeof v === 'number' ? fmtNum(v) : String(v)}
-                </span>
-              </div>
-            ))}
-          </div>
-          {gseData.summary && (
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border,#e2e8f0)' }}>
-              <strong style={{ fontSize: 13, color: '#666' }}>Summary</strong>
-              <p style={{ fontSize: 14, lineHeight: 1.6, marginTop: 6 }}>{gseData.summary}</p>
-            </div>
-          )}
+      {gseData && Array.isArray(gseData) && (
+        <section style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+            {gseData.length} datasets found
+          </p>
+          {gseData.map((d, i) => <DatasetCard key={i} d={d} />)}
         </section>
       )}
+
+      {gseData && !Array.isArray(gseData) && <DatasetCard d={gseData} />}
 
       {!gseData && !gseLoading && !gseError && (
         <div className="empty-state">
