@@ -170,6 +170,46 @@ def fig1():
     fig.savefig(OUT / 'small' / 'fig1B_growth.png', dpi=300)
     plt.close(fig)
 
+    # ── 小图 C: GSE 数量 ────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(7, 5))
+    x = np.arange(3)
+    gse_vals = [gse_per_platform[p] for p in PLATFORMS]
+    bars = ax.bar(x, gse_vals, 0.55, color=PLAT_COLORS, edgecolor='white', lw=0.8)
+    for bar, v in zip(bars, gse_vals):
+        ax.text(bar.get_x()+0.55/2, bar.get_y()+v/2, str(v), ha='center',
+                va='center', fontsize=16, fontweight='bold', color='white')
+    ax.set_xticks(x)
+    ax.set_xticklabels(PLATFORMS, fontsize=16, fontweight='bold')
+    ax.set_ylabel('GSE Series', fontsize=13)
+    ax.tick_params(axis='y', labelsize=11)
+    ax.set_title('GSE Count by Platform', fontsize=14, fontweight='bold')
+    fig.tight_layout()
+    fig.savefig(OUT / 'small' / 'fig1C_gse_counts.png', dpi=300)
+    plt.close(fig)
+
+    # ── 小图 D: 统计覆盖度 ──────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(7, 5))
+    metrics = [('n_cells', '# Cells'), ('n_transcripts', '# Tx'), ('n_genes', '# Genes')]
+    x = np.arange(len(metrics)); w = 0.22
+    for i, p in enumerate(PLATFORMS):
+        ready = [r for r in all_data[p] if r.get('status','').strip()=='ready']
+        n = max(len(ready), 1)
+        vals = [sum(1 for r in ready if r.get(mk,'').strip()) / n * 100 for mk, _ in metrics]
+        bars = ax.bar(x + (i-1)*w, vals, w, label=p, color=PLAT_COLORS[i],
+                      edgecolor='white', lw=0.5, alpha=0.85)
+        for bar, v in zip(bars, vals):
+            ax.text(bar.get_x()+w/2, bar.get_y()+v/2, f'{v:.0f}%',
+                    ha='center', va='center', fontsize=10, fontweight='bold', color='white')
+    ax.set_xticks(x)
+    ax.set_xticklabels(['# Cells', '# Transcripts', '# Genes'], fontsize=11)
+    ax.set_ylabel('Coverage (%)', fontsize=12)
+    ax.set_ylim(0, 110)
+    ax.set_title('Stats Coverage (Ready Only)', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=9, loc='lower right', framealpha=0.9)
+    fig.tight_layout()
+    fig.savefig(OUT / 'small' / 'fig1D_stats_coverage.png', dpi=300)
+    plt.close(fig)
+
     # ── 大图: 4 面板 ────────────────────────────────────────────
     fig = plt.figure(figsize=(16, 10))
     gs = fig.add_gridspec(2, 3, hspace=0.3, wspace=0.25)
@@ -347,6 +387,72 @@ def fig2():
     ax.legend(fontsize=9, loc='lower right')
     fig.tight_layout()
     fig.savefig(OUT / 'small' / 'fig2B_metadata.png', dpi=300)
+    plt.close(fig)
+
+    # ── 小图 C: 小提琴 n_transcripts ────────────────────────────
+    fig, ax = plt.subplots(figsize=(7, 5))
+    positions = []; all_v = []; labels_p = []
+    for i, p in enumerate(PLATFORMS):
+        v = violins[p]['n_transcripts']
+        if not v: continue
+        positions.append(i); all_v.append(np.log10(v)); labels_p.append(p)
+    parts = ax.violinplot(all_v, positions=positions, showmedians=True, widths=0.6)
+    for pc in parts['bodies']: pc.set_alpha(0.3)
+    for i, (p, color) in enumerate(zip(PLATFORMS, PLAT_COLORS)):
+        if violins[p]['n_transcripts']:
+            parts['bodies'][i].set_facecolor(color)
+        med = np.median(violins[p]['n_transcripts'])
+        ax.text(i, np.log10(med)+0.05, f'{med:,.0f}', ha='center', fontsize=11, fontweight='bold')
+    ax.set_xticks(range(len(PLATFORMS)))
+    ax.set_xticklabels(PLATFORMS, fontsize=14, fontweight='bold')
+    ax.set_ylabel('log₁₀(Transcripts)', fontsize=12)
+    ax.set_title('Transcripts per Dataset', fontsize=14, fontweight='bold')
+    fig.tight_layout()
+    fig.savefig(OUT / 'small' / 'fig2C_transcripts_violin.png', dpi=300)
+    plt.close(fig)
+
+    # ── 小图 D: 小提琴 n_cells ──────────────────────────────────
+    fig, ax = plt.subplots(figsize=(7, 5))
+    positions = []; all_v = []
+    for i, p in enumerate(PLATFORMS):
+        v = violins[p]['n_cells']
+        if not v: continue
+        positions.append(i); all_v.append(np.log10(v))
+    parts = ax.violinplot(all_v, positions=positions, showmedians=True, widths=0.6)
+    for pc in parts['bodies']: pc.set_alpha(0.3)
+    for i, (p, color) in enumerate(zip(PLATFORMS, PLAT_COLORS)):
+        if violins[p]['n_cells']:
+            parts['bodies'][i].set_facecolor(color)
+        med = np.median(violins[p]['n_cells'])
+        ax.text(i, np.log10(med)+0.05, f'{med:,.0f}', ha='center', fontsize=11, fontweight='bold')
+    ax.set_xticks(range(len(PLATFORMS)))
+    ax.set_xticklabels(PLATFORMS, fontsize=14, fontweight='bold')
+    ax.set_ylabel('log₁₀(Cells)', fontsize=12)
+    ax.set_title('Cells per Dataset', fontsize=14, fontweight='bold')
+    fig.tight_layout()
+    fig.savefig(OUT / 'small' / 'fig2D_cells_violin.png', dpi=300)
+    plt.close(fig)
+
+    # ── 小图 E: 小提琴 n_genes ──────────────────────────────────
+    fig, ax = plt.subplots(figsize=(7, 5))
+    positions = []; all_v = []
+    for i, p in enumerate(PLATFORMS):
+        v = violins[p]['n_genes']
+        if not v: continue
+        positions.append(i); all_v.append(np.log10(v))
+    parts = ax.violinplot(all_v, positions=positions, showmedians=True, widths=0.6)
+    for pc in parts['bodies']: pc.set_alpha(0.3)
+    for i, (p, color) in enumerate(zip(PLATFORMS, PLAT_COLORS)):
+        if violins[p]['n_genes']:
+            parts['bodies'][i].set_facecolor(color)
+        med = np.median(violins[p]['n_genes'])
+        ax.text(i, np.log10(med)+0.05, f'{med:,.0f}', ha='center', fontsize=11, fontweight='bold')
+    ax.set_xticks(range(len(PLATFORMS)))
+    ax.set_xticklabels(PLATFORMS, fontsize=14, fontweight='bold')
+    ax.set_ylabel('log₁₀(Genes)', fontsize=12)
+    ax.set_title('Genes per Dataset', fontsize=14, fontweight='bold')
+    fig.tight_layout()
+    fig.savefig(OUT / 'small' / 'fig2E_genes_violin.png', dpi=300)
     plt.close(fig)
 
     # ── 大图: 5 面板 (A/B 各半宽) ──────────────────────────────
