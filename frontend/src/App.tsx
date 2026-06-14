@@ -4,16 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingSkeleton from './components/LoadingSkeleton'
 
-const HomePage = lazy(() => import('./pages/HomePage'))
 const ReportPage = lazy(() => import('./pages/ReportPage'))
 const DataBrowser = lazy(() => import('./pages/DataBrowser'))
-const BenchmarkPage = lazy(() => import('./pages/BenchmarkPage'))
 
 const NAV_ITEMS = [
-  { path: '/',         label: 'Home',      icon: '🏠' },
+  { path: '/',         label: 'Browser',   icon: '📊' },
   { path: '/report',   label: 'Report',    icon: '📋' },
-  { path: '/browser',  label: 'Browser',   icon: '📊' },
-  { path: '/benchmark',label: 'Benchmark', icon: '⚡' },
 ]
 
 const queryClient = new QueryClient({
@@ -61,11 +57,9 @@ function AppContent() {
         <ErrorBoundary>
           <Suspense fallback={<PageLoading />}>
             <Routes>
-              <Route path="/" element={<HomePage />} />
+              <Route path="/" element={<DataBrowser />} />
               <Route path="/report" element={<ReportPage />} />
-              <Route path="/report/:runName" element={<ReportPage />} />
-              <Route path="/browser" element={<DataBrowser />} />
-              <Route path="/benchmark" element={<BenchmarkPage />} />
+              <Route path="/report/:gseId" element={<ReportPage />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>

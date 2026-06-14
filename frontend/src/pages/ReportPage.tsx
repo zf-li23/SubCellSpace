@@ -91,12 +91,34 @@ function extractLayerMetrics(le: Record<string, Record<string, unknown>> | undef
 // ── Main Component ────────────────────────────────────────────────────
 
 export default function ReportPage() {
-  const { runName: urlRunName } = useParams<{ runName?: string }>()
+  const { runName: urlRunName, gseId } = useParams<{ runName?: string; gseId?: string }>()
   const navigate = useNavigate()
 
   const { data: allRuns = [] } = useRuns()
   const [selectedRun, setSelectedRun] = useState<string | null>(urlRunName ?? null)
   const effectiveRun = selectedRun ?? allRuns[0]?.run_name ?? null
+
+  // ── GSE 搜索 ──
+  const [gseSearch, setGseSearch] = useState(gseId ?? '')
+  const [gseData, setGseData] = useState<any>(null)
+  const [gseLoading, setGseLoading] = useState(false)
+  const [gseError, setGseError] = useState<string | null>(null)
+
+  const handleGseSearch = async () => {
+    const q = gseSearch.trim()
+    if (!q) return
+    setGseLoading(true); setGseError(null)
+    try {
+      const r = await fetch(`/api/dataset?gse=${encodeURIComponent(q)}`)
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const j = await r.json()
+      setGseData(j)
+    } catch (e: any) {
+      setGseError(e.message ?? 'Failed to load dataset')
+      setGseData(null)
+    }
+    setGseLoading(false)
+  }
 
   const { data: report, isLoading: reportLoading, error: reportError } = useRunReport(effectiveRun)
   const { data: plots } = useRunPlots(effectiveRun)
@@ -116,18 +138,48 @@ export default function ReportPage() {
 
   return (
     <div className="container">
-      {/* Run selector */}
-      <section className="report-control-bar">
-        <div>
-          <div className="eyebrow">Pipeline Run</div>
-          <select value={effectiveRun ?? ''} onChange={(e) => handleSelectRun(e.target.value)}
-            style={{ fontSize: 18, fontWeight: 600, padding: '4px 8px', border: '1px solid var(--border-color,#ddd)', borderRadius: 6 }}>
-            {allRuns.map(r => r.run_name).map(name => <option key={name} value={name}>{name}</option>)}
-            {allRuns.length === 0 && <option value="">No runs</option>}
-          </select>
+      {/* GSE 搜索 */}
+      <section className="card report-control-bar" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div className="eyebrow">Dataset Search</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input type="text" value={gseSearch} onChange={e => setGseSearch(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleGseSearch()}
+                placeholder="GSE ID or sample name..."
+                style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(22,50,63,0.15)', fontSize: 14, width: 260 }} />
+              <button className="btn" onClick={handleGseSearch} disabled={gseLoading}>🔍 Search</button>
+            </div>
+            {gseLoading && <small style={{ color: '#888' }}>Loading...</small>}
+            {gseError && <small style={{ color: '#e74c3c' }}>{gseError}</small>}
+            {gseData && <small style={{ color: '#27ae60' }}>Found: {gseData.GSE}/{gseData.sample_name}</small>}
+          </div>
+          <div style={{ flex: 1 }} />
+          <div>
+            <div className="eyebrow">Pipeline Run</div>
+            <select value={effectiveRun ?? ''} onChange={(e) => handleSelectRun(e.target.value)}
+              style={{ fontSize: 18, fontWeight: 600, padding: '4px 8px', border: '1px solid var(--border-color,#ddd)', borderRadius: 6 }}>
+              {allRuns.map(r => r.run_name).map(name => <option key={name} value={name}>{name}</option>)}
+              {allRuns.length === 0 && <option value="">No runs</option>}
+            </select>
+          </div>
         </div>
       </section>
 
+      {gseData && (
+        <section className="card" style={{ marginTop: 16, padding: '12px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <span><strong>GSE:</strong> {gseData.GSE}</span>
+            <span><strong>Sample:</strong> {gseData.sample_name || gseData.GSM}</span>
+            <span><strong>Platform:</strong> {gseData.platform || gseData.Platform}</span>
+            <span><strong>Status:</strong> {gseData.status}</span>
+            {gseData.tissue && <span><strong>Tissue:</strong> {gseData.tissue}</span>}
+            {gseData.disease_state && <span><strong>Disease:</strong> {gseData.disease_state}</span>}
+            {gseData.n_cells && <span><strong>Cells:</strong> {fmtNum(gseData.n_cells)}</span>}
+            {gseData.n_transcripts && <span><strong>Transcripts:</strong> {fmtNum(gseData.n_transcripts)}</span>}
+          </div>
+        </section>
+      )}
       {reportLoading && <LoadingSkeleton />}
       {reportError && <div className="alert alert-error">Failed to load report. Network error.</div>}
 
