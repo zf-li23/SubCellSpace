@@ -46,17 +46,11 @@ function RowDetailView({ row, columns, onBack }: { row: GeoRow; columns: ColumnM
       <div className="detail-grid">
         {columns.map(col => {
           const val = getCellValue(row, col.name)
-          const isGseLink = col.name === 'GSE' && val !== '—'
-          const isGsmLink = col.name === 'sample_name' && val !== '—'
-          const href = isGseLink ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}`
-            : isGsmLink ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${val}` : ''
           return (
             <div key={col.name} className="detail-item">
               <span className="detail-label">{col.label_zh}</span>
               <span className="detail-value">
-                {href
-                  ? <a href={href} target="_blank" rel="noopener noreferrer" className="url-link">{val}</a>
-                  : val.length > 120 ? <span title={val}>{val.slice(0, 117)}...</span> : val}
+                {val.length > 120 ? <span title={val}>{val.slice(0, 117)}...</span> : val}
               </span>
             </div>
           )
@@ -276,21 +270,12 @@ export default function DataBrowser() {
                     return (
                       <div style={style} className={`tr ${isScrolling ? 'tr-scrolling' : ''}`}
                         onClick={() => setExpandedRow(row)}>
-                        {data.columns.map((col: ColumnMeta) => {
-                          const isGsm = col.name === 'sample_name'
-                          const href = isGsm ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${(row as Record<string, unknown>)[col.name]}` : ''
-                          return (
-                            <span key={col.name}
-                              className={`td td-${col.name} ${col.name === data.sortKey ? 'td-sorted' : ''}`}>
-                              {isGsm && (row as Record<string, unknown>)[col.name]
-                                ? <a href={href} target="_blank" rel="noopener noreferrer"
-                                    onClick={e => e.stopPropagation()}>
-                                    {(row as Record<string, unknown>)[col.name] as string}
-                                  </a>
-                                : fmtNumCol(row, col.name)}
-                            </span>
-                          )
-                        })}
+                        {data.columns.map((col: ColumnMeta) => (
+                          <span key={col.name}
+                            className={`td td-${col.name} ${col.name === data.sortKey ? 'td-sorted' : ''}`}>
+                            {fmtNumCol(row, col.name)}
+                          </span>
+                        ))}
                       </div>
                     )
                   }}
