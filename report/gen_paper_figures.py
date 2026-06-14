@@ -339,12 +339,12 @@ def fig2():
     fig.savefig(OUT / 'small' / 'fig2B_metadata.png', dpi=300)
     plt.close(fig)
 
-    # ── 大图: 4 面板 ────────────────────────────────────────────
+    # ── 大图: 5 面板 (A/B 各半宽) ──────────────────────────────
     fig = plt.figure(figsize=(18, 12))
-    gs = fig.add_gridspec(2, 3, hspace=0.3, wspace=0.22)
+    gs = fig.add_gridspec(2, 4, hspace=0.3, wspace=0.22)
 
-    # (a) 文件覆盖率热图
-    ax_a = fig.add_subplot(gs[0, 0])
+    # (a) 文件覆盖率热图 (左半)
+    ax_a = fig.add_subplot(gs[0, :2])
     im = ax_a.imshow(heat_data, cmap='Greens', aspect='auto', vmin=0, vmax=100)
     for i in range(len(PLATFORMS)):
         for j in range(len(cat_labels)):
@@ -359,10 +359,9 @@ def fig2():
     plt.colorbar(im, ax=ax_a, shrink=0.5, pad=0.02)
     ax_a.set_title('A  File Coverage', fontsize=14, fontweight='bold', loc='left')
 
-    # (b) 元数据完整度热图
-    ax_b = fig.add_subplot(gs[0, 1:])
+    # (b) 元数据完整度热图 (右半)
+    ax_b = fig.add_subplot(gs[0, 2:])
     meta_arr = np.array(meta_data).T  # (n_fields, 3)
-    # Sort by average
     avg = meta_arr.mean(axis=1)
     sidx = np.argsort(-avg)
     meta_arr_sorted = meta_arr[sidx]
@@ -427,7 +426,7 @@ def fig2():
     ax_d.set_title('D  Cells per Dataset', fontsize=13, fontweight='bold', loc='left')
 
     # (e) 小提琴: n_genes
-    ax_e = fig.add_subplot(gs[1, 2])
+    ax_e = fig.add_subplot(gs[1, 2:])
     positions = []; all_v = []
     for i, p in enumerate(PLATFORMS):
         v = violins[p]['n_genes']
