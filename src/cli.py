@@ -118,7 +118,7 @@ def _cmd_ingest(args: argparse.Namespace) -> None:
 
 
 def _cmd_lookup(args: argparse.Namespace) -> None:
-    """Handle ``subcellspace lookup`` — query datasets / GEO databases."""
+    """Handle ``subcellspace lookup`` — query the GEO registries."""
     from .database.resolver import lookup as db_lookup
 
     results = db_lookup(args.query)
@@ -132,8 +132,6 @@ def _cmd_lookup(args: argparse.Namespace) -> None:
         for r in results:
             path = r.resolved_path
             src_tag = f"[{r.source}]"
-            if r.id:
-                src_tag += f" {r.id}"
             if r.gse:
                 src_tag += f" {r.gse}"
                 if r.gsm:
@@ -156,16 +154,13 @@ def _cmd_lookup(args: argparse.Namespace) -> None:
     print()
     for r in results:
         src = r.source
-        rid = r.id or ""
         gse = r.gse or ""
         gsm = r.gsm or ""
         plat = r.platform or ""
         name = (r.name or "")[:60]
         st = r.status or "?"
 
-        if rid:
-            label = f"{rid} ({plat})"
-        elif gse and gsm:
+        if gse and gsm:
             label = f"{gse}/{gsm} ({plat})"
         elif gse:
             label = f"{gse} ({plat})"
@@ -262,7 +257,7 @@ def _cmd_touch_all(args: argparse.Namespace) -> None:
     results = []
     for i, ds in enumerate(all_ready, 1):
         path = ds.resolved_path
-        label = f"{ds.gse}/{ds.gsm}" if ds.gse else ds.id or path
+        label = f"{ds.gse}/{ds.gsm}" if ds.gse else path
         print(f"  [{i}/{len(all_ready)}] {label} ...", end=" ", flush=True)
 
         try:

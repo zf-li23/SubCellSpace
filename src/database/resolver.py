@@ -1,10 +1,9 @@
 """
 GEO 数据库统一查询模块 (Resolver)
 ===================================
-统一查询 datasets.csv（非GEO）和 per-platform *_geo.csv（GEO）的入口。
+统一查询 per-platform GEO 登记表（data/{cosmx,xenium,merfish}_geo.csv）的入口。
 
 查询模式:
-  "D0059"              → datasets.csv 的 ID
   "GSE234713"          → 所有 GEO CSV 中该 GSE 的行
   "GSE234713/GSM7473682" → 精确 GSM 查询
   "/absolute/path"     → 透传（已存在的路径）
@@ -12,7 +11,6 @@ GEO 数据库统一查询模块 (Resolver)
 用法:
     from src.database.resolver import lookup, list_datasets, resolve_path
 
-    info = lookup("D0059")
     gse = lookup("GSE234713")
     gsm = lookup("GSE234713/GSM7473682")
     rows = list_datasets(platform="CosMx", status="ready")
@@ -25,20 +23,20 @@ import os
 import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import List, Optional
 
 # ── 数据目录 ─────────────────────────────────────────────────────────
 # 相对于项目根目录
 
 _DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
-DATASETS_CSV = _DATA_DIR / "datasets.csv"
 COSMX_GEO_CSV = _DATA_DIR / "cosmx_geo.csv"
 XENIUM_GEO_CSV = _DATA_DIR / "xenium_geo.csv"
 MERFISH_GEO_CSV = _DATA_DIR / "merfish_geo.csv"
 
 # ── 集群根路径 ───────────────────────────────────────────────────────
-_CLUSTER_DATA_ROOT = "/data3/yangxr002/"
+# 可用环境变量 SUBCELLSPACE_DATA_ROOT 覆盖（需以 / 结尾）
+_CLUSTER_DATA_ROOT = os.environ.get("SUBCELLSPACE_DATA_ROOT", "/data3/yangxr002/")
 
 
 # ── 统一数据集信息模型 ──────────────────────────────────────────────
@@ -46,39 +44,16 @@ _CLUSTER_DATA_ROOT = "/data3/yangxr002/"
 
 @dataclass
 class DatasetInfo:
-    """统一的数据集信息，从 CSV 行映射而来。
-
-    无论来源是 datasets.csv 还是 *_geo.csv，都归一化为此结构。
-    """
-    # 标识
-    source: str                   # "datasets" | "cosmx_geo" | "xenium_geo" | "merfish_geo"
-    id: Optional[str] = None      # datasets.csv 的 id (D/R/M 前缀)
-    gse: Optional[str] = None     # GEO 编号
-    gsm: Optional[str] = None     # GSM 编号 (cosmx 用 sample_name)
+    """一条 GEO 登记表记录（GSE + GSM）。"""
+    source: str                     # "cosmx_geo" | "xenium_geo" | "merfish_geo" | "path"
+    gse: Optional[str] = None       # GEO Series 编号
+    gsm: Optional[str] = None       # GSM 编号或 GSM 范围（CosMx 合并样本）
     platform: Optional[str] = None  # CosMx / Xenium / MERFISH
-    name: Optional[str] = None    # 数据集名称
-
-    # 溯源
-    project_url: Optional[str] = None
-    download_url: Optional[str] = None
-    data_source: Optional[str] = None
-    publication_doi: Optional[str] = None
-
-    # 生物学
-    species: Optional[str] = None
+    name: Optional[str] = None      # 数据集名称
+    status: Optional[str] = None    # ready / pending / error
     tissue: Optional[str] = None
     disease_state: Optional[str] = None
-
-    # 技术
-    status: Optional[str] = None  # ready / pending / error
-    estimated_cell_count: Optional[int] = None
-    data_size_display: Optional[str] = None
-    spatial_resolution_um: Optional[float] = None
-    gene_panel_size: Optional[int] = None
-
-    # 存储
-    local_path: Optional[str] = None
-    file_name: Optional[str] = None
+    local_path: Optional[str] = None  # 集群上的样本目录
 
     # 原始行（调试用）
     _raw: dict = field(default_factory=dict, repr=False)
@@ -88,20 +63,8 @@ class DatasetInfo:
 
     @property
     def resolved_path(self) -> Optional[str]:
-        """返回可直接用于 pipeline 输入的文件路径。
-
-        如果已有 local_path + file_name，拼接完整路径。
-        如果是 GEO 数据但无 local_path，基于集群约定推断路径。
-        否则返回 None。
-        """
-        if self.local_path:
-            if self.file_name:
-                return os.path.join(self.local_path, self.file_name)
-            # local_path 可能已经是文件路径
-            if os.path.isfile(self.local_path):
-                return self.local_path
-            return self.local_path  # 目录路径，让 ingest 自己扫描
-        return None
+        """样本目录路径（无路径时为 None）。"""
+        return self.local_path or None
 
 
 # ── CSV 读取器 ───────────────────────────────────────────────────────
@@ -114,10 +77,6 @@ def _read_csv(path: Path) -> List[dict]:
     with open(path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         return list(reader)
-
-
-def _read_datasets_csv() -> List[dict]:
-    return _read_csv(DATASETS_CSV)
 
 
 def _read_cosmx_geo_csv() -> List[dict]:
@@ -135,31 +94,6 @@ def _read_merfish_geo_csv() -> List[dict]:
 # ── 行 → DatasetInfo 转换 ──────────────────────────────────────────
 
 
-def _from_datasets_row(row: dict) -> DatasetInfo:
-    """将 datasets.csv 的一行转换为 DatasetInfo。"""
-    return DatasetInfo(
-        source="datasets",
-        id=row.get("id"),
-        platform=row.get("platform"),
-        name=row.get("name"),
-        project_url=row.get("project_url"),
-        download_url=row.get("download_url"),
-        data_source=row.get("data_source"),
-        publication_doi=row.get("publication_doi"),
-        species=row.get("species"),
-        tissue=row.get("tissue"),
-        disease_state=row.get("disease_state"),
-        status=row.get("status"),
-        estimated_cell_count=_safe_int(row.get("estimated_cell_count")),
-        data_size_display=row.get("data_size_display"),
-        spatial_resolution_um=_safe_float(row.get("spatial_resolution_um")),
-        gene_panel_size=_safe_int(row.get("gene_panel_size")),
-        local_path=row.get("local_path"),
-        file_name=row.get("file_name"),
-        _raw=row,
-    )
-
-
 def _from_geo_row(row: dict, platform: str, source: str) -> DatasetInfo:
     """将 *_geo.csv 的一行转换为 DatasetInfo。
 
@@ -173,6 +107,8 @@ def _from_geo_row(row: dict, platform: str, source: str) -> DatasetInfo:
         platform=platform,
         name=row.get("name"),
         status=row.get("status"),
+        tissue=row.get("tissue") or None,
+        disease_state=row.get("disease_state") or None,
         # GEO 数据的 local_path 基于集群约定推断
         local_path=_infer_geo_local_path(platform, row.get("GSE", ""), gsm),
         _raw=row,
@@ -193,34 +129,14 @@ def _infer_geo_local_path(platform: str, gse: str, gsm: str) -> Optional[str]:
     return f"{_CLUSTER_DATA_ROOT}{platform_dir}/{gse}/{gsm}/"
 
 
-def _safe_int(val: Optional[str]) -> Optional[int]:
-    if val is None or val.strip() == "":
-        return None
-    try:
-        return int(val)
-    except (ValueError, TypeError):
-        return None
-
-
-def _safe_float(val: Optional[str]) -> Optional[float]:
-    if val is None or val.strip() == "":
-        return None
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
-
-
 # ── 查询 ID 模式 ────────────────────────────────────────────────────
 
 # 匹配规则：
-#   D0059, R0123, M0001  → datasets.csv ID
 #   GSE234713             → GEO 系列
 #   GSE234713/GSM7473682  → 精确 GSM
 #   GSM7473682            → 模糊 GSM（跨所有 GEO CSV 搜索）
 #   /data3/...            → 绝对路径（透传）
 
-_ID_PATTERN = re.compile(r"^[DRM]\d{4}$")
 _GSE_PATTERN = re.compile(r"^(GSE\d+)$")
 _GSM_PATTERN = re.compile(r"^(GSM\d+)$")
 _GSE_GSM_PATTERN = re.compile(r"^(GSE\d+)/(GSM\d+)$")
@@ -230,9 +146,6 @@ _COSMX_GSM_RANGE = re.compile(r"^(GSE\d+)/(GSM\d+)-?(GSM\d*)$")
 def _classify_query(query: str) -> tuple[str, ...]:
     """分类查询字符串，返回 (type, ...) 元组。"""
     query = query.strip()
-
-    if _ID_PATTERN.match(query):
-        return ("id", query)
 
     m = _GSE_GSM_PATTERN.match(query)
     if m:
@@ -263,16 +176,13 @@ def lookup(query: str) -> List[DatasetInfo]:
     """统一查询入口。
 
     参数:
-        query: "D0059" / "GSE234713" / "GSE234713/GSM7473682" / "/absolute/path"
+        query: "GSE234713" / "GSE234713/GSM7473682" / "GSM7473682" / "/absolute/path"
 
     返回:
         DatasetInfo 列表（通常 1 条，GSE 查询可能多条）
         无匹配时返回空列表。
     """
     qtype, *args = _classify_query(query)
-
-    if qtype == "id":
-        return _lookup_id(args[0])
 
     if qtype == "gse":
         return _lookup_gse(args[0])
@@ -299,14 +209,6 @@ def lookup(query: str) -> List[DatasetInfo]:
             )]
         return []
 
-    return []
-
-
-def _lookup_id(dataset_id: str) -> List[DatasetInfo]:
-    """按 datasets.csv 的 ID 查询。"""
-    for row in _read_datasets_csv():
-        if row.get("id") == dataset_id:
-            return [_from_datasets_row(row)]
     return []
 
 
@@ -407,17 +309,9 @@ def list_datasets(platform: Optional[str] = None,
         status: 按状态筛选 ("ready" / "pending")
 
     返回:
-        DatasetInfo 列表（来自 datasets.csv 和所有 GEO CSV）
+        DatasetInfo 列表（来自所有 GEO CSV）
     """
     results: List[DatasetInfo] = []
-
-    # datasets.csv
-    for row in _read_datasets_csv():
-        if platform and row.get("platform") != platform:
-            continue
-        if status and row.get("status") != status:
-            continue
-        results.append(_from_datasets_row(row))
 
     # CosmX GEO
     for row in _read_cosmx_geo_csv():

@@ -192,7 +192,7 @@ def touch(input_path: str | Path, normalize: bool = False,
         results = db_lookup(input_raw)
         if results:
             info = results[0]
-            report.dataset_id = info.id
+            report.dataset_id = f"{info.gse}/{info.gsm}" if info.gse and info.gsm else None
             report.gse = info.gse
             report.gsm = info.gsm
             if info.resolved_path:
