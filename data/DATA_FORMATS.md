@@ -1,32 +1,17 @@
 # SubCellSpace — 数据格式参考
 
-> **最后更新**: 2026-06-08  
-> 本文档描述所有平台的数据集输入格式。
+> **最后更新**: 2026-09-29  
+> 本文档描述 GEO 数据集的输入格式。厂商（非 GEO）数据已于 2026-09-29 移除。
 
 ---
 
-## 0. 集群目录结构（2026-06-08 更新）
-
-数据分为两条路径：
+## 0. 集群目录结构
 
 ```
-/data3/yangxr002/
-├── {Platform}/              非 GEO 来源（NanoString/Vizgen/10x Genomics/Zenodo 官方数据）
-│   └── Pxxxx/Dxxxx/         传统 P/D 命名空间
-└── {Platform}_GEO/          GEO 来源（所有 GEO 数据）
-    └── GSE*/{sample_name}/  GSE/GSM 命名空间
+$SUBCELLSPACE_DATA_ROOT/
+└── {CosMx,Xenium,MERFISH}_GEO/
+    └── GSE*/{GSM 或 GSM 范围}/     CosMx 合并样本用 GSM 范围命名（GSMxxxx-GSMyyyy）
 ```
-
-### 命名空间分配
-
-| 路径 | 平台 | 项目 ID | 数据集 ID |
-|------|------|---------|----------|
-| `CosMx/` | 非 GEO | P0001-P0013 | D0001-D0011 (Standard), R0001-R0883 (Fragment), M0001-M0004 (Merged) |
-| `CosMx_GEO/` | GEO | GSE* | sample_name (GSM 编号或 GSM 范围) |
-| `MERFISH/` | 非 GEO Vizgen | P2001-P2008 | D2001-D2018 |
-| `MERFISH_GEO/` | GEO | GSE* | GSM* |
-| `Xenium/` | 非 GEO 10x | P1001-P1045 | D1001-D1082 |
-| `Xenium_GEO/` | GEO | GSE* | GSM* |
 
 ---
 
@@ -53,24 +38,9 @@ CosMx 数据有三种变体，但**转录本 CSV 的列结构完全相同**。
 
 SubCellSpace 映射：`target → gene`, `cell → cell_id`, `x_global_px → x`, `y_global_px → y`。
 
-### 1.2 非 GEO 简单格式
+### 1.2 GEO 来源格式
 
-**路径**: `/data3/yangxr002/CosMx/Pxxxx/Dxxxx/`
-
-每个项目目录仅包含一个转录本 CSV 或完整的 NanoString 输出。适用于 NanoString/Bruker/Zenodo 来源的数据。
-
-```
-P0001/D0001/
-└── S0_tx_file.csv                    ← 最简形式
-P0011/D0011/
-├── KidneyRun2S1_tx_file.csv          ← 标准输出
-├── KidneyRun2S1_exprMat_file.csv.gz
-└── KidneyRun2S1_metadata_file.csv.gz
-```
-
-### 1.3 GEO 来源格式（已迁移到 CosMx_GEO）
-
-**路径**: `/data3/yangxr002/CosMx_GEO/GSE*/{sample_name}/`
+**路径**: `$SUBCELLSPACE_DATA_ROOT/CosMx_GEO/GSE*/{sample_name}/`
 
 GEO 数据的文件命名包含 GSM accession 号。支持两种形式：
 
@@ -110,12 +80,11 @@ GSE253474/GSM8021238-GSM8021269/
 
 Xenium 数据以平铺目录形式存在，包含标准 Xenium Ranger 输出文件。
 
-**非 GEO**: `/data3/yangxr002/Xenium/Pxxxx/Dxxxx/`
-**GEO**: `/data3/yangxr002/Xenium_GEO/GSE*/GSM*/`
+**GEO**: `$SUBCELLSPACE_DATA_ROOT/Xenium_GEO/GSE*/GSM*/`
 
 ```
-# 非 GEO 示例（10x Genomics 官方数据）
-P1001/D1001/
+# 示例（标准 Xenium 输出）
+GSE*/GSM*/
 ├── transcripts.parquet         ← 推荐使用（性能最优，可能以 .tar.gz 打包）
 ├── cells.parquet / cells.csv.gz
 ├── cell_boundaries.parquet / cell_boundaries.csv.gz
@@ -169,12 +138,11 @@ sdata = spatialdata_io.xenium("path/to/xenium_outs")
 
 Vizgen 标准输出包含 3 个核心文件。
 
-**非 GEO（Vizgen 官方数据）**: `/data3/yangxr002/MERFISH/P2xxx/D2xxx/`
-**GEO**: `/data3/yangxr002/MERFISH_GEO/GSE*/GSM*/`
+**GEO**: `$SUBCELLSPACE_DATA_ROOT/MERFISH_GEO/GSE*/GSM*/`
 
 ```
-# 非 GEO 示例
-P2001/D2001/
+# 示例（标准 MERSCOPE 输出）
+GSE*/GSM*/
 ├── HumanBreastCancerPatient1_detected_transcripts.csv   ← 转录本坐标
 ├── HumanBreastCancerPatient1_cell_metadata.csv          ← 细胞元数据
 └── HumanBreastCancerPatient1_cell_by_gene.csv           ← 表达矩阵
@@ -227,28 +195,10 @@ sdata = spatialdata_io.merscope("path/to/merscope_data", z_layers=3)
 
 ---
 
-## 4. Stereo-seq (BGI / STOmics)
-
-### 4.1 GEM 格式
-
-BGI Stereo-seq 数据可以以 GEM 格式提供：
-
-| 列名 | 说明 |
-|------|------|
-| `geneID` | 基因 ID |
-| `x` | X 坐标 |
-| `y` | Y 坐标 |
-| `count` | 计数（通常为 1，每个转录本一行） |
-
-也可以直接使用 BIN 级别的计数矩阵（`.tsv`），通过转换脚本生成 GEM 格式。
-
----
-
-## 5. 数据格式速查
+## 4. 数据格式速查
 
 | 平台 | 文件类型 | 扩展名 | X 列 | Y 列 | 基因列 | 细胞列 |
 |------|---------|--------|------|------|--------|--------|
 | CosMx | CSV | `.csv` | `x_global_px` | `y_global_px` | `target` | `cell` |
 | Xenium | Parquet/CSV | `.parquet` `.csv(.gz)` | `x_location` | `y_location` | `feature_name` | `cell_id` |
 | MERFISH | CSV | `.csv` | `global_x` | `global_y` | `gene` | `cell_id`/`barcode_id` |
-| Stereo-seq | TSV (GEM) | `.gem` | `x` | `y` | `geneID` | — |

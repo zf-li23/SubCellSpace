@@ -1,86 +1,37 @@
-# SubCellSpace：亚细胞空间转录组学分析平台
+# SubCellSpace
 
-SubCellSpace 是一个面向亚细胞空间转录组学的分析平台，支持 **CosMx / Xenium / MERFISH** 三平台。
-基于 **Scverse 生态**（scanpy + squidpy + spatialdata），零外部依赖，无需网络、无需 GPU。
+成像型空间转录组（CosMx / Xenium / MERFISH）**GEO 数据库**的本地整理工具：登记、完整性检查、数据补全，
+并为每个样本生成细胞水平的 Xenium 风格报告，最终发布为静态网站。
 
-- **统一数据层**：SpatialData 为中心容器，自动整合各平台标准输出中的所有伴侣文件
-- **单一的管线**：7 步骤，每步一个可靠后端，无需插件系统、无可选依赖
-- **一键运行**：`subcellspace run data.csv` 自动检测平台 → 摄入全部文件 → 分析 → 导出
-- **CLI 优先**：所有分析通过命令行执行；前端是纯数据浏览器
+细胞水平的分析（转录本归属、分割、聚合、预处理）**使用 [SOPA](https://github.com/gustaveroussy/sopa)**，
+本项目不再开发分析方法。
 
-## 设计哲学
+## 组成
 
-- **Scverse 原生**：管线完全基于 scanpy + squidpy + spatialdata，不引入任何需要网络下载或 GPU 的外部工具
-- **信息最大化**：摄入阶段自动整合各平台标准输出中的所有伴侣文件（多边形边界、表达矩阵、元数据等）
-- **可复现**：单一 config/pipeline.yaml，无插件注册机制，无运行时发现
+| 部分 | 位置 | 作用 |
+|------|------|------|
+| GEO 登记表 | `data/{cosmx,xenium,merfish}_geo.csv` | 每个 GSM 一行：状态、GEO 元数据、组织/疾病、文件、统计 |
+| GEO 工具链 | `src/geo/` | GSM 展开、下载、解压、元数据补全、格式识别 |
+| touch | `src/touch.py` | 样本目录的文件完整性检查（默认只读） |
+| 读取器 | `src/io/` | 把 GEO 上不完整、不标准的文件转成 SpatialData |
+| 报告 | `src/html_report.py` | Xenium 风格的交互式 HTML 报告 |
+| 浏览器 | `frontend/` | 登记表的静态浏览页面 |
 
-## 快速开始
-
-```bash
-conda activate subcellspace
-subcellspace run data/test/cosmx_D0059.csv
-subcellspace run /data/cosmx/tx_file.csv --platform cosmx -o outputs/my_run/
-subcellspace run data.csv --subcellular-analysis-backend scrin
-```
-
-## CLI 命令
+## 使用
 
 ```bash
-subcellspace run <file>
-subcellspace ingest <platform> <file>
-subcellspace export <zarr>
-subcellspace backends
-subcellspace db export|validate
+conda env create -f environment.yml && conda activate subcellspace
+pip install -e ".[dev]"
+
+subcellspace lookup GSE234713          # 查询登记表
+subcellspace touch <样本目录>           # 完整性检查
+subcellspace ingest cosmx <tx_file>     # GEO 文件 → SpatialData
+subcellspace stats <样本目录>           # 流式统计
+
+python scripts/export_frontend_json.py  # 登记表 → frontend/public/*.json
+cd frontend && npm install && npm run dev
+
+ruff check src scripts tests && pytest -q
 ```
 
-## 管线步骤
-
-| 步骤 | 后端 | 依赖 | 功能 |
-|------|------|------|------|
-| denoise | intracellular | pandas | 按 CellComp 过滤 |
-| segmentation | fov_cell_id | pandas | FOV 前缀防 ID 碰撞 |
-| analysis | leiden | scanpy | PCA + UMAP + Leiden |
-| annotation | rank_marker | scanpy | 差异基因标记 |
-| spatial_analysis | squidpy | squidpy | 空间域 + SVG + 邻域 |
-| subcellular_analysis | none / scrin | - / SCRIN | 亚细胞分析 |
-
-## 输出
-
-```
-outputs/my_run/
-  {platform}.h5ad
-  {platform}_report.json
-  cells.parquet
-  metadata.json
-  report.html
-  export/
-```
-
-## 项目结构
-
-```
-src/              Python 管线
-config/          单一管线配置 pipeline.yaml
-frontend/        React 浏览器（DataBrowser + DataEditor）
-tools/SCRIN/     可选：SCRIN 亚细胞分析
-data/            数据层（GEO CSV + 非GEO元数据 + 文档）
-scripts/         辅助脚本（迁移、查询、诊断）
-```
-
-## 数据层架构
-
-SubCellSpace 采用 **双系统数据库架构**：
-
-- `data/datasets.csv` — 非 GEO 数据集元数据（998 行，13 列）
-- `data/{platform}_geo.csv` — 各平台 GEO 数据集索引（GSE + GSM 双主键，4 列）
-  - `cosmx_geo.csv`: 1932 行, 63 GSEs
-  - `merfish_geo.csv`: 801 行, 44 GSEs
-  - `xenium_geo.csv`: 1745 行, 162 GSEs
-
-集群数据分两条路径：
-- `/data3/yangxr002/{Platform}/` — 非 GEO 官方数据
-- `/data3/yangxr002/{Platform}_GEO/` — GEO 来源数据（GSE*/GSM* 结构）
-
-详细文档：`data/DATA_FORMATS.md`、`data/DATA_STATUS.md`、`AGENTS.md`
-
-MIT License
+项目进度、决定和集群约定见 [AGENTS.md](AGENTS.md)。

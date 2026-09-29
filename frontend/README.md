@@ -1,35 +1,21 @@
 # SubCellSpace Frontend
 
-React + TypeScript + Vite 数据浏览器，**不含分析业务逻辑**。
-
-## 快速启动
+React + TypeScript + Vite 的登记表浏览器，不含分析逻辑。
 
 ```bash
+python scripts/export_frontend_json.py   # 在仓库根目录生成 frontend/public/{cosmx,xenium,merfish}.json
 cd frontend
 npm install
-npm run dev        # 自动启动后端（需 conda activate subcellspace）
+npm run dev      # http://127.0.0.1:5173；会自动启动本地 API（:8000）
+npm test         # vitest
+npm run build    # → dist/
 ```
 
-前端监听 `http://127.0.0.1:5173`，API 代理至 `http://127.0.0.1:8000`。
-
-## 页面
-
-| 路由 | 功能 | 数据源 |
+| 路由 | 页面 | 数据源 |
 |------|------|--------|
-| `/` | HomePage — 导航卡片与概述 | 静态 |
-| `/report` / `/report/:runName` | ReportPage — 管线结果可视化 | API `/api/reports/{run}` |
-| `/browser` | DataBrowser — 数据集浏览 | `datasets.json` |
-| `/editor` | DataEditor — 数据集 CRUD（仅 dev 模式） | API `/api/db/*` |
-| `/benchmark` | BenchmarkPage — 基准比较 | API `/api/benchmarks/{run}` |
+| `/` | DataBrowser：按平台浏览、搜索、筛选、排序、详情、CSV 导出；GEO / PubMed 链接 | `public/{platform}.json` |
+| `/report`, `/report/:gseId` | ReportPage：按 GSE/GSM/关键词查询 | 本地 API `/api/dataset` |
 
-## 构建
+`scripts/dev.mjs` 按以下顺序查找 Python：`.venv`、`$SUBCELLSPACE_PYTHON`、`$CONDA_PREFIX`、`PATH`。
 
-```bash
-npm run build      # → dist/
-```
-
-## 启动脚本
-
-`scripts/dev.mjs` 自动检测 8000 端口，后端未运行时自动拉起。
-
-关键依赖：`react-router-dom`、`@tanstack/react-query`。
+Phase 7 会把 ReportPage 改成静态的样本报告页面，并加上 GitHub Pages 部署；见 `../AGENTS.md`。
