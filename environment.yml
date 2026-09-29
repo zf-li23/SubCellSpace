@@ -7,9 +7,7 @@
 # 使用方式：
 #   conda env create -f environment.yml
 #   conda activate subcellspace
-#   pip install -e .                  # 核心依赖（所有默认后端可用）
-#   pip install -e ".[dev]"           # 核心 + 测试工具
-#   pip install -e ".[all]"           # 全部（含 cellpose, scvi, celltypist, baysor）
+#   pip install -e ".[dev]"           # 依赖（含 SOPA）+ 测试工具 (pytest, ruff)
 
 name: subcellspace
 channels:

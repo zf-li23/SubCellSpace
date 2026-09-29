@@ -29,7 +29,7 @@ venv/
 *~
 .ipynb_checkpoints/
 
-# Generated dependency exports (uv.lock is committed)
+# Generated dependency exports
 requirements.txt
 requirements-lock.txt
 
