@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import anndata as ad
-from spatialdata import SpatialData
 
 
 @dataclass(slots=True)
@@ -28,49 +26,3 @@ class DatasetSummary:
         for key, value in self.extra.items():
             lines.append(f"{key}: {value}")
         return "\n".join(lines)
-
-
-@dataclass(slots=True)
-class IngestResult:
-    """Result of Phase 0: Data Ingestion.
-
-    Attributes
-    ----------
-    sdata : SpatialData
-        The standardised spatial data object.
-    summary : DatasetSummary
-        Dataset-level summary statistics.
-    platform : str
-        Platform identifier string.
-    """
-    sdata: SpatialData
-    summary: DatasetSummary
-    platform: str
-
-
-@dataclass(slots=True)
-class StepResult:
-    """Standardised return value for every pipeline step.
-
-    Attributes
-    ----------
-    output : Any
-        The primary output of the step (e.g. filtered DataFrame, modified AnnData).
-    summary : dict[str, Any]
-        A dictionary of summary statistics for this step.
-    backend_used : str
-        The actual backend name that was used (may differ from requested due to fallback).
-    """
-
-    output: Any
-    summary: dict[str, Any]
-    backend_used: str
-
-
-@dataclass(slots=True)
-class PipelineResult:
-    adata: ad.AnnData
-    summary: DatasetSummary
-    sdata: SpatialData
-    adata_path: Path
-    report_path: Path

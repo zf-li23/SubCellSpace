@@ -377,111 +377,6 @@ def _build_data(adata, report: dict) -> dict:
                     "name": _label,
                 })
 
-    # ── SCRIN co-localization — stored in adata.uns for network viz ──
-    scrin_net = adata.uns.get("scrin_colocalization_network", {})
-
-    # ── SCRIN network visualization ──
-    scrin_network_plot: dict = {"data": [], "layout": dict(_DARK_LAYOUT)}
-    if scrin_net.get("status") == "completed" and scrin_net.get("results_json", ""):
-        try:
-            import networkx as nx
-            results = json.loads(scrin_net["results_json"])
-            if len(results) >= 2:
-                G = nx.Graph()
-                for r in results:
-                    gA, gB = r.get("gene_A"), r.get("gene_B")
-                    qval = r.get("qvalue_BH", 1.0)
-                    enrich = r.get("enrichment_ratio", 0)
-                    if gA and gB and qval > 0:
-                        weight = min(-np.log10(qval), 100)
-                        G.add_edge(gA, gB, weight=weight, enrichment=enrich)
-
-                if G.number_of_nodes() >= 2:
-                    pos = nx.spring_layout(G, k=2.5, iterations=100, seed=42)
-                    degrees = dict(G.degree())
-                    max_deg = max(degrees.values()) or 1
-                    max_w = max(d["weight"] for _, _, d in G.edges(data=True)) or 1
-
-                    # Edge trace: each edge drawn as a line segment
-                    # Color intensity based on -log10(q-value), using brand palette
-                    edge_x, edge_y, edge_colors = [], [], []
-                    for u, v, d in G.edges(data=True):
-                        x0, y0 = pos[u]
-                        x1, y1 = pos[v]
-                        edge_x.extend([x0, x1, None])
-                        edge_y.extend([y0, y1, None])
-                        intensity = d["weight"] / max_w
-                        # Blend from #6366f1 (indigo, low) to #22c55e (green, high)
-                        r = int(99 + (34 - 99) * intensity)
-                        g = int(102 + (197 - 102) * intensity)
-                        b = int(241 + (94 - 241) * intensity)
-                        edge_colors.extend([f"rgba({r},{g},{b},0.8)", f"rgba({r},{g},{b},0.8)", None])
-
-                    edge_trace = {
-                        "x": edge_x, "y": edge_y,
-                        "type": "scattergl", "mode": "lines",
-                        "line": {"color": edge_colors, "width": 1.5, "shape": "linear"},
-                        "hoverinfo": "none", "showlegend": False,
-                    }
-
-                    # Edge hover: separate invisible scatter for tooltips
-                    edge_hover_x, edge_hover_y, edge_hover_text = [], [], []
-                    for u, v, d in G.edges(data=True):
-                        x0, y0 = pos[u]
-                        x1, y1 = pos[v]
-                        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-                        edge_hover_x.append(mx)
-                        edge_hover_y.append(my)
-                        edge_hover_text.append(
-                            f"{u} ↔ {v}<br>-log₁₀(q) = {d['weight']:.2f}<br>Enrichment = {d['enrichment']:.2f}"
-                        )
-
-                    edge_hover_trace = {
-                        "x": edge_hover_x, "y": edge_hover_y,
-                        "type": "scattergl", "mode": "markers",
-                        "marker": {"size": 12, "color": "rgba(0,0,0,0)", "line": {"width": 0}},
-                        "text": edge_hover_text, "hovertext": edge_hover_text,
-                        "hoverinfo": "text", "showlegend": False,
-                    }
-
-                    # Node trace
-                    node_x = [pos[n][0] for n in G.nodes()]
-                    node_y = [pos[n][1] for n in G.nodes()]
-                    node_sizes = [10 + 20 * degrees[n] / max_deg for n in G.nodes()]
-                    node_colors = [degrees[n] / max_deg for n in G.nodes()]
-                    node_text = [f"<b>{n}</b><br>Connections: {degrees[n]}" for n in G.nodes()]
-
-                    node_trace = {
-                        "x": node_x, "y": node_y,
-                        "type": "scattergl", "mode": "markers+text",
-                        "marker": {
-                            "size": node_sizes, "color": node_colors,
-                            "colorscale": [[0, COLOR_PRIMARY], [1, COLOR_SECONDARY]],
-                            "colorbar": {"title": "Degree", "x": 1.02},
-                            "line": {"color": "#1e1b4b", "width": 1},
-                        },
-                        "text": [n for n in G.nodes()],
-                        "textposition": "middle right",
-                        "textfont": {"color": "#e5e7eb", "size": 11},
-                        "hovertext": node_text, "hoverinfo": "text",
-                        "showlegend": False,
-                    }
-
-                    scrin_network_plot = {
-                        "data": [edge_trace, node_trace, edge_hover_trace],
-                        "layout": {
-                            "xaxis": {"visible": False, "showgrid": False, "zeroline": False, "showline": False},
-                            "yaxis": {"visible": False, "showgrid": False, "zeroline": False, "showline": False},
-                            "hovermode": "closest",
-                            "margin": {"l": 10, "r": 60, "t": 10, "b": 10},
-                            "dragmode": "pan",
-                            "showlegend": False,
-                            **_DARK_LAYOUT,
-                        },
-                    }
-        except Exception as exc:
-            logger.warning("Failed to build SCRIN network: %s", exc)
-
     # ── Histograms with outlier-capped axes ──
     def _hist(values, color=COLOR_HISTOGRAM, xlabel="", ylabel="Cells", cap_pct=99.5):
         """Plot histogram with x-axis capped at *cap_pct* percentile.
@@ -706,8 +601,6 @@ def _build_data(adata, report: dict) -> dict:
             stat = f"{s.get('n_cell_types', 0)} cell types"
         elif sn == "spatial_analysis":
             stat = f"{s.get('n_spatial_domains', 0)} spatial domains"
-        elif sn == "subcellular_analysis":
-            stat = s.get("subcellular_analysis", "skipped")
         step_rows.append([sn, backend, elapsed_str, stat])
 
     # ── Cell Type Distribution plot (bar chart, dark theme) ──
@@ -797,7 +690,6 @@ def _build_data(adata, report: dict) -> dict:
             "pipeline": "SubCellSpace Analysis Summary",
             "page_title": f"SubCellSpace {platform.upper()} — {n_obs} cells",
         },
-        "scrin_network_plot": scrin_network_plot,
         "segmentation_table": {"rows": seg_rows},
         "software_table": {"rows": [
             ["Platform", platform.upper()],

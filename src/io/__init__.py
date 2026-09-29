@@ -23,7 +23,6 @@ from . import (
     cosmx,  # noqa: F401
     generic,  # noqa: F401 — minimal CSV (x, y, gene)
     merfish,  # noqa: F401
-    stereoseq,  # noqa: F401
     xenium,  # noqa: F401
 )
 from .base import (
@@ -60,9 +59,6 @@ def _detect_by_columns(columns: set[str]) -> str | None:
     # MERFISH (short names): x + y + gene + barcode_id
     if {"x", "y", "gene", "barcode_id"}.issubset(columns):
         return "merfish"
-    # Stereo-seq: geneID + x + y (GEM format)
-    if {"geneID", "x", "y"}.issubset(columns):
-        return "stereoseq"
     # CosMx fallback: x_global_px + target (without CellComp)
     if "x_global_px" in columns and "y_global_px" in columns and "target" in columns:
         return "cosmx"
@@ -94,7 +90,7 @@ def detect_platform(input_path: str | Path) -> str:
     Returns
     -------
     str
-        Detected platform name ("cosmx", "xenium", "merfish", "stereoseq").
+        Detected platform name ("cosmx", "xenium", "merfish", "generic").
 
     Raises
     ------
@@ -135,8 +131,6 @@ def detect_platform(input_path: str | Path) -> str:
     # 1. By extension — strongest signal
     if suffix == ".parquet":
         return "xenium"
-    if suffix == ".gem":
-        return "stereoseq"
 
     # 2. By column signature
     try:
@@ -150,7 +144,7 @@ def detect_platform(input_path: str | Path) -> str:
 
     raise DataLoadError(
         f"Cannot auto-detect platform for {resolved}. "
-        f"Please specify --platform explicitly (cosmx/xenium/merfish/stereoseq).",
+        f"Please specify --platform explicitly (cosmx/xenium/merfish/generic).",
         path=resolved,
     )
 
@@ -161,7 +155,7 @@ def ingest(platform: str, input_path: str | Path, cell_id_column: str | None = N
     Parameters
     ----------
     platform : str
-        One of ``"cosmx"``, ``"xenium"``, ``"merfish"``, ``"stereoseq"``.
+        One of ``"cosmx"``, ``"xenium"``, ``"merfish"``, ``"generic"``.
     input_path : str or Path
         Path to the input data file or directory.
     cell_id_column : str or None

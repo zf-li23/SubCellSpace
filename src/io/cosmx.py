@@ -16,23 +16,19 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import anndata as ad
 import numpy as np
 import pandas as pd
-from spatialdata import SpatialData, sanitize_table
-from spatialdata.models import PointsModel, ShapesModel
+from spatialdata import SpatialData
+from spatialdata.models import ShapesModel
 
 from ..constants import (
-    ATTRS_MAIN_TABLE_KEY,
     COL_CELL_ID,
     COL_CELLCOMP,
     COL_FOV,
     COL_GENE,
     COL_X,
     COL_Y,
-    KEY_MAIN_TABLE,
     KEY_PROVIDED_BOUNDARIES,
-    KEY_RAW_TRANSCRIPTS,
     PLATFORM_COSMX,
 )
 from .base import BaseIngestor, DataLoadError, register_ingestor
@@ -75,170 +71,6 @@ def _read_csv_or_gz(path: Path, **kwargs: Any) -> pd.DataFrame:
     if unnamed:
         df = df.drop(columns=unnamed)
     return df
-
-
-# ── Helper: build cell-level AnnData (multi-source) ──────────────────
-
-
-def build_cell_level_adata(
-    df: pd.DataFrame,
-    min_transcripts: int = 0,
-    min_genes: int = 0,
-    expr_matrix: pd.DataFrame | None = None,
-    cell_metadata: pd.DataFrame | None = None,
-) -> ad.AnnData:
-    """Build a cell-level AnnData from transcript DataFrame or pre-computed expression matrix.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Transcript-level DataFrame (canonical schema).
-    min_transcripts : int
-        Minimum transcripts per cell (QC filter).
-    min_genes : int
-        Minimum genes per cell (QC filter).
-    expr_matrix : pd.DataFrame or None
-        Pre-computed expression matrix (from CosMx *exprMat_file.csv).
-        If provided, skips the expensive pd.crosstab step.
-    cell_metadata : pd.DataFrame or None
-        Cell-level metadata (from CosMx *metadata_file.csv).
-        Merged into adata.obs if provided.
-
-    Returns
-    -------
-    AnnData
-    """
-    from ..constants import COL_CELL_ID, COL_FOV, COL_GENE, COL_X, COL_Y, resolve_col, resolve_col_strict
-
-    gene_col = resolve_col_strict(df.columns, COL_GENE)
-    cell_col = resolve_col_strict(df.columns, COL_CELL_ID)
-    x_col = resolve_col_strict(df.columns, COL_X)
-    y_col = resolve_col_strict(df.columns, COL_Y)
-    fov_col = resolve_col(df.columns, COL_FOV)
-
-    # Normalise cell column to string
-    df = df.copy()
-    df[cell_col] = df[cell_col].astype(str)
-
-    if expr_matrix is not None:
-        # Use pre-computed expression matrix (faster, platform-official)
-        expr_matrix = expr_matrix.copy()
-        expr_matrix.columns = expr_matrix.columns.astype(str)
-        cell_ids_in_expr = set(expr_matrix.index.astype(str))
-        # Filter df to cells that exist in expression matrix
-        df = df[df[cell_col].isin(cell_ids_in_expr)].copy()
-
-        grouped = df.groupby(cell_col, sort=True)
-        obs = grouped.agg(
-            n_transcripts=(gene_col, "size"),
-            n_genes=(gene_col, "nunique"),
-            x=(x_col, "mean"),
-            y=(y_col, "mean"),
-        )
-        if fov_col and fov_col in df.columns:
-            obs[fov_col] = grouped[fov_col].first()
-
-        # Align obs with expression matrix index
-        common_cells = sorted(set(obs.index) & cell_ids_in_expr)
-        obs = obs.loc[common_cells]
-        X_mat = expr_matrix.loc[common_cells].to_numpy(dtype=np.float32)
-        var_index = expr_matrix.columns.astype(str)
-    else:
-        # Build from tx_file (pd.crosstab)
-        cell_index = df[cell_col]
-        gene_index = df[gene_col].astype(str)
-
-        counts = pd.crosstab(cell_index, gene_index)
-        counts = counts.sort_index(axis=0).sort_index(axis=1)
-
-        grouped = df.groupby(cell_col, sort=True)
-        obs = grouped.agg(
-            n_transcripts=(gene_col, "size"),
-            n_genes=(gene_col, "nunique"),
-            x=(x_col, "mean"),
-            y=(y_col, "mean"),
-        )
-        if fov_col and fov_col in df.columns:
-            obs[fov_col] = grouped[fov_col].first()
-
-        obs = obs.loc[counts.index]
-        X_mat = counts.to_numpy(dtype=np.float32)
-        var_index = counts.columns
-
-    adata = ad.AnnData(
-        X=X_mat,
-        obs=obs,
-        var=pd.DataFrame(index=var_index),
-    )
-    adata.obs_names = obs.index.astype(str)
-    adata.var_names = var_index.astype(str)
-    adata.obsm["spatial"] = obs[["x", "y"]].to_numpy(dtype=np.float32)
-    adata.layers["counts"] = adata.X.copy().astype(np.float32)
-
-    # Enrich with cell metadata if available
-    if cell_metadata is not None:
-        meta = cell_metadata.copy()
-        if "cell_id" in meta.columns:
-            meta = meta.set_index("cell_id")
-        elif "cell_ID" in meta.columns:
-            meta = meta.set_index("cell_ID")
-        meta.index = meta.index.astype(str)
-
-        # ── Handle duplicate cell IDs in metadata ──
-        # Some CosMx datasets (e.g. P0014/D0021) have duplicate rows per cell.
-        # Deduplicate by keeping the first occurrence of each cell_id.
-        n_before = len(meta)
-        meta = meta[~meta.index.duplicated(keep="first")]
-        n_dup = n_before - len(meta)
-        if n_dup:
-            logger.warning("Metadata has %d duplicate cell IDs (keeping first occurrence)", n_dup)
-
-        for col in meta.columns:
-            if col in adata.obs.columns:
-                continue  # don't overwrite existing columns
-            if col.lower() in ("x", "y", "spatial"):
-                continue
-            # Convert to string-safe types for h5py compatibility
-            series = meta[col].reindex(adata.obs_names, fill_value=None)
-            if series.dtype.kind in ("O", "m", "M"):
-                series = series.astype(str).where(series.notna(), "")
-            elif series.dtype.kind == "f":
-                series = series.fillna(-1).astype(float)
-            adata.obs[col] = series
-
-    if min_transcripts > 0 or min_genes > 0:
-        mask = (adata.obs["n_transcripts"] >= min_transcripts) & (adata.obs["n_genes"] >= min_genes)
-        adata = adata[mask].copy()
-
-    return adata
-
-
-# ── Helper: build SpatialData from AnnData ──────────────────────────
-
-
-def build_spatialdata_from_adata(adata: ad.AnnData) -> SpatialData:
-    """Build a SpatialData from a cell-level AnnData."""
-    if "spatial" not in adata.obsm:
-        raise KeyError("No 'spatial' in adata.obsm")
-    coords = adata.obsm["spatial"]
-
-    points_frame = pd.DataFrame(
-        {"x": coords[:, 0], "y": coords[:, 1], "cell_id": adata.obs_names.to_numpy()},
-        index=adata.obs_names,
-    )
-    points = PointsModel.parse(points_frame)
-    table = adata.copy()
-    sanitize_table(table)
-
-    sdata = SpatialData(
-        points={KEY_RAW_TRANSCRIPTS: points},
-        tables={KEY_MAIN_TABLE: table},
-    )
-    sdata.attrs[ATTRS_MAIN_TABLE_KEY] = KEY_MAIN_TABLE
-    return sdata
-
-
-# ── Ingestor ─────────────────────────────────────────────────────────
 
 
 @register_ingestor(PLATFORM_COSMX)

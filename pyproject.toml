@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "subcellspace"
-version = "0.1.0"
-description = "A modular subcellular spatial transcriptomics analysis platform"
+version = "0.3.0"
+description = "GEO database, completion layer and cell-level reports for imaging spatial transcriptomics (CosMx / Xenium / MERFISH), built on SOPA"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
   {name = "SubCellSpace Contributors"},
 ]
-keywords = ["spatial-transcriptomics", "subcellular", "single-cell", "spatialdata", "scanpy", "sopa"]
+keywords = ["spatial-transcriptomics", "geo", "xenium", "cosmx", "merfish", "spatialdata", "sopa"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -23,62 +23,35 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-  # ── sopa + spatialdata stack (IO, patchify, aggregation) ──
+  # ── Analysis stack (SOPA does segmentation / aggregation / preprocessing) ──
   "sopa>=2.2",
   "spatialdata>=0.7",
   "spatialdata-io>=0.3",
-
-  # ── Core analysis stack ──
   "scanpy>=1.11",
-  "squidpy>=1.7",
   "anndata>=0.12",
-  "scikit-learn>=1.5",
-  "scipy>=1.13",
+
+  # ── GEO adapters, touch, statistics ──
   "numpy>=2.0",
   "pandas>=2.2",
-  "igraph>=0.11",
-  "leidenalg>=0.10",
-  "hdbscan>=0.8.42",
+  "scipy>=1.13",
   "shapely>=2.0",
   "geopandas>=1.0",
+  "zarr>=3.0",
+  "requests>=2.31",
 
-  # ── Web / API / CLI ──
+  # ── Local dev API for the frontend ──
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
-  "pydantic>=2.8",
-  "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-# ── Segmentation backends ──
-cellpose = ["cellpose>=3.0"]
-baysor = ["toml>=0.10.2", "loompy>=3.0.7"]  # Julia binary required separately
-
-# ── Analysis backends ──
-scvi = ["scvi-tools>=1.0"]
-
-# ── Annotation backends ──
-celltypist = ["celltypist>=1.6"]
-
-# ── Workflow engine ──
-snakemake = ["snakemake>=9.0"]
-
-# ── All pip-installable extras ──
-all = ["subcellspace[cellpose,baysor,scvi,celltypist,snakemake]"]
-
-# ── Development ──
-dev = ["pytest>=8.0", "pytest-cov>=4.0", "pytest-timeout>=2.3", "ruff>=0.6", "mypy>=1.11", "httpx>=0.28.1"]
-
-# ── Git-clone-only backends (NOT pip-installable) ──
-# spARC, PhenoGraph, scFates — clone from tools/ and `pip install -e tools/<name>/`
-# SCRIN — MPI-based, cluster-only manual install
-# See THIRD_PARTY_TOOLS.md for details.
+dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.6", "httpx>=0.28.1"]
 
 
 [project.urls]
-Homepage = "https://github.com/your-org/subcellspace"
-Repository = "https://github.com/your-org/subcellspace"
-Issues = "https://github.com/your-org/subcellspace/issues"
+Homepage = "https://github.com/zf-li23/SubCellSpace"
+Repository = "https://github.com/zf-li23/SubCellSpace"
+Issues = "https://github.com/zf-li23/SubCellSpace/issues"
 
 [project.scripts]
 subcellspace = "src.cli:main"

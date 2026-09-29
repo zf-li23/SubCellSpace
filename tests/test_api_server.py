@@ -1,107 +1,62 @@
 from __future__ import annotations
 
-import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from src.api_server import _parse_allowed_origins, _resolve_report_path, _resolve_under_repo, _validate_backend, app
+from src.api_server import _parse_allowed_origins, app, sample_id, search_registries
 
 client = TestClient(app)
 
 
-class TestHealthAndMeta:
+def _write_registries(tmp_path):
+    (tmp_path / "cosmx_geo.csv").write_text(
+        "GSE,name,sample_name,status,n_cells\nGSE1,Colon IBD,GSM11,ready,1200\n", encoding="utf-8"
+    )
+    (tmp_path / "xenium_geo.csv").write_text(
+        "GSE,name,GSM,status,n_cells\nGSE2,Breast tumour,GSM21,ready,3.0\nGSE2,Breast tumour,GSM22,pending,\n",
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+class TestHealth:
     def test_health(self):
-        response = client.get("/api/health")
-        assert response.status_code == 200
-        assert response.json() == {"status": "ok"}
-
-    def test_backends(self):
-        response = client.get("/api/meta/backends")
-        assert response.status_code == 200
-        data = response.json()
-        assert "denoise" in data
-        assert "segmentation" in data
-        assert "spatial_analysis" in data
-        assert "subcellular_analysis" in data
-        for key in data:
-            assert isinstance(data[key], dict)
-            assert len(data[key]) > 0
+        assert client.get("/api/health").json() == {"status": "ok"}
 
 
-class TestValidateBackend:
-    def test_valid_backend(self):
-        # Should not raise
-        _validate_backend("test_backend", "intracellular", ["intracellular", "supercellular"])
+class TestSearchRegistries:
+    def test_gsm_lookup_works_for_xenium_column_name(self, tmp_path):
+        # Regression: lookup used to read only ``sample_name`` (CosMx), so Xenium/MERFISH GSMs never matched.
+        rows = search_registries("gsm21", _write_registries(tmp_path))
+        assert [r["GSM"] for r in rows] == ["GSM21"]
+        assert rows[0]["platform"] == "xenium"
 
-    def test_invalid_backend_raises(self):
-        with pytest.raises(HTTPException):
-            _validate_backend("test_backend", "bad_value", ["allowed_value"])
+    def test_gsm_lookup_cosmx_sample_name(self, tmp_path):
+        rows = search_registries("GSM11", _write_registries(tmp_path))
+        assert rows[0]["GSM"] == "GSM11"
+        assert rows[0]["n_cells"] == 1200
+
+    def test_gse_returns_all_samples(self, tmp_path):
+        rows = search_registries("GSE2", _write_registries(tmp_path))
+        assert {r["GSM"] for r in rows} == {"GSM21", "GSM22"}
+
+    def test_numeric_float_strings_are_converted(self, tmp_path):
+        rows = search_registries("GSM21", _write_registries(tmp_path))
+        assert rows[0]["n_cells"] == 3
+
+    def test_keyword_match_on_name(self, tmp_path):
+        rows = search_registries("colon", _write_registries(tmp_path))
+        assert len(rows) == 1
+
+    def test_sample_id_prefers_gsm(self):
+        assert sample_id({"GSM": "GSM1", "sample_name": ""}) == "GSM1"
+        assert sample_id({"sample_name": "GSM2-GSM4"}) == "GSM2-GSM4"
 
 
-class TestPathResolution:
-    def test_resolve_under_repo_relative(self):
-        path = _resolve_under_repo("README.md")
-        assert path.is_absolute()
-        assert path.exists()
-
-    def test_resolve_report_path(self):
-        path = _resolve_report_path("test_run_name")
-        assert path.suffix == ".json"
-        assert "outputs" in str(path)
-
-
-class TestParseAllowedOrigins:
+class TestAllowedOrigins:
     def test_default(self, monkeypatch):
-        from src.api_server import _settings
+        monkeypatch.delenv("SUBCELLSPACE_ALLOWED_ORIGINS", raising=False)
+        assert "http://localhost:5173" in _parse_allowed_origins()
 
-        # Clear any existing override for allowed_origins
-        monkeypatch.setattr(_settings, "_overrides", {})
-        monkeypatch.setattr(_settings, "_raw", {})
-        origins = _parse_allowed_origins()
-        assert "http://127.0.0.1:5173" in origins
-        assert "http://localhost:5173" in origins
-
-    def test_custom(self, monkeypatch):
-        from src.api_server import _settings
-
-        # Use programmatic override (highest priority) instead of env var
-        monkeypatch.setattr(
-            _settings,
-            "_overrides",
-            {"allowed_origins": "http://example.com,http://test:3000"},
-        )
-        origins = _parse_allowed_origins()
-        assert origins == ["http://example.com", "http://test:3000"]
-
-    def test_empty_strings_filtered(self, monkeypatch):
-        from src.api_server import _settings
-
-        monkeypatch.setattr(
-            _settings,
-            "_overrides",
-            {"allowed_origins": "http://a.com, , http://b.com,"},
-        )
-        origins = _parse_allowed_origins()
-        assert origins == ["http://a.com", "http://b.com"]
-
-
-class TestCorsMiddleware:
-    def test_cors_headers_present(self):
-        response = client.options(
-            "/api/health",
-            headers={
-                "Origin": "http://localhost:5173",
-                "Access-Control-Request-Method": "GET",
-            },
-        )
-        # FastAPI TestClient may not trigger CORS preflight perfectly,
-        # but we can verify the app has CORSMiddleware configured
-        assert response.status_code in (200, 204, 405)  # Accept various responses
-
-
-class TestPlotsEndpoint:
-    def test_plots_without_params(self):
-        """Test that /api/plots without params returns 400 or 404 (run-dependent)."""
-        response = client.get("/api/plots")
-        # Will fail because there's no default report, but shouldn't crash
-        assert response.status_code in (200, 400, 404)
+    def test_custom_and_empty_filtered(self, monkeypatch):
+        monkeypatch.setenv("SUBCELLSPACE_ALLOWED_ORIGINS", "https://a.example, ,https://b.example")
+        assert _parse_allowed_origins() == ["https://a.example", "https://b.example"]
