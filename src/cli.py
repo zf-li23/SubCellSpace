@@ -180,7 +180,7 @@ def _cmd_touch(args: argparse.Namespace) -> None:
     """Handle ``subcellspace touch`` — dataset integrity check & normalization."""
     from pathlib import Path as _Path
 
-    from .touch import touch, format_report
+    from .touch import format_report, touch
 
     # ── --rollback 模式：从报告回退 ──
     rollback_path = getattr(args, "rollback", None)
@@ -229,6 +229,7 @@ def _cmd_touch(args: argparse.Namespace) -> None:
 def _cmd_touch_all(args: argparse.Namespace) -> None:
     """扫描所有 ready GEO 数据集并逐个 touch。"""
     from pathlib import Path as _Path
+
     from .database.resolver import list_datasets
     from .touch import touch
 

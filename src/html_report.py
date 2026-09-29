@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -49,7 +48,7 @@ def _find_polygon_file(source_path: str) -> Path | None:
 def _compute_polygon_areas(poly_path: Path, obs: pd.DataFrame) -> np.ndarray:
     """Compute cell areas from CosMx polygon vertex file using Shoelace formula."""
     df = pd.read_csv(poly_path, dtype={"cell": str})
-    
+
     # obs index format: "fov_cell" or similar. Polygon has (fov, cellID) pair.
     # e.g. obs "10_c_3_10_0" → fov=10, cellID=0 based on CosMx naming
     # Polygon has fov=1, cellID=1, cell="c_3_1_1"
@@ -65,7 +64,7 @@ def _compute_polygon_areas(poly_path: Path, obs: pd.DataFrame) -> np.ndarray:
                 cell_map[(fov, cid)] = idx_str
             except ValueError:
                 pass
-    
+
     # Group polygon vertices by (fov, cellID) and compute area
     grouped = df.groupby(["fov", "cellID"], sort=False)
     areas = {}
@@ -81,12 +80,12 @@ def _compute_polygon_areas(poly_path: Path, obs: pd.DataFrame) -> np.ndarray:
                     + x[-1] * y[0] - x[0] * y[-1]
                 )
                 areas[cell_map[key]] = area
-    
+
     if not areas:
         return np.array([])
-    
+
     result = np.array([areas[idx] for idx in obs.index if idx in areas])
-    logger.info("Computed %d polygon areas (matched %d / %d obs cells)", 
+    logger.info("Computed %d polygon areas (matched %d / %d obs cells)",
                 len(result), len(areas), len(obs))
     return result
 
@@ -207,13 +206,6 @@ def _build_data(adata, report: dict) -> dict:
     if "fov" in obs.columns and "total_counts" in obs.columns:
         fov_tx_counts = obs.groupby("fov")["total_counts"].sum().astype(int).tolist()
 
-    # Negative control probes
-    negprobe_mean = None
-    if "nCount_negprobes" in obs.columns:
-        v = obs["nCount_negprobes"][obs["nCount_negprobes"] >= 0]
-        if len(v) > 0:
-            negprobe_mean = float(v.mean())
-
     run_rows = [
         ["Run name", f"SubCellSpace {platform.upper()}"],
         ["Generated", datetime.now().strftime("%b %d, %Y, %H:%M GMT")],
@@ -224,10 +216,6 @@ def _build_data(adata, report: dict) -> dict:
         run_rows.append(["Region area (µm²)", region_area])
     if cell_area_total != "N/A":
         run_rows.append(["Total cell area (µm²)", cell_area_total])
-    software_rows = [
-        ["Analysis version", f"subcellspace-{pipeline_ver}"],
-        ["Pipeline", report.get("pipeline_name", "SubCellSpace")],
-    ]
     seg_rows = [["Cells after QC", f"{n_obs:,}"]]
     qc_metrics = report.get("qc_metrics", {})
     before_qc = qc_metrics.get("n_obs_before_qc", 0)
@@ -321,7 +309,7 @@ def _build_data(adata, report: dict) -> dict:
 
         # UMAP plot: color by transcript count (numeric gradient)
         colors = ncts.values.tolist() if len(ncts) == n_obs else [1] * n_obs
-        texts = [f"{c}\n{t} transcripts" for c, t in zip(ct, ncts)] if ct is not None else [str(c) for c in colors]
+        texts = [f"{c}\n{t} transcripts" for c, t in zip(ct, ncts, strict=False)] if ct is not None else [str(c) for c in colors]
         cmin, cmax = float(min(colors)), float(max(colors))
         # Use 2-98 percentile range for better visual contrast (cap outliers)
         p2, p98 = float(np.percentile(colors, 2)), float(np.percentile(colors, 98))
@@ -344,21 +332,21 @@ def _build_data(adata, report: dict) -> dict:
             spatial_data["data"] = [spat_trace]
 
     # ── Cluster-colored spatial + UMAP plots (standalone Plot components) ──
-    _CLUSTER_COLORS = [
+    cluster_colors = [
         "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#ec4899",
         "#06b6d4", "#8b5cf6", "#84cc16", "#f97316", "#14b8a6",
         "#a855f7", "#e11d48", "#0ea5e9", "#d946ef", "#10b981",
     ]
     cluster_spatial_plot = {"config": _scatter_cfg, "layout": _scatter_ly("Spatial (clusters)", "X (µm)", "Y (µm)"), "data": []}
     cluster_umap_plot = {"config": _scatter_cfg, "layout": _scatter_ly("UMAP (clusters)", "UMAP1", "UMAP2"), "data": []}
-    _spat_arr = adata.obsm["spatial"] if "spatial" in adata.obsm else None
-    _umap_arr = adata.obsm["X_umap"] if "X_umap" in adata.obsm else None
+    _spat_arr = adata.obsm.get("spatial", None)
+    _umap_arr = adata.obsm.get("X_umap", None)
     if "cluster" in obs.columns and _umap_arr is not None:
         _clusters = obs["cluster"].astype(str)
         _cnames = sorted(_clusters.unique())
         for i, c in enumerate(_cnames):
             _mask = _clusters.values == c
-            _color = _CLUSTER_COLORS[i % len(_CLUSTER_COLORS)]
+            _color = cluster_colors[i % len(cluster_colors)]
             _pct = _mask.sum() / n_obs * 100
             _label = f"Cluster {c} ({_pct:.1f}%)"
             cluster_umap_plot["data"].append({
@@ -633,7 +621,7 @@ def _build_data(adata, report: dict) -> dict:
     spat_info = steps.get("spatial_analysis", {})
     sd_dist_raw = spat_info.get("spatial_domain_distribution", {})
     if sd_dist_raw and isinstance(sd_dist_raw, dict):
-        labels = [str(k) for k in sd_dist_raw.keys()]
+        labels = [str(k) for k in sd_dist_raw]
         counts = [int(v) for v in sd_dist_raw.values()]
         spatial_domain_plot = {
             "data": [{

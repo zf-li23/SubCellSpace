@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.geo.llm_annotate import annotate_all, PLATFORM_CSVS, read_gsm_titles
+from src.geo.llm_annotate import PLATFORM_CSVS, annotate_all, read_gsm_titles
 
 
 def main():

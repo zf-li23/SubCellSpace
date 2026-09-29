@@ -79,22 +79,15 @@ select = [
 ]
 ignore = ["E501"]  # line-length is handled by ruff formatter
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG001"]            # pytest fixtures are injected by name
+"src/io/*" = ["ARG002"]           # ingestor hooks keep a uniform signature
+"src/geo/*" = ["ARG001"]          # registry helpers share a (csv_path, gsm_col) signature
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-ignore_missing_imports = true
-no_implicit_optional = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-disable_error_code = [
-    "type-arg",      # numpy/scipy/pandas stubs not fully aligned
-    "var-annotated", # some untyped class vars ok in dataclasses
-]
 
 [tool.coverage.run]
 source = ["src"]

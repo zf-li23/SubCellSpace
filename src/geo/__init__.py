@@ -8,13 +8,13 @@ SubCellSpace GEO 工具模块
 使用示例:
     from src.geo.api import query_gsms
     gsms = query_gsms("GSE234713")
-    
+
     from src.geo.download import download_gse_tar
     download_gse_tar("GSE234713", "/data/downloads/")
-    
+
     from src.geo.extract import extract_tar_to_gsm_dirs
     extract_tar_to_gsm_dirs("/data/GSE234713_RAW.tar", "/data/GSE234713/")
-    
+
     from src.geo.format import detect_format
     fmt = detect_format("/data/GSE234713/GSM7473682/")
 """

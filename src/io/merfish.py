@@ -25,7 +25,7 @@ from ..constants import (
     KEY_PROVIDED_BOUNDARIES,
     PLATFORM_MERFISH,
 )
-from .base import BaseIngestor, register_ingestor
+from .base import BaseIngestor, DataLoadError, register_ingestor
 
 logger = logging.getLogger(__name__)
 

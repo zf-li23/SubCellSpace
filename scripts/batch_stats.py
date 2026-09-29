@@ -20,9 +20,12 @@
         python3 scripts/batch_stats.py --cosmx --chunk 2 --total-chunks 3
 """
 
-import argparse, csv, logging, os, sys
+import argparse
+import csv
+import logging
+import os
+import sys
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -68,7 +71,7 @@ def _load_existing_results(output_path: Path) -> dict:
     existing = {}
     if not output_path.exists():
         return existing
-    with open(output_path, "r", encoding="utf-8") as f:
+    with open(output_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             key = (row.get("GSE", ""), row.get("sample_name", ""))
@@ -87,7 +90,7 @@ def _save_checkpoint(output_path: Path, rows: list, fieldnames: list) -> None:
 
 
 def run_batch(platform: str, output_dir: Path, dry_run: bool = False,
-              max_datasets: Optional[int] = None,
+              max_datasets: int | None = None,
               chunk: int = 0, total_chunks: int = 1) -> None:
     """对给定平台的所有 ready 数据集执行流式统计。
 
@@ -101,15 +104,12 @@ def run_batch(platform: str, output_dir: Path, dry_run: bool = False,
         return
 
     # 分片输出文件名
-    if total_chunks > 1:
-        output_fname = f"stats_{platform}.{chunk}.csv"
-    else:
-        output_fname = f"stats_{platform}.csv"
+    output_fname = f"stats_{platform}.{chunk}.csv" if total_chunks > 1 else f"stats_{platform}.csv"
     output_path = output_dir / output_fname
     existing = {} if dry_run else _load_existing_results(output_path)
 
     # ── 读取 GEO CSV ──
-    with open(csv_path, "r", encoding="utf-8") as f:
+    with open(csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         all_rows = list(reader)
 

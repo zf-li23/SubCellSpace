@@ -21,9 +21,8 @@ from __future__ import annotations
 import csv
 import os
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 # ── 数据目录 ─────────────────────────────────────────────────────────
 # 相对于项目根目录
@@ -46,14 +45,14 @@ _CLUSTER_DATA_ROOT = os.environ.get("SUBCELLSPACE_DATA_ROOT", "/data3/yangxr002/
 class DatasetInfo:
     """一条 GEO 登记表记录（GSE + GSM）。"""
     source: str                     # "cosmx_geo" | "xenium_geo" | "merfish_geo" | "path"
-    gse: Optional[str] = None       # GEO Series 编号
-    gsm: Optional[str] = None       # GSM 编号或 GSM 范围（CosMx 合并样本）
-    platform: Optional[str] = None  # CosMx / Xenium / MERFISH
-    name: Optional[str] = None      # 数据集名称
-    status: Optional[str] = None    # ready / pending / error
-    tissue: Optional[str] = None
-    disease_state: Optional[str] = None
-    local_path: Optional[str] = None  # 集群上的样本目录
+    gse: str | None = None       # GEO Series 编号
+    gsm: str | None = None       # GSM 编号或 GSM 范围（CosMx 合并样本）
+    platform: str | None = None  # CosMx / Xenium / MERFISH
+    name: str | None = None      # 数据集名称
+    status: str | None = None    # ready / pending / error
+    tissue: str | None = None
+    disease_state: str | None = None
+    local_path: str | None = None  # 集群上的样本目录
 
     # 原始行（调试用）
     _raw: dict = field(default_factory=dict, repr=False)
@@ -62,7 +61,7 @@ class DatasetInfo:
         return asdict(self)
 
     @property
-    def resolved_path(self) -> Optional[str]:
+    def resolved_path(self) -> str | None:
         """样本目录路径（无路径时为 None）。"""
         return self.local_path or None
 
@@ -70,24 +69,24 @@ class DatasetInfo:
 # ── CSV 读取器 ───────────────────────────────────────────────────────
 
 
-def _read_csv(path: Path) -> List[dict]:
+def _read_csv(path: Path) -> list[dict]:
     """读取 CSV 并返回字典列表。"""
     if not path.exists():
         return []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         return list(reader)
 
 
-def _read_cosmx_geo_csv() -> List[dict]:
+def _read_cosmx_geo_csv() -> list[dict]:
     return _read_csv(COSMX_GEO_CSV)
 
 
-def _read_xenium_geo_csv() -> List[dict]:
+def _read_xenium_geo_csv() -> list[dict]:
     return _read_csv(XENIUM_GEO_CSV)
 
 
-def _read_merfish_geo_csv() -> List[dict]:
+def _read_merfish_geo_csv() -> list[dict]:
     return _read_csv(MERFISH_GEO_CSV)
 
 
@@ -115,7 +114,7 @@ def _from_geo_row(row: dict, platform: str, source: str) -> DatasetInfo:
     )
 
 
-def _infer_geo_local_path(platform: str, gse: str, gsm: str) -> Optional[str]:
+def _infer_geo_local_path(platform: str, gse: str, gsm: str) -> str | None:
     """根据集群目录约定推断 GEO 数据的 local_path。"""
     platform_dir = {
         "CosMx": "CosMx_GEO",
@@ -172,7 +171,7 @@ def _classify_query(query: str) -> tuple[str, ...]:
 # ── 公共查询接口 ────────────────────────────────────────────────────
 
 
-def lookup(query: str) -> List[DatasetInfo]:
+def lookup(query: str) -> list[DatasetInfo]:
     """统一查询入口。
 
     参数:
@@ -212,9 +211,9 @@ def lookup(query: str) -> List[DatasetInfo]:
     return []
 
 
-def _lookup_gse(gse: str) -> List[DatasetInfo]:
+def _lookup_gse(gse: str) -> list[DatasetInfo]:
     """按 GSE 编号查询所有 GEO CSV。"""
-    results: List[DatasetInfo] = []
+    results: list[DatasetInfo] = []
 
     for row in _read_cosmx_geo_csv():
         if row.get("GSE") == gse:
@@ -231,9 +230,9 @@ def _lookup_gse(gse: str) -> List[DatasetInfo]:
     return results
 
 
-def _lookup_gse_gsm(gse: str, gsm: str) -> List[DatasetInfo]:
+def _lookup_gse_gsm(gse: str, gsm: str) -> list[DatasetInfo]:
     """按 GSE + GSM 精确查询。"""
-    results: List[DatasetInfo] = []
+    results: list[DatasetInfo] = []
 
     def matches(row: dict) -> bool:
         return row.get("GSE") == gse and (row.get("GSM") == gsm or row.get("sample_name") == gsm)
@@ -253,16 +252,13 @@ def _lookup_gse_gsm(gse: str, gsm: str) -> List[DatasetInfo]:
     return results
 
 
-def _lookup_gse_gsm_range(gse: str, start_gsm: str, end_suffix: str) -> List[DatasetInfo]:
+def _lookup_gse_gsm_range(gse: str, start_gsm: str, end_suffix: str) -> list[DatasetInfo]:
     """按 GSE + GSM 范围查询（CosMx merged 数据集）。"""
     # 构建范围：GSM8634610-GSM8634614
     start_num = int(start_gsm.replace("GSM", ""))
-    if end_suffix.startswith("GSM"):
-        end_num = int(end_suffix.replace("GSM", ""))
-    else:
-        end_num = int(end_suffix)
+    end_num = int(end_suffix.replace("GSM", "")) if end_suffix.startswith("GSM") else int(end_suffix)
 
-    results: List[DatasetInfo] = []
+    results: list[DatasetInfo] = []
 
     for row in _read_cosmx_geo_csv():
         if row.get("GSE") != gse:
@@ -278,9 +274,9 @@ def _lookup_gse_gsm_range(gse: str, start_gsm: str, end_suffix: str) -> List[Dat
     return results
 
 
-def _lookup_gsm(gsm: str) -> List[DatasetInfo]:
+def _lookup_gsm(gsm: str) -> list[DatasetInfo]:
     """按 GSM 编号在所有 GEO CSV 中模糊搜索。"""
-    results: List[DatasetInfo] = []
+    results: list[DatasetInfo] = []
 
     for row in _read_cosmx_geo_csv():
         if row.get("sample_name") == gsm:
@@ -300,8 +296,8 @@ def _lookup_gsm(gsm: str) -> List[DatasetInfo]:
 # ── 查询 & 列出 ──────────────────────────────────────────────────────
 
 
-def list_datasets(platform: Optional[str] = None,
-                  status: Optional[str] = None) -> List[DatasetInfo]:
+def list_datasets(platform: str | None = None,
+                  status: str | None = None) -> list[DatasetInfo]:
     """列出符合条件的数据库条目。
 
     参数:
@@ -311,7 +307,7 @@ def list_datasets(platform: Optional[str] = None,
     返回:
         DatasetInfo 列表（来自所有 GEO CSV）
     """
-    results: List[DatasetInfo] = []
+    results: list[DatasetInfo] = []
 
     # CosmX GEO
     for row in _read_cosmx_geo_csv():
@@ -340,7 +336,7 @@ def list_datasets(platform: Optional[str] = None,
     return results
 
 
-def resolve_path(query: str) -> Optional[str]:
+def resolve_path(query: str) -> str | None:
     """查询并返回可直接用于 pipeline 的文件路径。
 
     快捷方式：lookup(query)[0].resolved_path
@@ -361,7 +357,7 @@ def resolve_path(query: str) -> Optional[str]:
     return info.resolved_path
 
 
-def count_by_status(platform: Optional[str] = None) -> dict:
+def count_by_status(platform: str | None = None) -> dict:
     """按状态统计数据集数量。
 
     返回:

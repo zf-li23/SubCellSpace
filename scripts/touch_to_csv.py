@@ -11,9 +11,12 @@
     conda run -n subcellspace python3 scripts/touch_to_csv.py --dry-run
 """
 
-import argparse, csv, json, logging, os, sys
+import argparse
+import csv
+import json
+import logging
+import os
 from pathlib import Path
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("touch_to_csv")
@@ -139,7 +142,7 @@ def run(platform: str, dry_run: bool = False) -> None:
         return
 
     # ── 读取 CSV ──
-    with open(csv_path, "r", encoding="utf-8") as f:
+    with open(csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         fieldnames = list(reader.fieldnames or [])
         rows = list(reader)

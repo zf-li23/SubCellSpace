@@ -52,7 +52,6 @@ class GenericIngestor(BaseIngestor):
         # Detect compression
         is_gz = suffix == ".gz" or ".gz" in [s.lower() for s in suffixes]
         is_tsv = ".tsv" in suffix or any(".tsv" in s.lower() for s in suffixes)
-        is_csv = ".csv" in suffix or any(".csv" in s.lower() for s in suffixes) or (not is_tsv)
 
         # Read
         if is_gz:

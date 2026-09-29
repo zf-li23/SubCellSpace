@@ -9,9 +9,11 @@
     python3 scripts/export_frontend_json.py --cosmx-only       # 单个平台
 """
 
-import argparse, csv, json, logging, os, sys
+import argparse
+import csv
+import json
+import logging
 from pathlib import Path
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("export_frontend")
@@ -136,7 +138,7 @@ def export_platform(platform: str) -> None:
         logger.error(f"CSV not found: {csv_path}")
         return
 
-    with open(csv_path, "r", encoding="utf-8") as f:
+    with open(csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         csv_cols = reader.fieldnames or []
         rows = list(reader)

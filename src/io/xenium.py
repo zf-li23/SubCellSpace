@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from pathlib import Path
@@ -259,14 +260,15 @@ class XeniumIngestor(BaseIngestor):
     @staticmethod
     def _read_zarr_matrix(path: Path) -> pd.DataFrame | None:
         """读取 Xenium cell_feature_matrix.zarr.zip 到 DataFrame。"""
-        import tempfile, shutil, zipfile
+        import shutil
+        import tempfile
+        import zipfile
         tmp = tempfile.mkdtemp()
         try:
             with zipfile.ZipFile(path, "r") as zf:
                 zf.extractall(tmp)
             # Find the zarr root
             import zarr
-            import numpy as np
             zarr_dirs = [d for d in Path(tmp).iterdir() if d.is_dir()]
             if not zarr_dirs:
                 return None
@@ -311,7 +313,9 @@ class XeniumIngestor(BaseIngestor):
     @staticmethod
     def _read_zarr_cells(path: Path) -> pd.DataFrame | None:
         """读取 Xenium cells.zarr.zip 到 DataFrame。"""
-        import tempfile, shutil, zipfile
+        import shutil
+        import tempfile
+        import zipfile
         tmp = tempfile.mkdtemp()
         try:
             with zipfile.ZipFile(path, "r") as zf:
@@ -326,10 +330,8 @@ class XeniumIngestor(BaseIngestor):
             # Decode bytes
             for col in df.columns:
                 if df[col].dtype == "O":
-                    try:
+                    with contextlib.suppress(Exception):
                         df[col] = df[col].apply(lambda x: x.decode() if isinstance(x, bytes) else x)
-                    except Exception:
-                        pass
             return df
         except Exception:
             return None
@@ -354,13 +356,15 @@ class XeniumIngestor(BaseIngestor):
         if resolved.suffix == ".parquet":
             df = pd.read_parquet(resolved)
         elif ".zarr.zip" in resolved.name:
-            import tempfile, shutil, zipfile
+            import shutil
+            import tempfile
+            import zipfile
             tmp = tempfile.mkdtemp()
             try:
                 with zipfile.ZipFile(resolved, "r") as zf:
                     zf.extractall(tmp)
-                import zarr
                 import numpy as np
+                import zarr
                 zarr_dirs = [d for d in Path(tmp).iterdir() if d.is_dir()]
                 if not zarr_dirs:
                     raise DataLoadError("Empty zarr archive", platform=self.platform, path=resolved)

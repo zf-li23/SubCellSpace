@@ -6,9 +6,6 @@ GEO 数据格式检测模块
 """
 
 import os
-import glob
-from typing import List, Optional, Tuple
-
 
 # ── 格式常量 ──────────────────────────────────────────────────────
 FORMAT_COSMX_MATRIX = "CosMx_matrix"        # 标准 CosMx (exprMat_file.csv + metadata_file.csv)
@@ -30,13 +27,13 @@ FORMAT_UNKNOWN = "unknown"                   # 未知格式
 def detect_format(gsm_dir: str) -> str:
     """
     检测 GSM 目录中数据的平台与格式。
-    
+
     参数:
         gsm_dir: GSM 目录路径
-        
+
     返回:
         格式字符串常量
-    
+
     示例:
         >>> fmt = detect_format("/data/Xenium_GEO/GSE234713/GSM7473682/")
         >>> fmt
@@ -44,29 +41,29 @@ def detect_format(gsm_dir: str) -> str:
     """
     if not os.path.isdir(gsm_dir):
         return FORMAT_UNKNOWN
-    
+
     files = [f for f in os.listdir(gsm_dir) if os.path.isfile(os.path.join(gsm_dir, f))]
     fnames_lower = set(f.lower() for f in files)
     fnames = set(files)
-    
+
     # ── CosMx 检测 ──
     if _has_pattern(fnames_lower, '*exprmat_file*') or _has_pattern(fnames_lower, '*exprmat*'):
         return FORMAT_COSMX_MATRIX
-    
+
     if _has_pattern(fnames_lower, '*metadata_file*'):
         return FORMAT_COSMX_MATRIX
-    
+
     # CosMx SOOI 格式
     if _has_pattern(fnames_lower, '*sooi*'):
         return FORMAT_COSMX_SOOI
-    
+
     # ── Xenium 检测 ──
     # Xenium 预处理后格式：feature_matrix 目录或文件 + transcripts.parquet
     has_transcripts = False
     has_feature_matrix = False
     has_h5 = False
     has_cells = False
-    
+
     for f in files:
         fl = f.lower()
         if 'transcript' in fl and (fl.endswith('.csv') or fl.endswith('.parquet') or fl.endswith('.gz')):
@@ -82,66 +79,66 @@ def detect_format(gsm_dir: str) -> str:
         # Xenium 的 .zarr.zip
         if fl.endswith('.zarr.zip'):
             has_feature_matrix = True
-    
+
     # Xenium 原始格式
     if has_transcripts and has_feature_matrix:
         return FORMAT_XENIUM_PREPROCESSED
-    
+
     if has_h5 and has_cells:
         return FORMAT_XENIUM_RAW
-    
+
     if _has_pattern(fnames_lower, '*_GEM*') or _has_pattern(fnames_lower, '*count_matrix*'):
         return FORMAT_XENIUM_RAW
-    
+
     # Xenium also has .zarr.zip as primary
     if _has_pattern(fnames, '*.zarr.zip'):
         return FORMAT_XENIUM_PREPROCESSED
-    
+
     # ── MERFISH 检测 ──
     # MERFISH_full: detected_transcripts + cell_by_gene + cell_metadata
     dt = _has_pattern(fnames_lower, '*detected_transcripts*')
     cbg = _has_pattern(fnames_lower, '*cell_by_gene*')
     cm = _has_pattern(fnames_lower, '*cell_metadata*')
-    
+
     if dt and cbg and cm:
         return FORMAT_MERFISH_FULL
-    
+
     if dt and cbg:
         return FORMAT_MERFISH_FULL  # partial but still full-like
-    
+
     # MERFISH_raw
     if _has_pattern(fnames_lower, '*raw_detected*') or _has_pattern(fnames_lower, '*raw*merfish*'):
         return FORMAT_MERFISH_RAW
-    
+
     # MERFISH_matrix
     if _has_pattern(fnames_lower, '*count_matrix*') and not _has_pattern(fnames_lower, '*gem*'):
         return FORMAT_MERFISH_MATRIX
-    
+
     # MERFISH_seq
     if _has_pattern(fnames_lower, '*fastq*') or _has_pattern(fnames_lower, '*bam*'):
         return FORMAT_MERFISH_SEQ
-    
+
     # MERFISH_wang: 含 Wang Lab 格式特征
     if _has_pattern(fnames_lower, '*wang*'):
         return FORMAT_MERFISH_WANG
-    
+
     if _has_pattern(fnames_lower, '*lung_atlas*') or _has_pattern(fnames_lower, '*hlca*'):
         return FORMAT_MERFISH_LUNG
-    
+
     # ── Visium ──
     if _has_pattern(fnames_lower, '*spaceranger*'):
         return FORMAT_VISIUM
-    
+
     if _has_pattern(fnames_lower, '*visium*'):
         return FORMAT_VISIUM
-    
+
     return FORMAT_UNKNOWN
 
 
 def check_integrity(gsm_dir: str) -> dict:
     """
     检查 GSM 目录的数据完整性。
-    
+
     返回:
         完整性报告字典:
         {
@@ -161,7 +158,7 @@ def check_integrity(gsm_dir: str) -> dict:
     has_transcripts = False
     has_cell_data = False
     issues = []
-    
+
     for fname in files:
         fpath = os.path.join(gsm_dir, fname)
         if not os.path.isfile(fpath):
@@ -169,7 +166,7 @@ def check_integrity(gsm_dir: str) -> dict:
         size = os.path.getsize(fpath)
         total_size += size
         file_details.append(f"{fname} ({_fmt_size(size)})")
-        
+
         fl = fname.lower()
         if 'transcript' in fl:
             has_transcripts = True
@@ -177,7 +174,7 @@ def check_integrity(gsm_dir: str) -> dict:
             has_cell_data = True
         if fl.endswith('.h5') or fl.endswith('.h5ad'):
             has_cell_data = True
-    
+
     # 格式特定完整性检查
     if fmt == FORMAT_MERFISH_FULL:
         dt = any('detected_transcripts' in f.lower() for f in files)
@@ -189,13 +186,13 @@ def check_integrity(gsm_dir: str) -> dict:
             issues.append("Missing cell_by_gene file")
         if not cm:
             issues.append("Missing cell_metadata file")
-    
+
     elif fmt.startswith('Xenium'):
         if not has_transcripts:
             issues.append("Missing transcripts file")
         if not has_cell_data:
             issues.append("Missing cell/feature matrix")
-    
+
     return {
         'format': fmt,
         'file_count': len(file_details),
@@ -211,7 +208,7 @@ def check_integrity(gsm_dir: str) -> dict:
 def classify_platform(gsm_dir: str) -> str:
     """
     归类 GSM 所属平台。
-    
+
     返回: "CosMx" | "Xenium" | "MERFISH" | "Visium" | "unknown"
     """
     fmt = detect_format(gsm_dir)
@@ -226,13 +223,13 @@ def classify_platform(gsm_dir: str) -> str:
     return 'unknown'
 
 
-def scan_gse(gse_dir: str) -> List[dict]:
+def scan_gse(gse_dir: str) -> list[dict]:
     """
     扫描整个 GSE 目录下的所有 GSM，返回检测报告列表。
-    
+
     参数:
         gse_dir: GSE 目录路径
-        
+
     返回:
         [{gsm, format, platform, file_count, size_human, issues}] 列表
     """
@@ -241,7 +238,7 @@ def scan_gse(gse_dir: str) -> List[dict]:
         gsm_path = os.path.join(gse_dir, item)
         if not os.path.isdir(gsm_path) or not item.startswith('GSM'):
             continue
-        
+
         integrity = check_integrity(gsm_path)
         reports.append({
             'gsm': item,

@@ -19,7 +19,7 @@ from pathlib import Path
 # 添加项目根到 path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.geo.enrich import enrich_all, PLATFORM_CSVS
+from src.geo.enrich import PLATFORM_CSVS, enrich_all
 
 
 def main():
@@ -36,12 +36,12 @@ def main():
                         help="只处理 MERFISH")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="详细输出")
-    
+
     args = parser.parse_args()
     level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=level, format="%(message)s")
     logger = logging.getLogger(__name__)
-    
+
     # 筛选平台
     platforms = list(PLATFORM_CSVS)
     if args.cosmx_only:
@@ -50,9 +50,9 @@ def main():
         platforms = [p for p in platforms if "xenium" in p[0]]
     if args.merfish_only:
         platforms = [p for p in platforms if "merfish" in p[0]]
-    
+
     csv_dir = Path(__file__).resolve().parent.parent / "data"
-    
+
     logger.info("=" * 50)
     logger.info("GEO 元数据填充")
     logger.info(f"CSV 目录: {csv_dir}")
@@ -60,7 +60,7 @@ def main():
     if args.dry_run:
         logger.info("【干跑模式】不会写入文件")
     logger.info("=" * 50)
-    
+
     # 预览
     from src.geo.enrich import get_unique_gses
     for fname, gsm_col, _ in platforms:
@@ -71,14 +71,14 @@ def main():
         logger.info(f"\n{fname}: {len(gses)} 个唯一 GSE")
         for gse in gses:
             logger.info(f"  {gse}")
-    
+
     if args.dry_run:
         logger.info("\n干跑结束，未写入任何文件。")
         return
-    
+
     # 执行
     results = enrich_all(delay=args.delay, csv_dir=csv_dir, platforms=platforms)
-    
+
     logger.info("\n" + "=" * 50)
     logger.info("完成！")
     for fname, total in results.items():

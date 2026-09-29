@@ -9,11 +9,9 @@ from __future__ import annotations
 import csv
 import json
 import logging
-import os
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -26,7 +24,7 @@ NEW_COLUMNS = ["tissue", "disease_state"]
 # ── 备份/恢复 ───────────────────────────────────────────────────
 
 
-def backup_csv(csv_path: Path) -> Optional[Path]:
+def backup_csv(csv_path: Path) -> Path | None:
     """创建 CSV 备份。备份路径为 {stem}_copy.{suffix}"""
     backup_path = csv_path.parent / f"{csv_path.stem}_copy{csv_path.suffix}"
     if backup_path.exists():
@@ -52,7 +50,6 @@ def restore_from_backup(csv_path: Path) -> bool:
 
 def safe_write_csv(csv_path: Path, fieldnames: list, rows: list) -> bool:
     """安全写入 CSV：先写临时文件，成功后再替换原文件。"""
-    import tempfile
     tmp = csv_path.with_suffix(".csv.tmp")
     try:
         with open(tmp, "w", newline="") as f:
@@ -115,13 +112,13 @@ def call_llm(
     name: str,
     summary: str,
     taxon: str,
-    sample_titles: Dict[str, str],
+    sample_titles: dict[str, str],
     api_key: str,
     model: str = "deepseek-v4-flash",
     base_url: str = "https://api.deepseek.com",
     timeout: int = 120,
     max_retries: int = 5,
-) -> Optional[Dict[str, dict]]:
+) -> dict[str, dict] | None:
     """对单个 GSE 调用 LLM，返回 {GSM: {tissue, disease_state}}。"""
     sample_lines = "\n".join(
         f"  {gsm} | {title}" for gsm, title in sample_titles.items()
@@ -252,12 +249,12 @@ def ensure_columns(csv_path: Path) -> bool:
     return True
 
 
-def read_gsm_titles(csv_path: Path, gsm_col: str) -> Dict[str, Dict[str, str]]:
+def read_gsm_titles(csv_path: Path, gsm_col: str) -> dict[str, dict[str, str]]:
     """
     读取 CSV，返回 {GSE: {GSM: title, ...}} 结构。
     同时记录每行的原始数据用于回写。
     """
-    gse_groups: Dict[str, OrderedDict] = {}
+    gse_groups: dict[str, OrderedDict] = {}
     with open(csv_path) as f:
         for r in csv.DictReader(f):
             gse = r.get("GSE", "")
@@ -299,7 +296,7 @@ def get_annotated_gses(csv_path: Path, gsm_col: str) -> set:
 
 
 def merge_results(csv_path: Path, gsm_col: str,
-                  results: Dict[str, Dict[str, dict]]) -> int:
+                  results: dict[str, dict[str, dict]]) -> int:
     """将 LLM 标注结果合并回 CSV（安全写入 + 备份）。"""
     backup_csv(csv_path)
 
@@ -326,7 +323,7 @@ def merge_results(csv_path: Path, gsm_col: str,
     if safe_write_csv(csv_path, fieldnames, rows):
         logger.info(f"  Saved {len(rows)} rows → {csv_path.name}")
     else:
-        logger.error(f"  Write failed! Attempting restore...")
+        logger.error("  Write failed! Attempting restore...")
         restore_from_backup(csv_path)
         return 0
 
@@ -335,7 +332,7 @@ def merge_results(csv_path: Path, gsm_col: str,
 
 # ── 主流程 ──────────────────────────────────────────────────────
 
-PLATFORM_CSVS: List[Tuple[str, str]] = [
+PLATFORM_CSVS: list[tuple[str, str]] = [
     ("cosmx_geo.csv", "sample_name"),
     ("xenium_geo.csv", "GSM"),
     ("merfish_geo.csv", "GSM"),
@@ -347,9 +344,9 @@ def annotate_all(
     model: str = "deepseek-v4-flash",
     base_url: str = "https://api.deepseek.com",
     delay: float = 0.5,
-    csv_dir: Optional[Path] = None,
-    platforms: Optional[List[Tuple[str, str]]] = None,
-) -> Dict[str, int]:
+    csv_dir: Path | None = None,
+    platforms: list[tuple[str, str]] | None = None,
+) -> dict[str, int]:
     """
     对所有三平台 CSV 执行 LLM 标注。
 
@@ -381,7 +378,7 @@ def annotate_all(
         logger.info(f"  {len(annotated_gses)} already annotated, will skip")
 
         # Step 3: annotate each GSE
-        batch_results: Dict[str, Dict[str, dict]] = {}
+        batch_results: dict[str, dict[str, dict]] = {}
         total_gses = len(gse_groups)
         for i, (gse, gsm_titles) in enumerate(gse_groups.items(), 1):
             if gse in annotated_gses:
@@ -392,7 +389,7 @@ def annotate_all(
 
             metadata = get_gse_metadata(csv_path, gse)
             if not metadata.get("summary") and not metadata.get("name"):
-                logger.warning(f"    no metadata, skipping")
+                logger.warning("    no metadata, skipping")
                 continue
 
             llm_result = call_llm(
@@ -410,7 +407,7 @@ def annotate_all(
                 batch_results[gse] = llm_result
                 logger.info(f"    ✅ annotated {len(llm_result)} GSM")
             else:
-                logger.error(f"    ❌ failed after retries")
+                logger.error("    ❌ failed after retries")
 
             # Incremental save every 5 GSEs
             if (i + 1) % 5 == 0 and batch_results:

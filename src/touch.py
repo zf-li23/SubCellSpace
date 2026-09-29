@@ -16,11 +16,9 @@ from __future__ import annotations
 
 import gzip
 import json
-import os
 import shutil
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # ── subcellspace 前缀 ──────────────────────────────────────────────
 # 所有 subcellspace 生成的文件使用此前缀，touch 会忽略此类文件
@@ -110,7 +108,7 @@ class FileStatus:
     required: bool               # 是否必要
     desc: str                    # 文件说明
     found: bool                  # 是否存在
-    path: Optional[str] = None   # 实际路径（存在时）
+    path: str | None = None   # 实际路径（存在时）
     size_bytes: int = 0          # 文件大小
     is_gz: bool = False          # 是否 gzip 压缩
     is_parquet: bool = False     # 是否 parquet 格式
@@ -122,11 +120,11 @@ class FileStatus:
 class TouchReport:
     """完整的数据目录触摸报告。"""
     input_path: str
-    platform: Optional[str]          # 检测到的平台（或 None）
+    platform: str | None          # 检测到的平台（或 None）
     platform_source: str             # "auto" / "user" / "db"
-    dataset_id: Optional[str] = None
-    gse: Optional[str] = None
-    gsm: Optional[str] = None
+    dataset_id: str | None = None
+    gse: str | None = None
+    gsm: str | None = None
 
     files: list[FileStatus] = field(default_factory=list)
     unexpected: list[str] = field(default_factory=list)  # 不符合预期的文件
@@ -285,7 +283,6 @@ def _check_file(data_dir: Path, entry: dict) -> FileStatus:
     has_gz = any(str(c).endswith(".gz") for c in candidates)
     has_csv = any(not str(c).endswith(".gz") and not str(c).endswith(".parquet")
                   for c in candidates)
-    has_parquet = any(str(c).endswith(".parquet") for c in candidates)
     has_both = has_csv and has_gz
 
     best = None
@@ -299,10 +296,9 @@ def _check_file(data_dir: Path, entry: dict) -> FileStatus:
         valid = []
         for c in candidates:
             try:
-                if c.exists() or c.is_symlink():
-                    # 符号链接指向不存在的目标也被视为无效
-                    if c.is_symlink() and not c.exists():
-                        continue
+                # 符号链接指向不存在的目标被视为无效
+                if c.is_symlink() and not c.exists():
+                    continue
                 valid.append(c)
             except OSError:
                 continue
@@ -420,17 +416,16 @@ def _resolve_required_alternatives(report: TouchReport) -> None:
 
     # transcripts_parquet 也是必须文件 transcripts.csv 的替代格式
     # 它的存在不应该算作"可选文件"，因为跟 csv 是同一信息
-    for i, f in enumerate(report.files):
+    for _i, f in enumerate(report.files):
         if f.name == "transcripts_parquet" and not f.required:
             f.is_alternative = True
 
     # 标记所有替代格式（仅标记从属格式，主格式保持正常）
     all_alt_names = set()
-    for primary, alts in alt_groups:
-        for a in alts:
-            all_alt_names.add(a)
+    for _primary, alts in alt_groups:
+        all_alt_names.update(alts)
 
-    for i, f in enumerate(report.files):
+    for _i, f in enumerate(report.files):
         if f.name in all_alt_names and not f.required:
             f.is_alternative = True
 
@@ -572,7 +567,7 @@ def _normalize_files(data_dir: Path, report: TouchReport) -> None:
             "path": str(h5_gz),
             "reversible": False,
         })
-        report.actions_taken.append(f"Removed redundant cell_feature_matrix.h5.gz (already have .h5)")
+        report.actions_taken.append("Removed redundant cell_feature_matrix.h5.gz (already have .h5)")
 
     # ── 规则 4-6: CSV 压缩规范化 ──
     for status in report.files:
@@ -648,7 +643,6 @@ def rollback(report_path: str | Path) -> list[str]:
     返回:
         回退操作的人类可读记录列表
     """
-    import json
     report_path = Path(report_path)
     if not report_path.exists():
         raise FileNotFoundError(f"Report not found: {report_path}")
@@ -694,10 +688,9 @@ def rollback(report_path: str | Path) -> list[str]:
                 after = Path(entry["after"])
                 if after.exists() and not before.exists():
                     import gzip as _gz
-                    with _gz.open(after, "rb") as src:
-                        with open(before, "wb") as dst:
-                            import shutil as _sh
-                            _sh.copyfileobj(src, dst)
+                    with _gz.open(after, "rb") as src, open(before, "wb") as dst:
+                        import shutil as _sh
+                        _sh.copyfileobj(src, dst)
                     after.unlink()
                     actions.append(f"[UNDO] Compressed: {after.name} → {before.name}")
 
@@ -712,16 +705,14 @@ def rollback(report_path: str | Path) -> list[str]:
 
 def _gzip_compress(src: Path, dst: Path) -> None:
     """将文件 gzip 压缩。"""
-    with open(src, "rb") as f_in:
-        with gzip.open(dst, "wb") as f_out:
-            shutil.copyfileobj(f_in, f_out)
+    with open(src, "rb") as f_in, gzip.open(dst, "wb") as f_out:
+        shutil.copyfileobj(f_in, f_out)
 
 
 def _gzip_decompress(src: Path, dst: Path) -> None:
     """将 gzip 文件解压。"""
-    with gzip.open(src, "rb") as f_in:
-        with open(dst, "wb") as f_out:
-            shutil.copyfileobj(f_in, f_out)
+    with gzip.open(src, "rb") as f_in, open(dst, "wb") as f_out:
+        shutil.copyfileobj(f_in, f_out)
 
 
 # ── 格式化输出 ──────────────────────────────────────────────────────

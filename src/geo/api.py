@@ -4,27 +4,26 @@ GEO API 查询模块
 通过 NCBI E-utilities API 获取 GSE 的 GSM 列表。
 """
 
-import re
 import json
+import re
 import time
-import urllib.request
 import urllib.error
-from typing import List, Optional, Tuple
+import urllib.request
 
 
 def query_gsms(gse: str, user_agent: str = "SubCellSpace/1.0",
-               delay: float = 0.3) -> List[str]:
+               delay: float = 0.3) -> list[str]:
     """
     查询 GSE 的所有 GSM accession 编号。
-    
+
     参数:
         gse: GSE accession (如 "GSE234713")
         user_agent: HTTP User-Agent
         delay: API 调用间隔（秒），避免触发限流
-        
+
     返回:
         排序后的 GSM 列表
-        
+
     示例:
         >>> gsms = query_gsms("GSE234713")
         >>> print(f"Found {len(gsms)} GSMs")
@@ -35,55 +34,55 @@ def query_gsms(gse: str, user_agent: str = "SubCellSpace/1.0",
         f"?db=gds&term={gse}[ACCN]&retmax=10&retmode=json"
     )
     req = urllib.request.Request(search_url, headers={'User-Agent': user_agent})
-    
+
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
     except Exception as e:
         raise RuntimeError(f"GEO search failed for {gse}: {e}") from e
-    
+
     ids = data.get('esearchresult', {}).get('idlist', [])
     if not ids:
         return []
-    
+
     time.sleep(delay)
-    
+
     # Step 2: 获取 GDS 的样本信息
     summary_url = (
         f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
         f"?db=gds&id={','.join(ids)}&retmode=json"
     )
     req2 = urllib.request.Request(summary_url, headers={'User-Agent': user_agent})
-    
+
     try:
         with urllib.request.urlopen(req2, timeout=30) as resp2:
             data2 = json.loads(resp2.read().decode())
     except Exception as e:
         raise RuntimeError(f"GEO summary failed for {gse}: {e}") from e
-    
+
     result = data2.get('result', {})
     all_gsms = set()
-    
+
     for gds_id in ids:
         entry = result.get(gds_id, {})
         accession = entry.get('accession', '')
-        
+
         # 确保属于当前 GSE
         gse_match = re.search(r'GSE\d+', accession)
         if not gse_match or gse_match.group() != gse:
             continue
-        
+
         samples = entry.get('samples', [])
         for s in samples:
             acc = s.get('accession', '')
             if acc.startswith('GSM'):
                 all_gsms.add(acc)
-    
+
     return sorted(all_gsms)
 
 
 def get_gse_enrichment(gse: str, user_agent: str = "SubCellSpace/1.0",
-                        delay: float = 0.35) -> Optional[dict]:
+                        delay: float = 0.35) -> dict | None:
     """
     获取 GSE 的完整元数据用于数据库 enrich。
 
@@ -164,10 +163,10 @@ def get_gse_enrichment(gse: str, user_agent: str = "SubCellSpace/1.0",
 
 
 def get_gse_info(gse: str, user_agent: str = "SubCellSpace/1.0"
-                 ) -> Optional[dict]:
+                 ) -> dict | None:
     """
     获取 GSE 的元数据信息。
-    
+
     返回:
         {accession, title, gpl, gdstype, sample_count} 或 None
     """
@@ -176,32 +175,32 @@ def get_gse_info(gse: str, user_agent: str = "SubCellSpace/1.0"
         f"?db=gds&term={gse}[ACCN]&retmax=1&retmode=json"
     )
     req = urllib.request.Request(search_url, headers={'User-Agent': user_agent})
-    
+
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
     except Exception:
         return None
-    
+
     ids = data.get('esearchresult', {}).get('idlist', [])
     if not ids:
         return None
-    
+
     summary_url = (
         f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
         f"?db=gds&id={ids[0]}&retmode=json"
     )
     req2 = urllib.request.Request(summary_url, headers={'User-Agent': user_agent})
-    
+
     try:
         with urllib.request.urlopen(req2, timeout=30) as resp2:
             data2 = json.loads(resp2.read().decode())
     except Exception:
         return None
-    
+
     entry = data2.get('result', {}).get(ids[0], {})
     samples = entry.get('samples', [])
-    
+
     return {
         'accession': entry.get('accession', ''),
         'title': entry.get('summary', '')[:200],

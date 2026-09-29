@@ -9,7 +9,10 @@ stats_{platform}.csv，不修改原始 GEO CSV。
     python3 scripts/merge_stats_chunks.py --all
 """
 
-import argparse, csv, logging, sys
+import argparse
+import csv
+import logging
+import sys
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -31,7 +34,7 @@ def merge_platform(platform: str, result_dir: Path, total_chunks: int) -> None:
         if not chunk_path.exists():
             logger.warning(f"  Chunk file not found: {chunk_path}")
             continue
-        with open(chunk_path, "r", encoding="utf-8") as f:
+        with open(chunk_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             count = 0
             for row in reader:

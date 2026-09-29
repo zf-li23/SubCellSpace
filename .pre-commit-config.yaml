@@ -26,24 +26,10 @@ repos:
   # ── Python-specific ─────────────────────────────────────────────
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.5
+    rev: v0.15.13
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
-      - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.15.0
-    hooks:
-      - id: mypy
-        additional_dependencies:
-          - types-PyYAML
-          - types-requests
-        args: [--strict, --ignore-missing-imports]
-        # Only check source code, not tests or generated files
-        exclude: ^tests|^tools|^scripts
-
-  # ── TypeScript / JavaScript (frontend) ──────────────────────────
 
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.1.0

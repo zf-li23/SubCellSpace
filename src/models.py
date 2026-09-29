@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 
-
 @dataclass(slots=True)
 class DatasetSummary:
     source_path: Path

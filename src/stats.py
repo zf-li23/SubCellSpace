@@ -15,7 +15,6 @@ import os
 import statistics
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ PLATFORM_CONFIGS = {
 }
 
 
-def _find_transcript_file(data_dir: Path, platform: str) -> Optional[Path]:
+def _find_transcript_file(data_dir: Path, platform: str) -> Path | None:
     """在目录中查找转录本文件。"""
     cfg = PLATFORM_CONFIGS.get(platform)
     if not cfg:
@@ -65,7 +64,7 @@ def _open_csv(path: Path):
     return open(path, newline="")
 
 
-def _detect_column(header: List[str], primary: str, alts: List[str]) -> Optional[int]:
+def _detect_column(header: list[str], primary: str, alts: list[str]) -> int | None:
     """检测列名在 header 中的索引，支持主名和候补名。"""
     for i, col in enumerate(header):
         col_clean = col.strip('"')
@@ -74,7 +73,7 @@ def _detect_column(header: List[str], primary: str, alts: List[str]) -> Optional
     return None
 
 
-def _detect_platform_from_dir(data_dir: Path) -> Optional[str]:
+def _detect_platform_from_dir(data_dir: Path) -> str | None:
     """自动检测平台（基于文件名关键词）。"""
     files_lower = [f.lower() for f in os.listdir(data_dir)]
     if any("tx_file" in f for f in files_lower):
@@ -96,13 +95,13 @@ class StatsResult:
         self.n_transcripts: int = 0
         self.n_cells: int = 0
         self.n_genes: int = 0
-        self.n_fovs: Optional[int] = None
-        self.gene_panel_size: Optional[int] = None
-        self.median_transcripts: Optional[float] = None
-        self.median_genes: Optional[float] = None
-        self.platform: Optional[str] = None
-        self.transcript_file: Optional[str] = None
-        self.error: Optional[str] = None
+        self.n_fovs: int | None = None
+        self.gene_panel_size: int | None = None
+        self.median_transcripts: float | None = None
+        self.median_genes: float | None = None
+        self.platform: str | None = None
+        self.transcript_file: str | None = None
+        self.error: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -121,7 +120,7 @@ class StatsResult:
 # ── 核心统计 ────────────────────────────────────────────────────
 
 
-def stat_data_dir(data_dir: Path, platform: Optional[str] = None,
+def stat_data_dir(data_dir: Path, platform: str | None = None,
                   max_cells_for_per_cell_stats: int = 50000) -> StatsResult:
     """
     对数据目录执行流式统计。
@@ -189,7 +188,7 @@ def stat_data_dir(data_dir: Path, platform: Optional[str] = None,
     fov_col_idx = None
 
     cell_counts = Counter()        # cell_id → transcript_count
-    cell_genes: Dict[str, set] = {}  # cell_id → set of genes (for median_genes)
+    cell_genes: dict[str, set] = {}  # cell_id → set of genes (for median_genes)
     _skip_cell_genes = False       # 超过内存阈值时关闭逐 cell 基因追踪
 
     try:
@@ -274,7 +273,7 @@ def stat_data_dir(data_dir: Path, platform: Optional[str] = None,
 # ── 单目录 CLI ─────────────────────────────────────────────────
 
 
-def stats_single_dir(data_dir: str, platform: Optional[str] = None,
+def stats_single_dir(data_dir: str, platform: str | None = None,
                      json_output: bool = False,
                      max_cells_for_per_cell_stats: int = 50000) -> StatsResult:
     """对单个目录执行统计并输出。"""

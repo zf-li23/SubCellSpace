@@ -48,3 +48,6 @@ tools/
 
 # Local cleanup evidence (contains cluster paths)
 cleanup/
+
+# Backups written by src/geo/enrich.py
+data/*_copy.csv

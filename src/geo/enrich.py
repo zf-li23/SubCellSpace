@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import csv
 import logging
-import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from .api import get_gse_enrichment
 
@@ -21,7 +19,7 @@ logger = logging.getLogger(__name__)
 NEW_COLUMNS = ["title", "summary", "taxon", "pubmedids", "pdat"]
 
 # 三平台 CSV 信息: (文件名, GSM列名, 数据目录)
-PLATFORM_CSVS: List[Tuple[str, str, str]] = [
+PLATFORM_CSVS: list[tuple[str, str, str]] = [
     ("cosmx_geo.csv", "sample_name", "CosMx_GEO"),
     ("xenium_geo.csv", "GSM", "Xenium_GEO"),
     ("merfish_geo.csv", "GSM", "MERFISH_GEO"),
@@ -33,7 +31,7 @@ def ensure_columns(csv_path: Path) -> bool:
     with open(csv_path) as f:
         reader = csv.DictReader(f)
         fieldnames = list(reader.fieldnames or [])
-    
+
     changed = False
     for col in NEW_COLUMNS:
         if col not in fieldnames:
@@ -44,15 +42,15 @@ def ensure_columns(csv_path: Path) -> bool:
             else:
                 fieldnames.append(col)
             changed = True
-    
+
     if not changed:
         return False
-    
+
     rows = []
     with open(csv_path) as f:
         for r in csv.DictReader(f):
             rows.append(r)
-    
+
     with open(csv_path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -62,14 +60,14 @@ def ensure_columns(csv_path: Path) -> bool:
                 if col not in r:
                     r[col] = ""
             w.writerow(r)
-    
+
     logger.info(f"Added {len(NEW_COLUMNS)} columns to {csv_path.name}")
     return True
 
 
-def get_unique_gses(csv_path: Path, gsm_col: str) -> List[str]:
+def get_unique_gses(csv_path: Path, gsm_col: str) -> list[str]:
     """获取 CSV 中所有唯一的 GSE。"""
-    gses: List[str] = []
+    gses: list[str] = []
     seen: set = set()
     with open(csv_path) as f:
         for r in csv.DictReader(f):
@@ -81,22 +79,22 @@ def get_unique_gses(csv_path: Path, gsm_col: str) -> List[str]:
 
 
 def enrich_single_gse(gse: str, gsm_col: str,
-                      delay: float = 0.35) -> Optional[dict]:
+                      delay: float = 0.35) -> dict | None:
     """查询单个 GSE 的 GEO 元数据。"""
     try:
         data = get_gse_enrichment(gse, delay=delay)
     except Exception as e:
         logger.error(f"  {gse}: API error: {e}")
         return None
-    
+
     if data is None:
         logger.warning(f"  {gse}: no data from GEO")
         return None
-    
+
     return data
 
 
-def _lookup_gsm_title(gsm_key: str, gsm_titles: Dict[str, str]) -> str:
+def _lookup_gsm_title(gsm_key: str, gsm_titles: dict[str, str]) -> str:
     """查找 GSM title，支持范围写法（GSMxxx-GSMyyy）。"""
     if gsm_key in gsm_titles:
         return gsm_titles[gsm_key]
@@ -116,7 +114,7 @@ def _lookup_gsm_title(gsm_key: str, gsm_titles: Dict[str, str]) -> str:
 
 
 def merge_into_csv(csv_path: Path, gsm_col: str,
-                   enrichment_map: Dict[str, dict]) -> int:
+                   enrichment_map: dict[str, dict]) -> int:
     """将 enrichment 结果合并回 CSV（安全写入 + 备份）。"""
     # 备份
     backup_path = csv_path.parent / f"{csv_path.stem}_copy{csv_path.suffix}"
@@ -124,7 +122,6 @@ def merge_into_csv(csv_path: Path, gsm_col: str,
         import shutil
         shutil.copy2(csv_path, backup_path)
 
-    updated = 0
     rows = []
 
     with open(csv_path) as f:
@@ -179,10 +176,10 @@ def merge_into_csv(csv_path: Path, gsm_col: str,
 
 
 def enrich_all(delay: float = 0.35,
-               csv_dir: Optional[Path] = None,
+               csv_dir: Path | None = None,
                skip_columns: bool = False,
-               platforms: Optional[List[Tuple[str, str, str]]] = None
-               ) -> Dict[str, int]:
+               platforms: list[tuple[str, str, str]] | None = None
+               ) -> dict[str, int]:
     """
     对所有三平台 CSV 执行 GEO enrich。
 
@@ -209,15 +206,15 @@ def enrich_all(delay: float = 0.35,
             continue
 
         logger.info(f"Processing {fname} ...")
-        
+
         # Step 1: ensure columns
         if not skip_columns:
             ensure_columns(csv_path)
-        
+
         # Step 2: get unique GSEs
         gses = get_unique_gses(csv_path, gsm_col)
         logger.info(f"  {len(gses)} unique GSEs")
-        
+
         # Step 3: fetch enrichment data for each GSE
         enrichment_map = {}
         for i, gse in enumerate(gses):
@@ -225,12 +222,12 @@ def enrich_all(delay: float = 0.35,
             data = enrich_single_gse(gse, gsm_col, delay=delay)
             if data:
                 enrichment_map[gse] = data
-        
+
         logger.info(f"  Fetched {len(enrichment_map)}/{len(gses)} GSEs")
-        
+
         # Step 4: merge into CSV
         total = merge_into_csv(csv_path, gsm_col, enrichment_map)
         results[fname] = total
         logger.info(f"  Written {total} rows to {fname}")
-    
+
     return results

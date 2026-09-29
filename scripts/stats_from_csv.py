@@ -10,10 +10,11 @@
     python3 scripts/stats_from_csv.py --json
 """
 
-import argparse, csv, json, os, sys
+import argparse
+import csv
+import json
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Optional
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
@@ -41,7 +42,7 @@ PLATFORM_CONFIG = {
 
 def analyze_platform(platform: str) -> dict:
     cfg = PLATFORM_CONFIG[platform]
-    with open(cfg["csv"], "r", encoding="utf-8") as f:
+    with open(cfg["csv"], encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
     total = len(rows)
@@ -122,7 +123,7 @@ def print_report(results: list) -> None:
     for r in results:
         print(f"  ── {r['platform']} ──────────────────────────────")
         print(f"    总数据集:          {r['total']}")
-        print(f"    status:            ", end="")
+        print("    status:            ", end="")
         parts = [f"{k}={v}" for k, v in sorted(r['status'].items())]
         print(", ".join(parts))
         print(f"    ready 且有 transcripts: {r['ready_with_transcripts']}")
@@ -133,12 +134,12 @@ def print_report(results: list) -> None:
             print(f"    ⚠️  pending 却有 touch 数据: {r['pending_but_has_data']}")
         print(f"    所有可选文件齐全:  {r['all_optionals_present']}")
         print()
-        print(f"    可选文件分布 (按数据集拥有数):")
+        print("    可选文件分布 (按数据集拥有数):")
         for n_opt, count in sorted(r['optional_distribution'].items(), key=lambda x: int(x[0])):
             bar = "█" * count if count < 50 else "█" * 50
             print(f"      {n_opt} 个可选文件: {count:4d} 数据集 {bar}")
         print()
-        print(f"    各可选文件出现次数:")
+        print("    各可选文件出现次数:")
         for name, count in sorted(r['optional_counts'].items(), key=lambda x: -x[1]):
             pct = count / max(r['ready_with_transcripts'], 1) * 100
             bar = "█" * int(pct / 2)

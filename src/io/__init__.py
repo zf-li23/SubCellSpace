@@ -64,11 +64,11 @@ def _detect_by_columns(columns: set[str]) -> str | None:
         return "cosmx"
 
     # Generic fallback: any file with spatial x, y and a gene/feature column
-    from ..constants import _LEGACY_ALIASES as _aliases
+    from ..constants import _LEGACY_ALIASES
 
-    has_x = "x" in columns or any(a in columns for a in _aliases.get("x", []))
-    has_y = "y" in columns or any(a in columns for a in _aliases.get("y", []))
-    has_gene = "gene" in columns or any(a in columns for a in _aliases.get("gene", []))
+    has_x = "x" in columns or any(a in columns for a in _LEGACY_ALIASES.get("x", []))
+    has_y = "y" in columns or any(a in columns for a in _LEGACY_ALIASES.get("y", []))
+    has_gene = "gene" in columns or any(a in columns for a in _LEGACY_ALIASES.get("gene", []))
     if has_x and has_y and has_gene:
         return "generic"
 

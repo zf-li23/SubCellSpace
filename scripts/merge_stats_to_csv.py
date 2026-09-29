@@ -10,9 +10,10 @@
     python3 scripts/merge_stats_to_csv.py --xenium-only --dry-run  # 预览
 """
 
-import argparse, csv, logging, os, sys
+import argparse
+import csv
+import logging
 from pathlib import Path
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("merge_stats")
@@ -63,7 +64,7 @@ def merge_platform(platform: str, dry_run: bool = False) -> None:
 
     # ── 读取 stats 结果 ──
     stats_map = {}  # {gse+key: row}
-    with open(stats_path, "r", encoding="utf-8") as f:
+    with open(stats_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             gse = row.get("GSE", "").strip()
@@ -74,7 +75,7 @@ def merge_platform(platform: str, dry_run: bool = False) -> None:
     logger.info(f"  Loaded {len(stats_map)} stats results from {stats_path.name}")
 
     # ── 读取 GEO CSV ──
-    with open(geo_path, "r", encoding="utf-8") as f:
+    with open(geo_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         fieldnames = list(reader.fieldnames or [])
         rows = list(reader)
