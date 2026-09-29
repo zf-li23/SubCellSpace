@@ -18,22 +18,16 @@ function detectPython() {
     return venvPython
   } catch { /* not found */ }
 
-  // 2. Check conda env named "subcellspace" (primary for this project)
-  const condaBase = '/home/zf-li23/miniconda3'
-  const subcellspacePython = `${condaBase}/envs/subcellspace/bin/python`
-  try {
-    accessSync(subcellspacePython, constants.X_OK)
-    return subcellspacePython
-  } catch { /* not found */ }
+  // 2. Explicit override, then the active conda env (conda activate subcellspace)
+  for (const candidate of [process.env.SUBCELLSPACE_PYTHON, process.env.CONDA_PREFIX && resolve(process.env.CONDA_PREFIX, 'bin/python')]) {
+    if (!candidate) continue
+    try {
+      accessSync(candidate, constants.X_OK)
+      return candidate
+    } catch { /* not found */ }
+  }
 
-  // 3. Check conda env named "zf-li23" (legacy)
-  const condaPython = `${condaBase}/envs/zf-li23/bin/python`
-  try {
-    accessSync(condaPython, constants.X_OK)
-    return condaPython
-  } catch { /* not found */ }
-
-  // 4. Fall back to PATH
+  // 3. Fall back to PATH
   return 'python3'
 }
 

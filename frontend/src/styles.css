@@ -208,7 +208,7 @@ main { padding: 20px; }
 /* Column widths (approximate, table-layout: fixed distributes remaining space) */
 .data-tbl .col-gse           { width: 7%; }
 .data-tbl .col-name          { width: 18%; }
-.data-tbl .col-sample_name   { width: 8%; }
+.data-tbl .col-GSM   { width: 8%; }
 .data-tbl .col-status        { width: 6%; }
 .data-tbl .col-tissue        { width: 8%; }
 .data-tbl .col-disease_state { width: 8%; }
@@ -1270,7 +1270,7 @@ select {
   background: var(--table-hover, rgba(11,76,110,0.08));
 }
 
-.pubmed-btn {
+.geo-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1284,7 +1284,7 @@ select {
   transition: opacity 0.15s;
 }
 
-.pubmed-btn:hover {
+.geo-btn:hover {
   opacity: 0.85;
 }
 

@@ -24,7 +24,7 @@ OUTPUT_DIR = Path(__file__).resolve().parent.parent / "frontend" / "public"
 
 COLUMN_META = {
     "GSE":             {"type": "string", "category": "id",      "label_zh": "GSE 编号",    "priority": True},
-    "sample_name":     {"type": "string", "category": "id",      "label_zh": "GSM/样本名",  "priority": True},
+    "GSM":             {"type": "string", "category": "id",      "label_zh": "GSM/样本名",  "priority": True},
     "platform":        {"type": "string", "category": "id",      "label_zh": "平台",        "priority": True},
     "status":          {"type": "string", "category": "status",  "label_zh": "状态",        "priority": True},
 
@@ -51,7 +51,7 @@ COLUMN_META = {
 }
 
 CATEGORIES = [
-    {"key": "id",      "label_zh": "标识",      "columns": ["GSE", "sample_name", "platform", "status"]},
+    {"key": "id",      "label_zh": "标识",      "columns": ["GSE", "GSM", "platform", "status"]},
     {"key": "meta",    "label_zh": "元数据",     "columns": ["name", "tissue", "disease_state", "species"]},
     {"key": "stats",   "label_zh": "统计数据",    "columns": ["n_transcripts", "n_cells", "n_genes", "n_fovs",
                                                             "gene_panel_size", "median_transcripts", "median_genes"]},
@@ -66,6 +66,25 @@ PLATFORM_CONFIG = {
 }
 
 SAMPLE_KEY = {"cosmx": "sample_name", "xenium": "GSM", "merfish": "GSM"}
+
+# 前端统一使用 GSM 列名；CosMx 登记表里叫 sample_name
+OUTPUT_SAMPLE_COL = "GSM"
+
+
+def output_columns(csv_cols: list, sample_col: str) -> list:
+    """把平台特有的样本列名统一成 OUTPUT_SAMPLE_COL。"""
+    return [OUTPUT_SAMPLE_COL if c == sample_col else c for c in csv_cols]
+
+
+def build_rows(rows: list, csv_cols: list, sample_col: str, col_types: dict) -> list:
+    out = []
+    for r in rows:
+        row = {}
+        for col in csv_cols:
+            name = OUTPUT_SAMPLE_COL if col == sample_col else col
+            row[name] = parse_value(r.get(col) or "", col_types.get(name, "string"))
+        out.append(row)
+    return out
 
 
 def build_meta(platform_cols: list) -> dict:
@@ -122,15 +141,9 @@ def export_platform(platform: str) -> None:
         csv_cols = reader.fieldnames or []
         rows = list(reader)
 
-    meta = build_meta(csv_cols)
+    meta = build_meta(output_columns(csv_cols, key_col))
     col_types = {c["name"]: c["type"] for c in meta["columns"]}
-
-    out_rows = []
-    for r in rows:
-        row = {}
-        for col in csv_cols:
-            row[col] = parse_value(r.get(col, ""), col_types.get(col, "string"))
-        out_rows.append(row)
+    out_rows = build_rows(rows, csv_cols, key_col, col_types)
 
     meta["total_rows"] = len(out_rows)
 

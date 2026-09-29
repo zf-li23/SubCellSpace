@@ -14,6 +14,23 @@ function fmtNum(n: number | null | undefined): string {
   return String(n)
 }
 
+const GEO_URL = 'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc='
+const PUBMED_URL = 'https://pubmed.ncbi.nlm.nih.gov/'
+
+/** GEO accession to link to; merged CosMx samples are stored as a range ("GSM1-GSM3"). */
+export function geoAccession(value: string): string {
+  return value.split('-')[0].trim()
+}
+
+/** Split a pubmedids cell ("38168317, 39901013" or "37433806.0") into clean PMIDs. */
+export function parsePmids(value: unknown): string[] {
+  if (value === null || value === undefined) return []
+  return String(value)
+    .split(/[,;|\s]+/)
+    .map(p => p.replace(/\.0+$/, '').trim())
+    .filter(p => /^\d+$/.test(p))
+}
+
 function getCellValue(row: GeoRow, colName: string): string {
   const val = (row as Record<string, unknown>)[colName]
   if (val === null || val === undefined) return '—'
@@ -43,9 +60,27 @@ function renderDetailValue(row: GeoRow, colName: string): React.ReactNode {
   }
 
   const s = String(raw)
+  // PMIDs → PubMed links
+  if (colName === 'pubmedids') {
+    const pmids = parsePmids(raw)
+    if (pmids.length === 0) return <span>{s}</span>
+    return (
+      <span>
+        {pmids.map((pmid, i) => (
+          <React.Fragment key={pmid}>
+            {i > 0 && ', '}
+            <a href={`${PUBMED_URL}${pmid}/`} target="_blank" rel="noopener noreferrer" className="url-link">
+              {pmid} ↗
+            </a>
+          </React.Fragment>
+        ))}
+      </span>
+    )
+  }
+
   // GSE / GSM → clickable GEO links
-  if (colName === 'GSE' || colName === 'sample_name') {
-    const href = `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${s}`
+  if (colName === 'GSE' || colName === 'GSM') {
+    const href = `${GEO_URL}${geoAccession(s)}`
     return (
       <a href={href} target="_blank" rel="noopener noreferrer"
         style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--link-color,#0b4c6e)', textDecoration: 'none' }}>
@@ -64,16 +99,22 @@ function RowDetailView({ row, columns, onBack }: { row: GeoRow; columns: ColumnM
         <button className="back-btn" onClick={onBack}>← Back to results</button>
         <div className="detail-topbar-links">
           {row.GSE && (
-            <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${row.GSE}`}
-              target="_blank" rel="noopener noreferrer" className="pubmed-btn">
+            <a href={`${GEO_URL}${row.GSE}`}
+              target="_blank" rel="noopener noreferrer" className="geo-btn">
               View on GEO ↗
             </a>
           )}
+          {parsePmids(row.pubmedids).slice(0, 1).map(pmid => (
+            <a key={pmid} href={`${PUBMED_URL}${pmid}/`}
+              target="_blank" rel="noopener noreferrer" className="geo-btn">
+              PubMed ↗
+            </a>
+          ))}
         </div>
       </div>
       <h2 className="detail-title">{row.name}</h2>
       <p style={{ color: 'var(--color-text-secondary,#666)', fontSize: 13, marginBottom: 20, fontFamily: 'monospace' }}>
-        {row.GSE}/{row.sample_name}
+        {row.GSE}/{row.GSM}
       </p>
       <div className="detail-grid">
         {columns.map(col => (

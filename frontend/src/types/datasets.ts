@@ -17,7 +17,7 @@ export interface CategoryMeta {
 
 export interface GeoRow {
   GSE: string | null
-  sample_name: string | null
+  GSM: string | null  // GSM accession, or a GSM range for merged CosMx samples
   platform: string | null
   status: string | null
 

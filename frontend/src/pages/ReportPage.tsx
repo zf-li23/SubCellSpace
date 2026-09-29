@@ -42,11 +42,11 @@ export default function ReportPage() {
           <div>
             <h2 style={{ margin: 0, fontSize: '1.3rem' }}>{d.name || d.GSE}</h2>
             <p style={{ margin: '4px 0 0', color: 'var(--text-secondary,#666)', fontSize: 13, fontFamily: 'monospace' }}>
-              {d.GSE} / {d.sample_name || d.GSM}
+              {d.GSE} / {d.GSM}
             </p>
           </div>
           <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${d.GSE}`}
-            target="_blank" rel="noopener noreferrer" className="pubmed-btn">
+            target="_blank" rel="noopener noreferrer" className="geo-btn">
             View on GEO ↗
           </a>
         </div>
@@ -55,8 +55,8 @@ export default function ReportPage() {
             <div key={k} className="detail-item">
               <span className="detail-label">{k.replace(/_/g, ' ')}</span>
               <span className="detail-value">
-                {['GSE','GSM','sample_name'].includes(k)
-                  ? <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${v}`} target="_blank" rel="noopener noreferrer" className="url-link">{String(v)} ↗</a>
+                {['GSE','GSM'].includes(k)
+                  ? <a href={`https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${String(v).split('-')[0]}`} target="_blank" rel="noopener noreferrer" className="url-link">{String(v)} ↗</a>
                   : typeof v === 'number' ? fmtNum(v) : String(v)}
               </span>
             </div>
