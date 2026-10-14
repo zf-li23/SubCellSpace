@@ -1,16 +1,17 @@
-"""SOPA mode: cell-level analysis built on SOPA (https://github.com/gustaveroussy/sopa, BSD-3, see SOPA_LICENSE).
+"""SOPA mode: cell-level analysis ported from SOPA 2.2.11 (https://github.com/gustaveroussy/sopa, BSD-3, see SOPA_LICENSE).
 
-SOPA is used as a library where it works unchanged (``sopa.aggregate``, ``sopa.spatial.assign_transcript_to_cell``).
-Where SOPA assumes an image is present — not the case for most GEO uploads — the corresponding step is ported here
-without that assumption:
+SOPA itself is not a dependency. The parts SubCellSpace needs are ported here, without SOPA's assumption that an
+image is present (most GEO uploads have none; the matrix / transcripts carry the information needed):
 
-- ``sdata.to_sopa_sdata``      image-free SpatialData with the keys SOPA expects
-- ``aggregate.count_by_cell_id``  counts from vendor cell_ids (SOPA only aggregates over shapes)
-- ``preprocess.preprocess``    ``sopa scanpy-preprocess`` without the image sanity check
+- ``constants``              SOPA's gene-exclusion pattern and CosMx pixel size
+- ``aggregate.assign_to_boundaries``  SOPA's point-in-polygon transcript assignment (``sopa.spatial.join``)
+- ``aggregate.count_by_cell_id`` / ``count_with_boundaries``  per-cell counts (SOPA only aggregates over shapes)
+- ``preprocess.preprocess``  ``sopa scanpy-preprocess`` without the image sanity check
 """
 
-from .aggregate import count_by_cell_id, count_with_boundaries
+from .aggregate import assign_to_boundaries, count_by_cell_id, count_with_boundaries
+from .constants import COSMX_PIXEL_SIZE, GENE_EXCLUDE_PATTERN
 from .preprocess import add_markers, preprocess
-from .sdata import to_sopa_sdata
 
-__all__ = ["count_by_cell_id", "count_with_boundaries", "preprocess", "add_markers", "to_sopa_sdata"]
+__all__ = ["assign_to_boundaries", "count_by_cell_id", "count_with_boundaries", "preprocess", "add_markers",
+           "COSMX_PIXEL_SIZE", "GENE_EXCLUDE_PATTERN"]

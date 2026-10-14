@@ -722,7 +722,7 @@ def _legacy_report(summary: dict) -> dict:
         "step_summary": {},
         "step_order": [],
         "pipeline_name": "SubCellSpace (SOPA preprocessing)",
-        "pipeline_version": summary.get("software", {}).get("sopa", ""),
+        "pipeline_version": summary.get("software", {}).get("subcellspace", ""),
         "source_path": "",
     }
 

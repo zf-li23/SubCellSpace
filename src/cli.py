@@ -11,11 +11,10 @@ import json
 import logging
 from pathlib import Path
 
-# Platforms with a reader in src/io. Kept literal: importing src.io pulls in sopa, whose __init__ skips its
-# submodule imports when "--help" is on the command line, which breaks `subcellspace --help`.
+# Platforms with a reader in src/io. Kept literal so argument parsing does not import the analysis stack.
 PLATFORMS = ["cosmx", "merfish", "xenium"]
 
-_NOISY_LOGGERS = ("tqdm", "ome_zarr", "spatialdata", "spatialdata._logging", "squidpy")
+_NOISY_LOGGERS = ("tqdm", "numba")
 
 
 def _suppress_noise() -> None:

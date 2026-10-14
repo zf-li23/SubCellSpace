@@ -16,7 +16,8 @@ from pathlib import Path
 import anndata as ad
 import geopandas as gpd
 import pandas as pd
-import sopa
+
+from ..analysis.constants import GENE_EXCLUDE_PATTERN
 
 TX_COLUMNS = ("x", "y", "gene", "cell_id")  # required transcript columns (``z``, ``qv`` optional)
 
@@ -40,8 +41,8 @@ class Sample:
 
 
 def is_control_name(names: pd.Series | pd.Index) -> pd.Series:
-    """Same rule SOPA uses to drop control/blank/negative probes before counting."""
-    return pd.Series(names, dtype="string").str.match(sopa.settings.gene_exclude_pattern, case=False, na=True).to_numpy()
+    """SOPA's rule for control/blank/negative probes (excluded from counts)."""
+    return pd.Series(names, dtype="string").str.match(GENE_EXCLUDE_PATTERN, case=False, na=True).to_numpy()
 
 
 def drop_control_genes(adata: ad.AnnData) -> ad.AnnData:

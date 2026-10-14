@@ -125,8 +125,8 @@ def complete(s: Sample) -> Completion:
         tx = _countable(s)
         table, assigned = count_with_boundaries(tx, s.boundaries)
         s.transcripts["cell_id"] = pd.Categorical(assigned.reindex(s.transcripts.index))
-        prov["matrix"] = "derived: transcripts assigned to vendor boundaries and counted (sopa.aggregate)"
-        prov["cell_id"] = "derived: sopa.spatial.assign_transcript_to_cell on vendor boundaries"
+        prov["matrix"] = "derived: transcripts assigned to vendor boundaries (point-in-polygon, ported from SOPA) and counted"
+        prov["cell_id"] = "derived: point-in-polygon assignment to vendor boundaries (ported from sopa.spatial.join)"
     elif s.transcripts is not None:
         raise SegmentationRequiredError(f"{s.sample_dir}: transcripts have no cell_id, no boundaries and no matrix")
     else:

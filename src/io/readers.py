@@ -18,10 +18,9 @@ import numpy as np
 import pandas as pd
 import scipy.io
 import scipy.sparse as sp
-import sopa  # noqa: F401  (import the package first: its submodules have import cycles)
 from shapely.geometry import Polygon
-from sopa.io.reader.cosmx import COSMX_PIXEL_SIZE
 
+from ..analysis.constants import COSMX_PIXEL_SIZE
 from ..touch import touch
 from .sample import Sample, drop_control_genes, is_control_name
 
@@ -191,7 +190,7 @@ def _keyed(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Index]:
 
 def read_cosmx(report) -> Sample:
     s = Sample(platform="cosmx", sample_dir=Path(report.input_path))
-    px = COSMX_PIXEL_SIZE  # µm per pixel (same constant as SOPA's CosMx reader)
+    px = COSMX_PIXEL_SIZE  # µm per pixel (SOPA's CosMx constant)
 
     tx_path = _found(report, "transcripts", "transcripts_detected")
     header = _header(tx_path) if tx_path else []

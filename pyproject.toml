@@ -23,12 +23,11 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-  # ── Analysis stack (SOPA does segmentation / aggregation / preprocessing) ──
-  "sopa>=2.2",
-  "spatialdata>=0.7",
-  "spatialdata-io>=0.3",
+  # ── Cell-level analysis (SOPA-derived code lives in src/analysis, no sopa dependency) ──
   "scanpy>=1.11",
   "anndata>=0.12",
+  "igraph>=0.11",          # leiden (flavor="igraph")
+  "pyarrow>=15",           # parquet + arrow-backed strings
 
   # ── GEO adapters, touch, statistics ──
   "numpy>=2.0",
@@ -36,7 +35,6 @@ dependencies = [
   "scipy>=1.13",
   "shapely>=2.0",
   "geopandas>=1.0",
-  "zarr>=3.0",
   "requests>=2.31",
 
   # ── Local dev API for the frontend ──

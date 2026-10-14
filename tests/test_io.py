@@ -84,8 +84,8 @@ def test_xenium_cell_id_route_reproduces_vendor_matrix(testdata):
     assert abs(vendor[derived.obs_names, genes].X - derived[:, genes].X).sum() == 0
 
 
-def test_xenium_boundary_route_with_sopa(testdata):
-    # Regression: sopa renames aggregated cells positionally; ids must map back to the vendor cell_ids.
+def test_xenium_boundary_route(testdata):
+    # Boundary route (ported SOPA point-in-polygon): ids must map back to the vendor cell_ids.
     s = read_sample(testdata / "xenium")
     vendor_ids = s.transcripts["cell_id"].copy()
     vendor = s.matrix.copy()

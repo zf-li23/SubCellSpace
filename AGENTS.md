@@ -11,8 +11,9 @@ SubCellSpace is a **local tool** that curates a database of imaging spatial-tran
 (CosMx / Xenium / MERFISH), completes what can be derived from the raw files, and renders one cell-level,
 Xenium-style report per sample for a static website.
 
-It **does not develop analysis methods**. Cell-level analysis (transcript→cell assignment, segmentation,
-aggregation, preprocessing) reuses [SOPA](https://github.com/gustaveroussy/sopa). SubCellSpace owns only:
+It **does not develop analysis methods**. Cell-level analysis (transcript→cell assignment, aggregation,
+preprocessing) is ported from [SOPA](https://github.com/gustaveroussy/sopa) into `src/analysis/` (BSD-3; SOPA itself
+is not a dependency). SubCellSpace owns:
 
 | Part | Where | Why SOPA can't do it |
 |------|-------|----------------------|
@@ -55,10 +56,13 @@ GEO sample dir ─► touch (file discovery) ─► src/io reader ─► Sample 
     ─► src/analysis "SOPA mode" preprocessing ─► subcellspace_{cells.h5ad, summary.json, report.html, status.json}
 ```
 
-**SOPA mode** (`src/analysis/`, BSD-3 notice in `SOPA_LICENSE`): SOPA is a library we may modify or port from.
-Upstream functions are used where they work unchanged (`sopa.aggregate`, `sopa.spatial.assign_transcript_to_cell`);
-steps that insist on an image (SOPA's `sanity_check`, `scanpy-preprocess`) are ported without that requirement,
-since for imaging data the matrix / transcripts carry the information needed.
+**SOPA mode** (`src/analysis/`, BSD-3 notice in `SOPA_LICENSE`): the parts of SOPA 2.2.11 we need are ported into
+the source (owner, 2026-10-14) — gene-exclusion pattern and CosMx pixel size (`constants.py`), point-in-polygon
+transcript assignment (`aggregate.py`, from `sopa.spatial.join`), `scanpy-preprocess` (`preprocess.py`) — without
+SOPA's image requirement, since for imaging data the matrix / transcripts carry the information needed. One deliberate
+difference: a transcript inside overlapping polygons counts once (for its assigned cell), whereas `sopa.aggregate`
+counts it per polygon (Xenium test sample: 87,147 vs 87,149; cell_id assignment identical). Segmentation, if ever
+needed, would mean porting or installing SOPA's segmentation methods.
 
 ```
 src/
@@ -76,7 +80,6 @@ src/
 ├── database/resolver.py   lookup / list_datasets / resolve_path over the GEO CSVs
 scripts/              sample lists, tiering, slurm/ (array jobs), dedup/, GEO enrichment, LLM labels, frontend JSON
 frontend/             React + Vite static browser (DataBrowser, ReportPage); see frontend/README.md
-tools/sopa/           SOPA source checkout (reference only, gitignored)
 ```
 
 **Interfaces other projects read (OmniSTP)**: `data/*_geo.csv` (paths + column names), `src/geo/`, `src/touch.py`.
@@ -158,7 +161,7 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
 
 | # | Decision |
 |---|----------|
-| D1 | No new analysis methods. Analysis = SOPA, used as a library (borrow functions; no wrapper framework, no fork). |
+| D1 | No new analysis methods. Analysis = SOPA's framework, ported into `src/analysis/` (2026-10-14: no sopa dependency, no `tools/sopa`). |
 | D2 | Subcellular module / SCRIN removed. |
 | D3 | Reports are cell-level only. |
 | D4 | Raw GEO data is never deleted or modified (vendor data removal on 2026-09-29 was an explicit owner exception). |
@@ -170,7 +173,7 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
 | D10 | Not a distributable tool: no GitHub CI; run ruff + pytest locally. |
 
 **Data completion rules** (cell_id and cell boundaries are equivalent at cell level):
-- boundaries → cell_id: yes, `sopa.spatial.assign_transcript_to_cell` (dask; replaces our old `polygon_intersect`).
+- boundaries → cell_id: yes, point-in-polygon in partitions, ported from `sopa.spatial.join` (replaces the old `polygon_intersect`).
 - cell_id → boundaries: not done (hulls / Voronoi are not accurate); reports then show centroids.
 - neither: segmentation, as close to Xenium as possible — nucleus (cellpose/stardist on DAPI) + 5 µm expansion
   when images exist, otherwise SOPA transcript-only methods (proseg/baysor/comseg), labelled as such.
@@ -201,6 +204,9 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   went from 7–45 GB to 3.4–14 GB; times 5–16 min. Data issues found on real samples: CosMx label-only cell ids
   (`c_<slide>_<fov>_<cell>`), per-chunk categorical dtype clash, and a duplicated transcript upload (GSE278766/GSM8554642,
   every row twice) — all handled, with regression tests.
+
+- 2026-10-14 SOPA ported into `src/analysis/` and removed as a dependency (local env 1.7 → 1.4 GB, still 45/45 tests);
+  `tools/sopa` deleted. **Cluster env / code switch over after the running batch finishes** (batch uses the sopa build).
 
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
@@ -250,7 +256,7 @@ site repo (this repo vs separate, naming if split); GSE310392 overlaps OmniSTP O
 - **Duplicate scans**: match by size + normalised name, then head/mid/tail chunk md5; compare `.gz` against
   decompressed originals; re-verify each copy immediately before deleting.
 - **Auto-mode** blocks the agent from deleting files on shared cluster storage — hand the owner the exact command.
-- **SOPA quirks**: `sopa scanpy-preprocess` / `read_zarr_standardized` assert an image exists; `sopa/__init__` skips
+- **SOPA quirks** (why it was ported rather than imported): `sopa scanpy-preprocess` / `read_zarr_standardized` assert an image exists; `sopa/__init__` skips
   its submodule imports when `--help` is in `sys.argv` (so the CLI must not import sopa at parse time); importing
   `sopa.io.*` before `import sopa` hits an import cycle; `sopa.aggregate` renames cells positionally.
 - **Xenium counts**: Xenium Ranger's `cell_feature_matrix` only counts transcripts with qv ≥ 20.

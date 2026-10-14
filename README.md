@@ -3,8 +3,8 @@
 成像型空间转录组（CosMx / Xenium / MERFISH）**GEO 数据库**的本地整理工具：登记、完整性检查、数据补全，
 并为每个样本生成细胞水平的 Xenium 风格报告，最终发布为静态网站。
 
-细胞水平的分析（转录本归属、分割、聚合、预处理）**使用 [SOPA](https://github.com/gustaveroussy/sopa)**，
-本项目不再开发分析方法。
+细胞水平的分析（转录本归属、聚合、预处理）**移植自 [SOPA](https://github.com/gustaveroussy/sopa)**（BSD-3，
+代码在 `src/analysis/`，不依赖 sopa 包），本项目不再开发分析方法。
 
 ## 组成
 
@@ -14,7 +14,7 @@
 | GEO 工具链 | `src/geo/` | GSM 展开、下载、解压、元数据补全、格式识别 |
 | touch | `src/touch.py` | 样本目录的文件完整性检查（默认只读） |
 | 读取器 | `src/io/` | 把 GEO 上不完整、不标准的文件读成统一的样本结构 |
-| 补全 + SOPA 模式 | `src/complete.py`、`src/analysis/` | 按规则补出细胞×基因表；基于 SOPA（去掉图像依赖）做预处理 |
+| 补全 + SOPA 模式 | `src/complete.py`、`src/analysis/` | 按规则补出细胞×基因表；移植自 SOPA（去掉图像依赖）的分配与预处理 |
 | 报告 | `src/html_report.py` | Xenium 风格的交互式 HTML 报告 |
 | 浏览器 | `frontend/` | 登记表的静态浏览页面 |
 

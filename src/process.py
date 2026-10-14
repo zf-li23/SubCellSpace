@@ -114,7 +114,7 @@ def process_sample(sample_dir: str | Path, out_dir: str | Path, platform: str | 
         summary["n_clusters"] = 0
         s.notes.append(f"fewer than 3 cells with >= {MIN_TRANSCRIPTS_PER_CELL} transcripts; not clustered")
 
-    summary["software"] = {pkg: version(pkg) for pkg in ("sopa", "scanpy", "anndata", "spatialdata")}
+    summary["software"] = {pkg: version(pkg) for pkg in ("scanpy", "anndata", "geopandas")}
     summary["software"]["subcellspace"] = code_version()
     summary["generated"] = datetime.now(UTC).isoformat(timespec="seconds")
     processed.uns["subcellspace_summary"] = json.dumps(summary)
