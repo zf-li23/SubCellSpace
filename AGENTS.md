@@ -199,8 +199,7 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
 S transcripts without cell info (needs segmentation) · D unreadable.
 
 **Next**
-1. Registry-wide tiering → `data_tier` column; decide the segmentation path from the number of S samples;
-   clarify `pending` / `error`; reconcile registry vs disk.
+1. Clarify `pending` / `error` in the registries; reconcile registry vs disk (more GSEs registered than downloaded).
 2. Batch-process all 1019 ready samples (owner confirms first): ≈750 GB of input, est. ~150 CPU-hours → ~20 h with
    8 concurrent small + 2 concurrent large (≥ 2 GB) tasks on gpu01 (376 GB RAM); outputs ≈ 0.3× input on /Share.
 3. Refill registry stats from the new summaries — the old values are unreliable (e.g. MERFISH GSE275954 has
