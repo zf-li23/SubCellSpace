@@ -123,8 +123,12 @@ Cluster access, topology, storage, transfer rules and Slurm conventions live in 
   + `bin/conda-unpack`; scripts call `$ENV/bin/python -m src` from the code dir (no conda needed on nodes).
 - Code dir `~/zf-li23/subcellspace/` is a plain copy of local `src/ scripts/ pyproject.toml data/` (rsync);
   the pre-2026-10 copy is kept as `subcellspace_legacy_20261014/` (old outputs, logs, dupscan evidence).
-- Slurm: partition `Yangxrlab` (gpu01, 80 CPU); memory is not a Slurm resource (no `--mem`);
-  always cap arrays with `%N` (a 10-way spatial run once took gpu01 down).
+- Slurm: partition `Yangxrlab` (gpu01, 80 CPU, 376 GB RAM); always cap arrays with `%N` (a 10-way spatial run once
+  took gpu01 down). **Slurm cannot limit memory here** (CR_CORE, task/affinity without task/cgroup, no accounting →
+  `--mem` is rejected, cgroup limits never apply), so every task runs under `scripts/slurm/mem_guard.py`: waits until
+  node MemAvailable ≥ budget + 40 GB, kills its process tree above the budget or when the node drops below 20 GB,
+  and records `MemoryLimitExceeded`. Budget = size × 20 (CosMx/Xenium) or × 8 (MERFISH) + 4 GB, capped at 160 GB.
+  Check the node before submitting (`squeue -p Yangxrlab`, `srun -p Yangxrlab free -g`).
 - `/data3` is shared and nearly full; OmniSTP also downloads there. Never touch other projects' dirs.
 - GEO sample dirs: `$SUBCELLSPACE_DATA_ROOT/{CosMx,Xenium,MERFISH}_GEO/GSE*/GSM*/` (resolver default is the lab path).
 - Our own outputs inside sample dirs use the `subcellspace_` prefix; touch ignores them.
@@ -186,8 +190,11 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   cell_id route reproduces the vendor matrix exactly; the SOPA boundary route gives per-cell r = 0.9993 (total 4.4%
   lower). Cluster test: 9 smallest samples (3/platform) all ok.
 - 2026-10-14 Duplicate raw files: 406 `.gz` + decompressed pairs (Xenium `ome.tif` / `parquet`, 658.8 GB) found by
-  `scripts/dedup/`; all 406 verified identical (full md5); removal is run by the owner (keeps the decompressed binary,
-  logs each deletion in the sample's `subcellspace_dedup_manifest.json`). 29 dangling symlinks listed for removal.
+  `scripts/dedup/`; all 406 verified identical (full md5) and removed with the owner's go-ahead (decompressed binary
+  kept; each deletion logged in the sample's `subcellspace_dedup_manifest.json`); 29 dangling symlinks removed.
+  `/data3` free 9.3 → 9.9 TB.
+- 2026-10-14 Full batch submitted (owner approved): Slurm 311795 (930 samples ≤ 2 GB, `%6`, 4 CPU) then 311796
+  (89 samples > 2 GB, largest first, `%3`, 8 CPU, after 311795) → `~/zf-li23/subcellspace/outputs/all/GSE*/GSM*/`.
 - 2026-10-14 Registry-wide tiering of the 1019 ready samples → new `data_tier` column: **984 A, 35 B, 0 S/C/D**
   (no ready sample needs segmentation). Evidence: `cleanup/tiers_2026-10-14.tsv`.
 - 2026-10-14 Reader memory fixes (column subsets, categoricals, chunked sparse matrices): peak RSS on ~800 MB samples
@@ -200,8 +207,7 @@ S transcripts without cell info (needs segmentation) · D unreadable.
 
 **Next**
 1. Clarify `pending` / `error` in the registries; reconcile registry vs disk (more GSEs registered than downloaded).
-2. Batch-process all 1019 ready samples (owner confirms first): ≈750 GB of input, est. ~150 CPU-hours → ~20 h with
-   8 concurrent small + 2 concurrent large (≥ 2 GB) tasks on gpu01 (376 GB RAM); outputs ≈ 0.3× input on /Share.
+2. Collect the batch: success / failure counts by reason (incl. `MemoryLimitExceeded`), fix and re-run failures.
 3. Refill registry stats from the new summaries — the old values are unreliable (e.g. MERFISH GSE275954 has
    `n_cells == gene_panel_size`; CosMx GSM8554642 recorded 2,100 cells vs 283,682 in the vendor matrix).
 4. Report rework on SOPA outputs (current full reports are 27–37 MB for ~800 MB samples); lightweight web bundle; measure size on a few dozen samples → Pages budget
