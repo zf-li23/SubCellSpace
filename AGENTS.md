@@ -185,8 +185,15 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   Real-data checks: each vendor matrix equals its own cell-assigned gene transcripts (Xenium qv ≥ 20); the Xenium
   cell_id route reproduces the vendor matrix exactly; the SOPA boundary route gives per-cell r = 0.9993 (total 4.4%
   lower). Cluster test: 9 smallest samples (3/platform) all ok.
-- 2026-10-14 Duplicate raw files: 406 `.gz` + decompressed pairs (Xenium `ome.tif` / `parquet`, ~659 GB) found by
-  `scripts/dedup/`; content verification on the cluster; removal by the owner (keeps the decompressed binary).
+- 2026-10-14 Duplicate raw files: 406 `.gz` + decompressed pairs (Xenium `ome.tif` / `parquet`, 658.8 GB) found by
+  `scripts/dedup/`; all 406 verified identical (full md5); removal is run by the owner (keeps the decompressed binary,
+  logs each deletion in the sample's `subcellspace_dedup_manifest.json`). 29 dangling symlinks listed for removal.
+- 2026-10-14 Registry-wide tiering of the 1019 ready samples → new `data_tier` column: **984 A, 35 B, 0 S/C/D**
+  (no ready sample needs segmentation). Evidence: `cleanup/tiers_2026-10-14.tsv`.
+- 2026-10-14 Reader memory fixes (column subsets, categoricals, chunked sparse matrices): peak RSS on ~800 MB samples
+  went from 7–45 GB to 3.4–14 GB; times 5–16 min. Data issues found on real samples: CosMx label-only cell ids
+  (`c_<slide>_<fov>_<cell>`), per-chunk categorical dtype clash, and a duplicated transcript upload (GSE278766/GSM8554642,
+  every row twice) — all handled, with regression tests.
 
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
@@ -194,12 +201,18 @@ S transcripts without cell info (needs segmentation) · D unreadable.
 **Next**
 1. Registry-wide tiering → `data_tier` column; decide the segmentation path from the number of S samples;
    clarify `pending` / `error`; reconcile registry vs disk.
-2. Batch-process all A/B/C samples on the cluster (owner confirms scale first).
-3. Report rework on SOPA outputs; lightweight web bundle; measure size on a few dozen samples → Pages budget
+2. Batch-process all 1019 ready samples (owner confirms first): ≈750 GB of input, est. ~150 CPU-hours → ~20 h with
+   8 concurrent small + 2 concurrent large (≥ 2 GB) tasks on gpu01 (376 GB RAM); outputs ≈ 0.3× input on /Share.
+3. Refill registry stats from the new summaries — the old values are unreliable (e.g. MERFISH GSE275954 has
+   `n_cells == gene_panel_size`; CosMx GSM8554642 recorded 2,100 cells vs 283,682 in the vendor matrix).
+4. Report rework on SOPA outputs (current full reports are 27–37 MB for ~800 MB samples); lightweight web bundle; measure size on a few dozen samples → Pages budget
    (1 GB / site, ≈400–450 KB per sample) → single vs split site (owner decides). Rebuild the frontend as the
    static site and add its GitHub Pages build/deploy workflow then.
-4. Registry completion (stats, LLM label spot-check with accuracy, missing-value reasons) + completion report.
-5. `scripts/update/` manual update flow + Chinese runbook; desensitise; English README/About; tag `v1.0`.
+5. Registry completion (LLM label spot-check with accuracy, missing-value reasons) + completion report.
+6. Data-organisation issues to review: 3 zero-byte morphology images (2 Xenium samples) to re-download; dirs mixing two
+   samples (e.g. Xenium GSE277463/GSM8522750) or deep vendor paths (GSE283497); old pipeline outputs
+   (`subcellspace_results.h5ad`, …) inside some CosMx raw dirs.
+7. `scripts/update/` manual update flow + Chinese runbook; desensitise; English README/About; tag `v1.0`.
 
 **Open owner questions**: storage for new downloads (`/data3` vs `/Share`); full-report location on the cluster;
 site repo (this repo vs separate, naming if split); GSE310392 overlaps OmniSTP OS0030 — who downloads.
