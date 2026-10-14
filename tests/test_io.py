@@ -102,3 +102,17 @@ def test_xenium_boundary_route_with_sopa(testdata):
 def test_author_annotations_joined(testdata):
     c = complete(read_sample(testdata / "xenium"))
     assert c.table.obs["author_coarse_cell_type"].notna().all()
+
+
+def test_cosmx_transcripts_with_all_missing_cellcomp_chunks(tmp_path):
+    # Regression (GSE305393/GSM9170947): CellComp "None" for a whole CSV chunk gave
+    # "dtype of categories must be the same" when reading with dtype="category".
+    n = 400_000
+    comp = np.where(np.arange(n) < n // 2, "None", "Nuclear")
+    pd.DataFrame({
+        "fov": 1, "cell_ID": np.arange(n) % 50, "x_global_px": 1.0, "y_global_px": 2.0, "z": 0,
+        "target": np.where(np.arange(n) % 7 == 0, "NegPrb1", "CD3E"), "CellComp": comp,
+    }).to_csv(tmp_path / "GSM1_tx_file.csv.gz", index=False)
+    s = read_sample(tmp_path, platform="cosmx")
+    assert len(s.transcripts) == n
+    assert s.transcripts["is_control"].sum() == (np.arange(n) % 7 == 0).sum()

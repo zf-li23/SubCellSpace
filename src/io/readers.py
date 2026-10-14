@@ -185,7 +185,9 @@ def read_cosmx(report) -> Sample:
         if not has_num:
             want += ["cell", "cell_id"]
         cols = [c for c in want if c in header]
-        tx = read_table(tx_path, usecols=cols, dtype={"target": "category", "CellComp": "category"})
+        # arrow strings, not "category": pandas infers categories per CSV chunk, and a chunk whose CellComp is
+        # all "None" (→ NaN) gets a different category dtype, which fails when the chunks are concatenated
+        tx = read_table(tx_path, usecols=cols, dtype={"target": "string[pyarrow]", "CellComp": "string[pyarrow]"})
         genes = _labels(tx["target"])
         out = pd.DataFrame({
             "x": tx["x_global_px"].to_numpy(np.float32) * np.float32(px),
@@ -196,7 +198,7 @@ def read_cosmx(report) -> Sample:
         if "z" in tx.columns:
             out["z"] = tx["z"].to_numpy(np.float32)
         if "CellComp" in tx.columns:
-            out["cell_compartment"] = tx["CellComp"]
+            out["cell_compartment"] = pd.Categorical(tx["CellComp"])
         out["fov"] = pd.Categorical(tx["fov"])
         out["is_control"] = _control_flags(genes)
         s.transcripts, s.sources["transcripts"] = out, tx_path.name
@@ -358,7 +360,7 @@ def read_merfish(report) -> Sample:
         header = _header(tx_path)
         xcol, ycol = ("global_x", "global_y") if "global_x" in header else ("x", "y")
         cols = [c for c in (xcol, ycol, "global_z", "gene", "cell_id", "fov") if c in header]
-        tx = read_table(tx_path, usecols=cols, dtype={"gene": "category"})
+        tx = read_table(tx_path, usecols=cols, dtype={"gene": "string[pyarrow]"})
         genes = _labels(tx["gene"])
         out = pd.DataFrame({
             "x": tx[xcol].to_numpy(np.float32),
