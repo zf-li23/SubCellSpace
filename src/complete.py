@@ -80,10 +80,35 @@ def _coordinates(s: Sample, cell_ids: pd.Index) -> tuple[np.ndarray | None, str]
     return None, "none"
 
 
+DUPLICATE_ROWS_THRESHOLD = 0.05  # above this, exact duplicate transcript rows are an upload artefact
+
+
+def drop_duplicate_transcripts(s: Sample) -> tuple[float, int]:
+    """Fraction of exact duplicate transcript rows; removes them when above the threshold.
+
+    Some GEO uploads contain every transcript twice (GSE278766/GSM8554642: matrix = 0.5 × assigned transcripts
+    for every cell and gene). Real transcripts essentially never share coordinates, gene and cell.
+    """
+    if s.transcripts is None or s.transcripts.empty:
+        return 0.0, 0
+    cols = [c for c in ("x", "y", "z", "gene", "cell_id") if c in s.transcripts.columns]
+    dup = s.transcripts.duplicated(cols).to_numpy()
+    frac = float(dup.mean())
+    if frac <= DUPLICATE_ROWS_THRESHOLD:
+        return frac, 0
+    s.transcripts = s.transcripts[~dup].reset_index(drop=True)
+    return frac, int(dup.sum())
+
+
 def complete(s: Sample) -> Completion:
     tier = assess_tier(s)
     prov: dict[str, str] = {"files": ", ".join(f"{k}={v}" for k, v in s.sources.items())}
     checks: dict[str, float] = {}
+
+    dup_frac, removed = drop_duplicate_transcripts(s)
+    checks["duplicate_transcript_rows"] = round(dup_frac, 4)
+    if removed:
+        prov["transcripts"] = f"derived: {removed:,} exact duplicate rows removed ({dup_frac:.1%} of the upload)"
 
     if s.matrix is not None:
         table = s.matrix.copy()

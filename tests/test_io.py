@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -116,3 +117,22 @@ def test_cosmx_transcripts_with_all_missing_cellcomp_chunks(tmp_path):
     s = read_sample(tmp_path, platform="cosmx")
     assert len(s.transcripts) == n
     assert s.transcripts["is_control"].sum() == (np.arange(n) % 7 == 0).sum()
+
+
+def test_duplicated_transcript_upload_is_deduplicated():
+    # Regression (GSE278766/GSM8554642): every transcript appeared twice; stats were inflated 2x.
+    tx = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0], "gene": ["A", "B", "A"],
+                       "cell_id": ["c1", "c1", "c2"], "is_control": False})
+    s = Sample("cosmx", Path("dup"), transcripts=pd.concat([tx, tx], ignore_index=True))
+    c = complete(s)
+    assert len(s.transcripts) == 3 and c.table.X.sum() == 3
+    assert c.checks["duplicate_transcript_rows"] == 0.5
+    assert "duplicate" in c.provenance["transcripts"]
+
+
+def test_occasional_duplicates_are_kept():
+    tx = pd.DataFrame({"x": np.arange(100.0), "y": 0.0, "gene": "A", "cell_id": "c1", "is_control": False})
+    tx.loc[1, "x"] = 0.0  # one coincidental duplicate (1%)
+    s = Sample("xenium", Path("dup"), transcripts=tx)
+    c = complete(s)
+    assert len(s.transcripts) == 100 and c.checks["duplicate_transcript_rows"] == 0.01
