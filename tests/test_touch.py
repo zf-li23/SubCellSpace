@@ -4,8 +4,7 @@ import gzip
 
 import pytest
 
-from src.io.base import DataLoadError
-from src.io.merfish import MERFISHIngestor
+from src.io import SampleReadError, read_sample
 from src.touch import SUBCELLPREFIX, touch
 
 
@@ -54,7 +53,14 @@ def test_gz_variant_counts_as_found(tmp_path):
     assert report.to_dict()["summary"]["required_found"] == 1
 
 
-def test_merfish_empty_dir_raises_data_load_error(tmp_path):
-    # Regression: merfish.py referenced DataLoadError without importing it (NameError instead).
-    with pytest.raises(DataLoadError):
-        MERFISHIngestor()._resolve_tx_path(tmp_path)
+def test_empty_sample_dir_raises_sample_read_error(tmp_path):
+    with pytest.raises(SampleReadError):
+        read_sample(tmp_path, platform="merfish")
+
+
+def test_author_annotation_is_discovered(tmp_path):
+    _write(tmp_path / "GSM1_transcripts.csv.gz")
+    _write(tmp_path / "GSM1_TLS_annotation.csv.gz")
+    report = touch(str(tmp_path), platform_override="xenium")
+    assert any(f.name == "author_annotation" and f.found for f in report.files)
+    assert report.unexpected == []

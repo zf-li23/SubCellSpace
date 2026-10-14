@@ -710,24 +710,51 @@ def _render_tabs_html() -> str:
     return template_path.read_text(encoding="utf-8")
 
 
+def _legacy_report(summary: dict) -> dict:
+    """Map subcellspace_summary.json onto the keys _build_data still reads (rework pending, AGENTS.md Phase 7)."""
+    return {
+        "platform": summary.get("platform", ""),
+        "summary": {
+            "n_transcripts": summary.get("n_transcripts") or summary.get("n_transcripts_in_cells", 0),
+            "n_cells": summary.get("n_cells", 0),
+            "n_genes": summary.get("gene_panel_size", 0),
+        },
+        "step_summary": {},
+        "step_order": [],
+        "pipeline_name": "SubCellSpace (SOPA preprocessing)",
+        "pipeline_version": summary.get("software", {}).get("sopa", ""),
+        "source_path": "",
+    }
+
+
+def _adapt_obs(adata):
+    """Rename process_sample columns to the names _build_data expects."""
+    obs = adata.obs
+    renames = {"n_transcripts": "total_counts", "n_genes": "n_genes_by_counts", "leiden": "cluster", "area": "cell_area"}
+    for src, dst in renames.items():
+        if src in obs.columns and dst not in obs.columns:
+            obs[dst] = obs[src]
+    author_type = next((c for c in obs.columns if c.startswith("author_") and "type" in c.lower()), None)
+    if author_type and "cell_type" not in obs.columns:
+        obs["cell_type"] = obs[author_type]
+    return adata
+
+
 def generate_html_report(output_dir: str | Path) -> Path:
     """Generate a SubCellSpace HTML report from pipeline output."""
     output_dir = Path(output_dir)
     if not output_dir.exists():
         raise FileNotFoundError(f"Output directory not found: {output_dir}")
-
-    # ── Load pipeline output ──
-    reports = sorted(output_dir.glob("*_report.json"))
-    if not reports:
-        raise FileNotFoundError(f"No *_report.json in {output_dir}")
-    report = json.loads(reports[0].read_text())
-
-    h5ads = sorted(output_dir.glob("*.h5ad"))
-    if not h5ads:
-        raise FileNotFoundError(f"No .h5ad in {output_dir}")
+    # ── Load process_sample output ──
+    summary_path = output_dir / "subcellspace_summary.json"
+    h5ad_path = output_dir / "subcellspace_cells.h5ad"
+    if not summary_path.exists() or not h5ad_path.exists():
+        raise FileNotFoundError(f"{output_dir} has no subcellspace_summary.json / subcellspace_cells.h5ad")
     import anndata as ad
 
-    adata = ad.read_h5ad(h5ads[0])
+    summary = json.loads(summary_path.read_text())
+    adata = _adapt_obs(ad.read_h5ad(h5ad_path))
+    report = _legacy_report(summary)
 
     # ── Load template components (from local src/ — no cluster dependency) ──
     style_block, head_before, body_open, bundle_script = _load_template()

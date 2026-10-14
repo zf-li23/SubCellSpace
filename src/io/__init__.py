@@ -1,185 +1,33 @@
-# ─────────────────────────────────────────────────────────────────────
-# SubCellSpace I/O module
-# Platform-specific data ingestors for spatial transcriptomics data.
-#
-# Usage::
-#
-#     from subcellspace.io import ingest, detect_platform
-#     platform = detect_platform("data/test/sample.csv")
-#     sdata = ingest(platform, "data/test/sample.csv")
-#
-# Each platform ingestor produces a standardised ``SpatialData`` object.
-# ─────────────────────────────────────────────────────────────────────
+"""GEO sample readers.
+
+    from src.io import read_sample
+    sample = read_sample("/path/to/GSE…/GSM…/")   # platform auto-detected by touch
+
+See :mod:`src.io.sample` for the conventions every reader follows.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
-import pandas as pd
+from .readers import READERS, SampleReadError, read_sample, read_table
+from .sample import Sample
 
-# Import platform modules to trigger @register_ingestor decorators
-from . import (
-    cosmx,  # noqa: F401
-    generic,  # noqa: F401 — minimal CSV (x, y, gene)
-    merfish,  # noqa: F401
-    xenium,  # noqa: F401
-)
-from .base import (
-    BaseIngestor,
-    DataLoadError,
-    DataValidationError,
-    get_available_platforms,
-    get_ingestor,
-    register_ingestor,
-)
+__all__ = ["Sample", "SampleReadError", "read_sample", "read_table", "detect_platform", "get_available_platforms"]
 
-# ── Platform auto-detection ─────────────────────────────────────────
 
-# Detection rules: (condition, platform_name)
-# Evaluated in order — first match wins.
+def get_available_platforms() -> list[str]:
+    return sorted(READERS)
 
-def _detect_by_columns(columns: set[str]) -> str | None:
-    """Detect platform from column names."""
-    # Xenium (standard): x_location + feature_name + cell_id
-    if {"x_location", "y_location", "feature_name", "cell_id"}.issubset(columns):
+
+def detect_platform(transcript_file: str | Path) -> str | None:
+    """Guess the platform from a transcript file's column names (used by touch as a fallback)."""
+    is_parquet = ".parquet" in str(transcript_file)
+    cols = set(read_table(transcript_file).columns if is_parquet else read_table(transcript_file, nrows=5).columns)
+    if {"feature_name", "x_location", "y_location"} <= cols:
         return "xenium"
-    # Xenium (flexible): feature_name + cell_id + (x|y or x_location|y_location)
-    # Handles CSV exports where coords are named x/y instead of x_location/y_location
-    if {"feature_name", "cell_id"}.issubset(columns):
-        has_xy = {"x", "y"}.issubset(columns) or {"x_location", "y_location"}.issubset(columns)
-        if has_xy:
-            return "xenium"
-    # CosMx: x_global_px + target (+ CellComp)
-    if {"x_global_px", "y_global_px", "target"}.issubset(columns):
+    if {"x_global_px", "y_global_px", "target"} <= cols:
         return "cosmx"
-    # MERFISH (long names): global_x + global_y + gene + barcode_id
-    if {"global_x", "global_y", "gene"}.issubset(columns) and "barcode_id" in columns:
+    if "gene" in cols and ({"global_x", "global_y"} <= cols or "barcode_id" in cols):
         return "merfish"
-    # MERFISH (short names): x + y + gene + barcode_id
-    if {"x", "y", "gene", "barcode_id"}.issubset(columns):
-        return "merfish"
-    # CosMx fallback: x_global_px + target (without CellComp)
-    if "x_global_px" in columns and "y_global_px" in columns and "target" in columns:
-        return "cosmx"
-
-    # Generic fallback: any file with spatial x, y and a gene/feature column
-    from ..constants import _LEGACY_ALIASES
-
-    has_x = "x" in columns or any(a in columns for a in _LEGACY_ALIASES.get("x", []))
-    has_y = "y" in columns or any(a in columns for a in _LEGACY_ALIASES.get("y", []))
-    has_gene = "gene" in columns or any(a in columns for a in _LEGACY_ALIASES.get("gene", []))
-    if has_x and has_y and has_gene:
-        return "generic"
-
     return None
-
-
-def detect_platform(input_path: str | Path) -> str:
-    """Auto-detect the spatial transcriptomics platform from a file.
-
-    Detection order:
-    1. File extension (``.parquet`` → Xenium, ``.gem`` → Stereo-seq)
-    2. Column name signature (reads first rows of CSV/TSV)
-
-    Parameters
-    ----------
-    input_path : str or Path
-        Path to the input data file.
-
-    Returns
-    -------
-    str
-        Detected platform name ("cosmx", "xenium", "merfish", "generic").
-
-    Raises
-    ------
-    DataLoadError
-        If the platform cannot be detected.
-    """
-    resolved = Path(input_path)
-    if not resolved.exists():
-        raise DataLoadError(f"Input file does not exist: {resolved}", path=resolved)
-
-    # ── If input is a directory, search for transcript files inside ──
-    if resolved.is_dir():
-        # Priority order: platform-specific patterns first, then generic CSV
-        patterns = [
-            "*tx_file.csv*",            # CosMx
-            "*detected_transcripts.csv*",  # MERFISH
-            "transcripts.csv*",         # Xenium
-            "transcripts.parquet",      # Xenium parquet
-            "*.csv", "*.csv.gz",        # Generic fallback
-        ]
-        for pattern in patterns:
-            candidates = sorted(resolved.glob(pattern))
-            if candidates:
-                # Try detecting platform from the first match
-                try:
-                    return detect_platform(candidates[0])
-                except DataLoadError:
-                    continue  # try next pattern
-        raise DataLoadError(
-            f"Cannot auto-detect platform for directory {resolved}. "
-            f"No recognized transcript file found. "
-            f"Please specify --platform explicitly.",
-            path=resolved,
-        )
-
-    suffix = resolved.suffix.lower()
-
-    # 1. By extension — strongest signal
-    if suffix == ".parquet":
-        return "xenium"
-
-    # 2. By column signature
-    try:
-        sep = "\t" if suffix == ".tsv" else ","
-        df = pd.read_csv(resolved, sep=sep, nrows=5)
-        platform = _detect_by_columns(set(df.columns))
-        if platform:
-            return platform
-    except Exception:
-        pass
-
-    raise DataLoadError(
-        f"Cannot auto-detect platform for {resolved}. "
-        f"Please specify --platform explicitly (cosmx/xenium/merfish/generic).",
-        path=resolved,
-    )
-
-
-def ingest(platform: str, input_path: str | Path, cell_id_column: str | None = None) -> Any:
-    """Run data ingestion for *platform* and return a SpatialData object.
-
-    Parameters
-    ----------
-    platform : str
-        One of ``"cosmx"``, ``"xenium"``, ``"merfish"``, ``"generic"``.
-    input_path : str or Path
-        Path to the input data file or directory.
-    cell_id_column : str or None
-        Override the cell ID column name (e.g. ``"barcode_id"`` for MERFISH
-        data where the default cell_id column differs from actual cells).
-
-    Returns
-    -------
-    SpatialData
-        Standardised spatial data object.
-    """
-    ingestor = get_ingestor(platform)
-    if cell_id_column is not None:
-        ingestor._cell_id_column = cell_id_column
-    return ingestor.ingest(Path(input_path))
-
-
-__all__ = [
-    "BaseIngestor",
-    "DataLoadError",
-    "DataValidationError",
-    "get_ingestor",
-    "get_available_platforms",
-    "register_ingestor",
-    "detect_platform",
-    "ingest",
-]

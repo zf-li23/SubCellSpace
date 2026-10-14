@@ -1,6 +1,6 @@
 """SubCellSpace command-line interface.
 
-Commands: ``ingest`` (GEO files → SpatialData), ``touch`` (integrity check),
+Commands: ``process`` (GEO sample → cell table, summary, report), ``report``, ``touch`` (integrity check),
 ``lookup`` (query the GEO registries), ``stats`` (streaming statistics).
 """
 
@@ -11,7 +11,9 @@ import json
 import logging
 from pathlib import Path
 
-from .io import get_available_platforms, ingest
+# Platforms with a reader in src/io. Kept literal: importing src.io pulls in sopa, whose __init__ skips its
+# submodule imports when "--help" is on the command line, which breaks `subcellspace --help`.
+PLATFORMS = ["cosmx", "merfish", "xenium"]
 
 _NOISY_LOGGERS = ("tqdm", "ome_zarr", "spatialdata", "spatialdata._logging", "squidpy")
 
@@ -26,14 +28,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="subcellspace")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # ── Ingest: GEO files → SpatialData ──────────────────────────────
-    ingest_parser = subparsers.add_parser("ingest", help="Ingest raw data → SpatialData (.zarr)")
-    ingest_parser.add_argument("platform", choices=get_available_platforms(), help="Platform name")
-    ingest_parser.add_argument("input_path", type=str, help="Path to input data file/directory")
-    ingest_parser.add_argument("--output", type=Path, default=None, help="Write .zarr (skips if unset)")
-    ingest_parser.add_argument("--json", action="store_true", help="Print summary as JSON")
-    ingest_parser.add_argument("--cell-id-column", type=str, default=None,
-                                help="Override cell ID column name (useful for MERFISH data where barcode_id ≠ cell_id)")
+    # ── Process: GEO sample → cell table + summary (+ report) ─────────
+    process_parser = subparsers.add_parser("process", help="Read a GEO sample, complete it, preprocess (SOPA steps), write outputs")
+    process_parser.add_argument("sample_dir", type=str, help="GEO sample directory (GSE*/GSM*/)")
+    process_parser.add_argument("-o", "--output-dir", type=Path, required=True, help="Output directory (not the raw dir)")
+    process_parser.add_argument("--platform", choices=PLATFORMS, default=None, help="Skip auto-detection")
+    process_parser.add_argument("--no-report", action="store_true", help="Skip the HTML report")
+
+    report_parser = subparsers.add_parser("report", help="Render the Xenium-style HTML report from process outputs")
+    report_parser.add_argument("output_dir", type=Path, help="Directory written by `subcellspace process`")
 
     # ── Stats (lightweight streaming statistics) ────────────────────
     stats_parser = subparsers.add_parser("stats", help="Streaming statistics: count transcripts, cells, genes (no I/O load)")
@@ -71,50 +74,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_ingest(args: argparse.Namespace) -> None:
-    """Handle the ``subcellspace ingest`` command."""
-    from .models import DatasetSummary
+def _cmd_process(args: argparse.Namespace) -> None:
+    from .process import process_sample
 
-    sdata = ingest(args.platform, args.input_path, cell_id_column=args.cell_id_column)
+    summary = process_sample(args.sample_dir, args.output_dir, platform=args.platform)
+    keys = ("data_tier", "n_cells", "n_cells_clustered", "n_clusters", "gene_panel_size", "n_transcripts",
+            "median_transcripts", "median_genes")
+    print(json.dumps({k: summary.get(k) for k in keys}, indent=2))
+    if not args.no_report:
+        from .html_report import generate_html_report
 
-    # Extract summary from attrs
-    summary_dict = sdata.attrs.get("ingestion_summary", {})
-    summary = DatasetSummary(
-        source_path=Path(args.input_path),
-        n_transcripts=summary_dict.get("n_transcripts", 0),
-        n_cells=summary_dict.get("n_cells", 0),
-        n_genes=summary_dict.get("n_genes", 0),
-        n_fovs=summary_dict.get("n_fovs", 1),
-        extra={k: v for k, v in summary_dict.items()
-               if k not in ("n_transcripts", "n_cells", "n_genes", "n_fovs")},
-    )
+        print(f"report: {generate_html_report(args.output_dir)}")
 
-    if args.json:
-        print(json.dumps({
-            "platform": args.platform,
-            "input_path": str(args.input_path),
-            "summary": {
-                "n_transcripts": summary.n_transcripts,
-                "n_cells": summary.n_cells,
-                "n_genes": summary.n_genes,
-                "n_fovs": summary.n_fovs,
-                "has_images": bool(sdata.images),
-                "has_boundaries": "provided_boundaries" in sdata.shapes,
-                **summary.extra,
-            },
-        }, ensure_ascii=False, indent=2))
-    else:
-        print(summary.to_text())
-        print(f"Platform:   {args.platform}")
-        print(f"Images:     {list(sdata.images.keys()) if sdata.images else 'none'}")
-        print(f"Shapes:     {list(sdata.shapes.keys()) if sdata.shapes else 'none'}")
-        print(f"Tables:     {list(sdata.tables.keys()) if sdata.tables else 'none'}")
 
-    if args.output:
-        output_path = Path(args.output)
-        print(f"\nWriting SpatialData to {output_path} …")
-        sdata.write(output_path)
-        print("Done.")
+def _cmd_report(args: argparse.Namespace) -> None:
+    from .html_report import generate_html_report
+
+    print(generate_html_report(args.output_dir))
 
 
 def _cmd_lookup(args: argparse.Namespace) -> None:
@@ -320,7 +296,8 @@ def _cmd_stats(args: argparse.Namespace) -> None:
 
 
 _COMMANDS = {
-    "ingest": _cmd_ingest,
+    "process": _cmd_process,
+    "report": _cmd_report,
     "lookup": _cmd_lookup,
     "touch": _cmd_touch,
     "stats": _cmd_stats,
