@@ -136,3 +136,25 @@ def test_occasional_duplicates_are_kept():
     s = Sample("xenium", Path("dup"), transcripts=tx)
     c = complete(s)
     assert len(s.transcripts) == 100 and c.checks["duplicate_transcript_rows"] == 0.01
+
+
+def test_nan_matrix_entries_become_zero_with_note(tmp_path):
+    # Regression (GSE289194 merged upload): NaN entries in exprMat made every stat NaN.
+    pd.DataFrame({"fov": [1, 1], "cell_ID": [1, 2], "GENE_A": [1.0, np.nan], "GENE_B": [np.nan, 2.0]}).to_csv(
+        tmp_path / "GSM1_exprMat_file.csv.gz", index=False)
+    pd.DataFrame({"fov": [1, 1], "cell_ID": [1, 2], "x_global_px": [0.0, 1.0], "y_global_px": [0.0, 1.0],
+                  "target": ["GENE_A", "GENE_B"]}).to_csv(tmp_path / "GSM1_tx_file.csv.gz", index=False)
+    s = read_sample(tmp_path, platform="cosmx")
+    assert s.matrix.X.sum() == 3 and not np.isnan(s.matrix.X.toarray()).any()
+    assert any("NaN" in n and "2 genes" in n for n in s.notes)
+
+
+def test_misnamed_transcript_file_is_ignored(tmp_path):
+    # Regression (GSE299786/GSM9046089): a metadata table saved as *_tx_file → KeyError 'target'.
+    meta = pd.DataFrame({"fov": [1], "cell_ID": [1], "CenterX_global_px": [0.0], "CenterY_global_px": [0.0]})
+    meta.to_csv(tmp_path / "GSM1_tx_file.csv.gz", index=False)
+    meta.to_csv(tmp_path / "GSM1_metadata_file.csv.gz", index=False)
+    pd.DataFrame({"fov": [1], "cell_ID": [1], "GENE_A": [3]}).to_csv(tmp_path / "GSM1_exprMat_file.csv.gz", index=False)
+    s = read_sample(tmp_path, platform="cosmx")
+    assert s.transcripts is None and s.matrix.X.sum() == 3
+    assert any("not a transcript table" in n for n in s.notes)

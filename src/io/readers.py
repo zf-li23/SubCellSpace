@@ -110,16 +110,32 @@ def _sparse_matrix_csv(path: Path, id_columns: Callable[[pd.DataFrame], tuple[pd
                        chunksize: int = 20_000) -> ad.AnnData:
     """Dense cell × gene CSV (one row per cell) → sparse AnnData, read in chunks to bound memory."""
     blocks, ids, genes = [], [], None
+    nan_entries, nan_genes = 0, None
     for chunk in read_table(path, chunksize=chunksize):
         chunk, idx = id_columns(_drop_index_columns(chunk))
         if genes is None:
             genes = [c for c in chunk.columns if c not in _COSMX_META and pd.api.types.is_numeric_dtype(chunk[c])]
-        blocks.append(sp.csr_matrix(chunk[genes].to_numpy(dtype=np.float32)))
+            nan_genes = np.zeros(len(genes), dtype=bool)
+        values = chunk[genes].to_numpy(dtype=np.float32)
+        nan = np.isnan(values)
+        if nan.any():  # merged GEO uploads: genes absent from part of the merged samples are left empty
+            nan_entries += int(nan.sum())
+            nan_genes |= nan.any(axis=0)
+            values[nan] = 0
+        blocks.append(sp.csr_matrix(values))
         ids.append(idx)
     adata = ad.AnnData(sp.vstack(blocks).tocsr() if blocks else sp.csr_matrix((0, 0), dtype=np.float32))
     adata.obs_names = pd.Index(np.concatenate([i.to_numpy() for i in ids])).astype(str)
     adata.var_names = pd.Index(genes or []).astype(str)
+    if nan_entries:
+        adata.uns["nan_note"] = (f"{path.name}: {nan_entries:,} empty (NaN) entries in {int(nan_genes.sum())} genes "
+                                 "set to 0 (typically genes absent from part of a merged upload)")
     return adata
+
+
+def _matrix_notes(s: Sample) -> None:
+    if s.matrix is not None and "nan_note" in s.matrix.uns:
+        s.notes.append(s.matrix.uns.pop("nan_note"))
 
 
 def _found(report, *names: str) -> Path | None:
@@ -178,8 +194,12 @@ def read_cosmx(report) -> Sample:
     px = COSMX_PIXEL_SIZE  # µm per pixel (same constant as SOPA's CosMx reader)
 
     tx_path = _found(report, "transcripts", "transcripts_detected")
+    header = _header(tx_path) if tx_path else []
+    missing = {"target", "x_global_px", "y_global_px"} - set(header)
+    if tx_path and missing:  # e.g. a metadata table saved under a *_tx_file name (GSE299786/GSM9046089)
+        s.notes.append(f"{tx_path.name} is not a transcript table (missing {sorted(missing)}); ignored")
+        tx_path = None
     if tx_path:
-        header = _header(tx_path)
         has_num = "cell_ID" in header or "cellID" in header
         want = ["fov", "cell_ID", "cellID", "slide", "x_global_px", "y_global_px", "z", "target", "CellComp"]
         if not has_num:
@@ -207,6 +227,7 @@ def read_cosmx(report) -> Sample:
     if mat_path:
         s.matrix = drop_control_genes(_sparse_matrix_csv(mat_path, _keyed))
         s.sources["matrix"] = mat_path.name
+        _matrix_notes(s)
 
     meta_path = _found(report, "cell_metadata", "cell_metadata_csv")
     if meta_path:
@@ -287,6 +308,10 @@ def read_xenium(report) -> Sample:
             tx = read_table(tx_path, columns=want)
         else:
             tx = read_table(tx_path, usecols=lambda c: c in want)
+    if tx_path and ".zarr" not in tx_path.name and not {"feature_name", "x_location", "y_location"} <= set(tx.columns):
+        s.notes.append(f"{tx_path.name} is not a Xenium transcript table (columns {list(tx.columns)[:8]}); ignored")
+        tx_path = None
+    if tx_path and ".zarr" not in tx_path.name:
         genes = _labels(tx["feature_name"])
         out = pd.DataFrame({
             "x": tx["x_location"].to_numpy(np.float32),
@@ -359,6 +384,10 @@ def read_merfish(report) -> Sample:
     if tx_path:
         header = _header(tx_path)
         xcol, ycol = ("global_x", "global_y") if "global_x" in header else ("x", "y")
+        if not {xcol, ycol, "gene"} <= set(header):
+            s.notes.append(f"{tx_path.name} is not a MERFISH transcript table (columns {header[:8]}); ignored")
+            tx_path = None
+    if tx_path:
         cols = [c for c in (xcol, ycol, "global_z", "gene", "cell_id", "fov") if c in header]
         tx = read_table(tx_path, usecols=cols, dtype={"gene": "string[pyarrow]"})
         genes = _labels(tx["gene"])
@@ -385,6 +414,7 @@ def read_merfish(report) -> Sample:
 
         s.matrix = drop_control_genes(_sparse_matrix_csv(mat_path, merfish_ids))
         s.sources["matrix"] = mat_path.name
+        _matrix_notes(s)
 
     meta_path = _found(report, "cell_metadata")
     if meta_path:

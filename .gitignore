@@ -51,3 +51,6 @@ cleanup/
 
 # Backups written by src/geo/enrich.py
 data/*_copy.csv
+
+# Written by scripts/deploy_cluster.sh
+src/BUILD

@@ -28,6 +28,20 @@ log = logging.getLogger(__name__)
 MIN_TRANSCRIPTS_PER_CELL = 10  # cells below this are kept in the stats but left out of clustering
 
 
+def code_version() -> str:
+    """Git commit of the code that produced the outputs (BUILD file written by scripts/deploy_cluster.sh)."""
+    build = Path(__file__).with_name("BUILD")
+    if build.exists():
+        return build.read_text().strip()
+    import subprocess
+
+    try:
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).parent,
+                              capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
 def _median(values: np.ndarray) -> float | None:
     return float(np.median(values)) if len(values) else None
 
@@ -101,6 +115,7 @@ def process_sample(sample_dir: str | Path, out_dir: str | Path, platform: str | 
         s.notes.append(f"fewer than 3 cells with >= {MIN_TRANSCRIPTS_PER_CELL} transcripts; not clustered")
 
     summary["software"] = {pkg: version(pkg) for pkg in ("sopa", "scanpy", "anndata", "spatialdata")}
+    summary["software"]["subcellspace"] = code_version()
     summary["generated"] = datetime.now(UTC).isoformat(timespec="seconds")
     processed.uns["subcellspace_summary"] = json.dumps(summary)
     processed.write_h5ad(out_dir / "subcellspace_cells.h5ad")
