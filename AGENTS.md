@@ -1,6 +1,6 @@
 # SubCellSpace — AGENTS.md
 
-> **Last updated**: 2026-09-29
+> **Last updated**: 2026-10-14
 > **Current phase**: Phase 7 — Wrap-up (SOPA-based data completion + cell-level reports + static site)
 
 ---
@@ -33,8 +33,11 @@ conda activate subcellspace
 
 subcellspace lookup GSE234713              # query the GEO registries
 subcellspace touch <sample_dir>            # file integrity report (read-only unless --normalize)
-subcellspace ingest cosmx <tx_file.csv>    # GEO files → SpatialData (being reworked for SOPA, see §6)
+subcellspace process <sample_dir> -o <out> # read → complete → preprocess → h5ad + summary.json + report.html
+subcellspace report <out>                  # re-render the HTML report
 subcellspace stats <sample_dir>            # streaming counts
+
+bash scripts/fetch_testdata.sh             # 3 tiny real GEO samples → ~/SubCellSpace_testdata (for pytest)
 
 python scripts/export_frontend_json.py     # registries → frontend/public/{platform}.json
 cd frontend && npm run dev                 # browser (+ local API on :8000)
@@ -46,26 +49,32 @@ ruff check src scripts tests && pytest -q  # checks (no CI — run locally)
 
 ## 3. Architecture
 
-Target flow (Phase 7):
+```
+GEO sample dir ─► touch (file discovery) ─► src/io reader ─► Sample (µm, cell_id|None, controls flagged)
+    ─► src/complete.py (vendor matrix > count by cell_id > SOPA assignment to boundaries > needs segmentation)
+    ─► src/analysis "SOPA mode" preprocessing ─► subcellspace_{cells.h5ad, summary.json, report.html, status.json}
+```
 
-```
-GEO raw files ─► touch + format detection ─► GEO reader (src/io) ─► SpatialData
-    ─► completion via SOPA (assign transcripts / aggregate / segment if needed)
-    ─► sopa scanpy-preprocess ─► stats + Xenium-style report (full on cluster, light for the site)
-```
+**SOPA mode** (`src/analysis/`, BSD-3 notice in `SOPA_LICENSE`): SOPA is a library we may modify or port from.
+Upstream functions are used where they work unchanged (`sopa.aggregate`, `sopa.spatial.assign_transcript_to_cell`);
+steps that insist on an image (SOPA's `sanity_check`, `scanpy-preprocess`) are ported without that requirement,
+since for imaging data the matrix / transcripts carry the information needed.
 
 ```
 src/
-├── cli.py            ingest / touch / lookup / stats
+├── cli.py            process / report / touch / lookup / stats
 ├── api_server.py     local dev API: /api/health, /api/dataset (read-only registry search)
 ├── touch.py          integrity check + optional normalize/rollback
 ├── stats.py          streaming statistics
 ├── html_report.py    Xenium-style HTML report (+ _report_bundle.js, _report_style.css, _tabs_template.html)
-├── io/               readers: cosmx, xenium, merfish, generic → SpatialData
+├── process.py        per-sample flow + full-data summary
+├── complete.py       completion rules, data tiers
+├── tiers.py          fast registry-wide tiering (touch + transcript peek)
+├── analysis/         SOPA mode: image-free SpatialData, count_by_cell_id, preprocessing, markers
+├── io/               readers.py (cosmx, xenium, merfish) + sample.py (Sample conventions)
 ├── geo/              api, download, extract, enrich, format, llm_annotate, migrate
 ├── database/resolver.py   lookup / list_datasets / resolve_path over the GEO CSVs
-├── constants.py, models.py
-scripts/              batch stats, CSV merges, GEO enrichment, LLM annotation, frontend JSON export
+scripts/              sample lists, tiering, slurm/ (array jobs), dedup/, GEO enrichment, LLM labels, frontend JSON
 frontend/             React + Vite static browser (DataBrowser, ReportPage); see frontend/README.md
 tools/sopa/           SOPA source checkout (reference only, gitignored)
 ```
@@ -109,8 +118,13 @@ Cluster access, topology, storage, transfer rules and Slurm conventions live in 
 (outside the repo — it contains hosts and usernames). Key rules:
 
 - Download on the jumpbox, **pull from the cluster side**; never push from the jumpbox.
-- The cluster has no internet; Python runs from the rsync'd conda env via its full path.
-- Slurm scripts must `source` conda explicitly; cap array concurrency (a 10-way spatial run once took gpu01 down).
+- The cluster has no internet. The env is built locally and shipped with **conda-pack**
+  (`conda-pack -n subcellspace --ignore-editable-packages`, ~580 MB) → unpacked to `~/zf-li23/envs/subcellspace`
+  + `bin/conda-unpack`; scripts call `$ENV/bin/python -m src` from the code dir (no conda needed on nodes).
+- Code dir `~/zf-li23/subcellspace/` is a plain copy of local `src/ scripts/ pyproject.toml data/` (rsync);
+  the pre-2026-10 copy is kept as `subcellspace_legacy_20261014/` (old outputs, logs, dupscan evidence).
+- Slurm: partition `Yangxrlab` (gpu01, 80 CPU); memory is not a Slurm resource (no `--mem`);
+  always cap arrays with `%N` (a 10-way spatial run once took gpu01 down).
 - `/data3` is shared and nearly full; OmniSTP also downloads there. Never touch other projects' dirs.
 - GEO sample dirs: `$SUBCELLSPACE_DATA_ROOT/{CosMx,Xenium,MERFISH}_GEO/GSE*/GSM*/` (resolver default is the lab path).
 - Our own outputs inside sample dirs use the `subcellspace_` prefix; touch ignores them.
@@ -166,10 +180,21 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
 - 2026-09-29 Bug fixes: GSM links for Xenium/MERFISH (browser + API); PubMed links; merfish `DataLoadError` NameError;
   wget failures now reported.
 
+- 2026-10-14 New pipeline: readers → completion → SOPA mode → outputs; `process` / `report` CLI; Slurm array
+  tooling with per-sample status files; local env rebuilt (8.3 → 1.7 GB, sopa 2.2.11) and shipped by conda-pack.
+  Real-data checks: each vendor matrix equals its own cell-assigned gene transcripts (Xenium qv ≥ 20); the Xenium
+  cell_id route reproduces the vendor matrix exactly; the SOPA boundary route gives per-cell r = 0.9993 (total 4.4%
+  lower). Cluster test: 9 smallest samples (3/platform) all ok.
+- 2026-10-14 Duplicate raw files: 406 `.gz` + decompressed pairs (Xenium `ome.tif` / `parquet`, ~659 GB) found by
+  `scripts/dedup/`; content verification on the cluster; removal by the owner (keeps the decompressed binary).
+
+**Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
+S transcripts without cell info (needs segmentation) · D unreadable.
+
 **Next**
-1. GEO reader → SOPA-compatible SpatialData adapter + completion rules (local, synthetic tests).
-2. On the cluster: touch/format scan → `data_tier` column (A transcripts+boundaries / B matrix+coords / C matrix only /
-   D unreadable); clarify `pending` / `error`; reconcile registry vs disk.
+1. Registry-wide tiering → `data_tier` column; decide the segmentation path from the number of S samples;
+   clarify `pending` / `error`; reconcile registry vs disk.
+2. Batch-process all A/B/C samples on the cluster (owner confirms scale first).
 3. Report rework on SOPA outputs; lightweight web bundle; measure size on a few dozen samples → Pages budget
    (1 GB / site, ≈400–450 KB per sample) → single vs split site (owner decides). Rebuild the frontend as the
    static site and add its GitHub Pages build/deploy workflow then.
@@ -207,3 +232,9 @@ site repo (this repo vs separate, naming if split); GSE310392 overlaps OmniSTP O
 - **Duplicate scans**: match by size + normalised name, then head/mid/tail chunk md5; compare `.gz` against
   decompressed originals; re-verify each copy immediately before deleting.
 - **Auto-mode** blocks the agent from deleting files on shared cluster storage — hand the owner the exact command.
+- **SOPA quirks**: `sopa scanpy-preprocess` / `read_zarr_standardized` assert an image exists; `sopa/__init__` skips
+  its submodule imports when `--help` is in `sys.argv` (so the CLI must not import sopa at parse time); importing
+  `sopa.io.*` before `import sopa` hits an import cycle; `sopa.aggregate` renames cells positionally.
+- **Xenium counts**: Xenium Ranger's `cell_feature_matrix` only counts transcripts with qv ≥ 20.
+- **Old preprocessing left duplicates**: Phase 5 decompressed + renamed Xenium binaries but kept the `.gz`, and left
+  dangling unprefixed symlinks after GSM prefixing.
