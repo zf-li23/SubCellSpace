@@ -14,11 +14,21 @@ from src.io.sample import Sample, is_control_name
 # ── unit tests (synthetic) ──────────────────────────────────────────
 
 
+def _ids(cat):
+    return [None if pd.isna(v) else v for v in np.asarray(cat, dtype=object)]
+
+
 def test_cosmx_cell_key_background_and_multi_slide():
     df = pd.DataFrame({"fov": [1, 1, 2], "cell_ID": [0, 5, 5], "slide": ["S1", "S1", "S2"]})
-    assert _cosmx_cell_key(df, "cell_ID").tolist() == [None, "S1_1_5", "S2_2_5"]
+    assert _ids(_cosmx_cell_key(df)) == [None, "0_1_5", "1_2_5"]
     single = df.assign(slide="S1")
-    assert _cosmx_cell_key(single, "cell_ID").tolist() == [None, "1_5", "2_5"]
+    assert _ids(_cosmx_cell_key(single)) == [None, "1_5", "2_5"]
+
+
+def test_cosmx_cell_key_from_label_column():
+    # Regression: some GEO CosMx metadata has only cell_id = "c_<slide>_<fov>_<cell>" (no cell_ID) → KeyError.
+    df = pd.DataFrame({"fov": [1, 1], "cell_id": ["c_1_1_0", "c_1_1_7"]})
+    assert _ids(_cosmx_cell_key(df)) == [None, "1_7"]
 
 
 def test_merfish_ids_keep_large_integers_exact():
