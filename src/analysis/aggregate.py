@@ -18,8 +18,8 @@ from .sdata import to_sopa_sdata
 def count_by_cell_id(tx: pd.DataFrame) -> ad.AnnData:
     """Cells × genes counts from transcripts that carry a cell_id (a groupby, no spatial step)."""
     tx = tx[tx["cell_id"].notna()]
-    cells = pd.Categorical(tx["cell_id"])
-    genes = pd.Categorical(tx["gene"])
+    cells = pd.Categorical(tx["cell_id"]).remove_unused_categories()
+    genes = pd.Categorical(tx["gene"]).remove_unused_categories()
     X = sp.csr_matrix(
         (np.ones(len(tx), dtype=np.float32), (cells.codes, genes.codes)),
         shape=(len(cells.categories), len(genes.categories)),

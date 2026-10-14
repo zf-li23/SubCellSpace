@@ -71,7 +71,7 @@ def _coordinates(s: Sample, cell_ids: pd.Index) -> tuple[np.ndarray | None, str]
     if s.cells is not None and {"x", "y"} <= set(s.cells.columns) and cell_ids.isin(s.cells.index).all():
         return s.cells.loc[cell_ids, ["x", "y"]].to_numpy(float), f"vendor cell table ({s.sources.get('cells')})"
     if s.transcripts is not None and s.has_cell_ids:
-        cent = s.transcripts[s.transcripts["cell_id"].notna()].groupby("cell_id")[["x", "y"]].mean()
+        cent = s.transcripts[s.transcripts["cell_id"].notna()].groupby("cell_id", observed=True)[["x", "y"]].mean()
         if cell_ids.isin(cent.index).all():
             return cent.loc[cell_ids].to_numpy(float), "derived: mean position of the cell's transcripts"
     if s.boundaries is not None and cell_ids.isin(s.boundaries.index).all():
@@ -99,7 +99,7 @@ def complete(s: Sample) -> Completion:
     elif s.transcripts is not None and s.boundaries is not None:
         tx = _countable(s)
         table, assigned = count_with_boundaries(tx, s.boundaries)
-        s.transcripts.loc[assigned.index, "cell_id"] = assigned
+        s.transcripts["cell_id"] = pd.Categorical(assigned.reindex(s.transcripts.index))
         prov["matrix"] = "derived: transcripts assigned to vendor boundaries and counted (sopa.aggregate)"
         prov["cell_id"] = "derived: sopa.spatial.assign_transcript_to_cell on vendor boundaries"
     elif s.transcripts is not None:

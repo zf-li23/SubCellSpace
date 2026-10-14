@@ -40,10 +40,19 @@ def read_table(path: str | Path, **kwargs) -> pd.DataFrame:
     path = Path(path)
     name = path.name.lower()
     if ".parquet" in name:
+        import pyarrow.parquet as pq
+
+        src: Path | io.BytesIO = path
         if name.endswith(".gz"):
             with gzip.open(path, "rb") as f:
-                return pd.read_parquet(io.BytesIO(f.read()), **kwargs)
-        return pd.read_parquet(path, **kwargs)
+                src = io.BytesIO(f.read())
+        columns = kwargs.pop("columns", None)
+        if columns is not None:  # keep only the requested columns that exist
+            available = set(pq.read_schema(src).names)
+            columns = [c for c in columns if c in available]
+            if isinstance(src, io.BytesIO):
+                src.seek(0)
+        return pd.read_parquet(src, columns=columns, **kwargs)
     sep = "\t" if ".tsv" in name else ","
     return pd.read_csv(path, sep=sep, **kwargs)
 
@@ -69,6 +78,50 @@ def _or_none(values: pd.Series, keep) -> pd.Series:
     return pd.Series(np.where(np.asarray(keep), values.to_numpy(dtype=object), None), index=values.index, dtype=object)
 
 
+def _labels(values, unassigned: set[str] = frozenset()) -> pd.Categorical:
+    """Categorical of string labels, built per unique value (decode bytes, ints → "123"); unassigned → NaN."""
+    cat = pd.Categorical(values)
+    names = []
+    for c in cat.categories:
+        if isinstance(c, bytes):
+            c = c.decode("utf-8")
+        elif isinstance(c, float) and c.is_integer():
+            c = int(c)
+        names.append(str(c))
+    names = pd.Index(names)
+    keep = ~names.isin(unassigned)
+    remap = np.full(len(names) + 1, -1, dtype=np.int64)  # last slot maps code -1 → -1
+    remap[np.flatnonzero(keep)] = np.arange(int(keep.sum()))
+    codes = remap[np.where(cat.codes < 0, len(names), cat.codes)]
+    return pd.Categorical.from_codes(codes, names[keep])
+
+
+def _control_flags(genes: pd.Categorical) -> np.ndarray:
+    """is_control per transcript, evaluated once per gene name."""
+    per_gene = np.append(is_control_name(pd.Series(genes.categories)), True)  # NaN gene → control
+    return per_gene[np.where(genes.codes < 0, len(genes.categories), genes.codes)]
+
+
+def _header(path: Path) -> list[str]:
+    return list(read_table(path, nrows=0).columns) if ".parquet" not in path.name else []
+
+
+def _sparse_matrix_csv(path: Path, id_columns: Callable[[pd.DataFrame], tuple[pd.DataFrame, pd.Index]],
+                       chunksize: int = 20_000) -> ad.AnnData:
+    """Dense cell × gene CSV (one row per cell) → sparse AnnData, read in chunks to bound memory."""
+    blocks, ids, genes = [], [], None
+    for chunk in read_table(path, chunksize=chunksize):
+        chunk, idx = id_columns(_drop_index_columns(chunk))
+        if genes is None:
+            genes = [c for c in chunk.columns if c not in _COSMX_META and pd.api.types.is_numeric_dtype(chunk[c])]
+        blocks.append(sp.csr_matrix(chunk[genes].to_numpy(dtype=np.float32)))
+        ids.append(idx)
+    adata = ad.AnnData(sp.vstack(blocks).tocsr() if blocks else sp.csr_matrix((0, 0), dtype=np.float32))
+    adata.obs_names = pd.Index(np.concatenate([i.to_numpy() for i in ids])).astype(str)
+    adata.var_names = pd.Index(genes or []).astype(str)
+    return adata
+
+
 def _found(report, *names: str) -> Path | None:
     for f in report.files:
         if f.name in names and f.found and f.path:
@@ -79,15 +132,45 @@ def _found(report, *names: str) -> Path | None:
 # ── CosMx ────────────────────────────────────────────────────────────
 
 _COSMX_META = {"sampleID", "slide", "case", "fov", "cell_ID", "cell", "cellID", "cell_id"}
+_COSMX_LABEL = r"^c_(\d+)_(\d+)_(\d+)$"  # c_<slide>_<fov>_<cell>
 
 
-def _cosmx_cell_key(df: pd.DataFrame, cell_col: str) -> pd.Series:
-    """Unique cell id: ``[slide_]fov_cellID``; cell 0 is background → None."""
-    parts = [df["fov"].astype(str), df[cell_col].astype(int).astype(str)]
-    if "slide" in df.columns and df["slide"].nunique() > 1:
-        parts.insert(0, df["slide"].astype(str))
-    key = parts[0].str.cat(parts[1:], sep="_")
-    return _or_none(key, df[cell_col].astype(int) != 0)
+def _cosmx_parts(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(slide code, fov, cell number) from numeric fov + cell_ID/cellID, or from a c_<slide>_<fov>_<cell> label."""
+    num = next((c for c in ("cell_ID", "cellID") if c in df.columns), None)
+    if num is not None and "fov" in df.columns:
+        slide = pd.factorize(df["slide"])[0] if "slide" in df.columns else np.zeros(len(df), dtype=np.int64)
+        return slide, df["fov"].to_numpy(np.int64), df[num].to_numpy(np.int64)
+    label = next((c for c in ("cell", "cell_id") if c in df.columns), None)
+    if label is None:
+        raise SampleReadError(f"CosMx table without cell_ID / cellID / cell label columns: {list(df.columns)[:12]}")
+    parts = df[label].astype(str).str.extract(_COSMX_LABEL)
+    if parts.isna().all().all():
+        raise SampleReadError(f"CosMx column {label!r} is not of the form c_<slide>_<fov>_<cell>")
+    parts = parts.fillna(0).astype(np.int64)
+    return parts[0].to_numpy(), parts[1].to_numpy(), parts[2].to_numpy()
+
+
+def _cosmx_cell_key(df: pd.DataFrame) -> pd.Categorical:
+    """Unique cell id ``[slide_]fov_cell`` as a categorical; cell 0 (background) → NaN."""
+    slide, fov, cell = _cosmx_parts(df)
+    multi_slide = len(np.unique(slide)) > 1
+    code = (slide * 10**6 + fov) * 10**7 + cell
+    valid = cell != 0
+    uniq, inv = np.unique(code[valid], return_inverse=True)
+    u_slide, rest = np.divmod(uniq, 10**13)
+    u_fov, u_cell = np.divmod(rest, 10**7)
+    names = [f"{a}_{b}_{c}" if multi_slide else f"{b}_{c}" for a, b, c in zip(u_slide, u_fov, u_cell, strict=True)]
+    codes = np.full(len(df), -1, dtype=np.int64)
+    codes[valid] = inv
+    return pd.Categorical.from_codes(codes, names)
+
+
+def _keyed(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Index]:
+    """Rows with a real cell and their cell id index."""
+    key = _cosmx_cell_key(df)
+    valid = key.codes >= 0
+    return df[valid], pd.Index(np.asarray(key)[valid], name="cell_id")
 
 
 def read_cosmx(report) -> Sample:
@@ -96,36 +179,37 @@ def read_cosmx(report) -> Sample:
 
     tx_path = _found(report, "transcripts", "transcripts_detected")
     if tx_path:
-        tx = _drop_index_columns(read_table(tx_path))
+        header = _header(tx_path)
+        has_num = "cell_ID" in header or "cellID" in header
+        want = ["fov", "cell_ID", "cellID", "slide", "x_global_px", "y_global_px", "z", "target", "CellComp"]
+        if not has_num:
+            want += ["cell", "cell_id"]
+        cols = [c for c in want if c in header]
+        tx = read_table(tx_path, usecols=cols, dtype={"target": "category", "CellComp": "category"})
+        genes = _labels(tx["target"])
         out = pd.DataFrame({
-            "x": tx["x_global_px"].to_numpy(float) * px,
-            "y": tx["y_global_px"].to_numpy(float) * px,
-            "gene": tx["target"].astype(str).to_numpy(),
-            "cell_id": _cosmx_cell_key(tx, "cell_ID").to_numpy(),
+            "x": tx["x_global_px"].to_numpy(np.float32) * np.float32(px),
+            "y": tx["y_global_px"].to_numpy(np.float32) * np.float32(px),
+            "gene": genes,
+            "cell_id": _cosmx_cell_key(tx),
         })
         if "z" in tx.columns:
-            out["z"] = tx["z"].to_numpy()
+            out["z"] = tx["z"].to_numpy(np.float32)
         if "CellComp" in tx.columns:
-            out["cell_compartment"] = tx["CellComp"].astype(str).to_numpy()
-        out["fov"] = tx["fov"].astype(str).to_numpy()
-        out["is_control"] = is_control_name(out["gene"])
+            out["cell_compartment"] = tx["CellComp"]
+        out["fov"] = pd.Categorical(tx["fov"])
+        out["is_control"] = _control_flags(genes)
         s.transcripts, s.sources["transcripts"] = out, tx_path.name
 
     mat_path = _found(report, "expr_matrix")
     if mat_path:
-        m = _drop_index_columns(read_table(mat_path))
-        key = _cosmx_cell_key(m, "cell_ID")
-        m = m[key.notna()]
-        genes = [c for c in m.columns if c not in _COSMX_META and pd.api.types.is_numeric_dtype(m[c])]
-        adata = ad.AnnData(sp.csr_matrix(m[genes].to_numpy(dtype=np.float32)))
-        adata.obs_names, adata.var_names = key[key.notna()].to_numpy(), genes
-        s.matrix, s.sources["matrix"] = drop_control_genes(adata), mat_path.name
+        s.matrix = drop_control_genes(_sparse_matrix_csv(mat_path, _keyed))
+        s.sources["matrix"] = mat_path.name
 
     meta_path = _found(report, "cell_metadata", "cell_metadata_csv")
     if meta_path:
-        md = _drop_index_columns(read_table(meta_path))
-        key = _cosmx_cell_key(md, "cell_ID")
-        md = md[key.notna()].set_index(key[key.notna()].rename("cell_id"))
+        md, ids = _keyed(_drop_index_columns(read_table(meta_path)))
+        md = md.set_index(ids)
         cells = pd.DataFrame(index=md.index)
         if {"CenterX_global_px", "CenterY_global_px"} <= set(md.columns):
             cells["x"] = md["CenterX_global_px"].to_numpy(float) * px
@@ -136,10 +220,8 @@ def read_cosmx(report) -> Sample:
 
     poly_path = _found(report, "polygons")
     if poly_path:
-        pl = _drop_index_columns(read_table(poly_path))
-        cell_col = "cellID" if "cellID" in pl.columns else "cell_ID"
-        pl["cell_id"] = _cosmx_cell_key(pl, cell_col)
-        pl = pl[pl["cell_id"].notna()]
+        pl, ids = _keyed(_drop_index_columns(read_table(poly_path)))
+        pl = pl.assign(cell_id=ids.to_numpy())
         s.boundaries = _polygons_from_vertices(pl, "cell_id", "x_global_px", "y_global_px", scale=px)
         s.sources["boundaries"] = poly_path.name
     return s
@@ -198,22 +280,26 @@ def read_xenium(report) -> Sample:
 
     tx_path = _found(report, "transcripts", "transcripts_parquet")
     if tx_path and ".zarr" not in tx_path.name:
-        tx = read_table(tx_path)
-        gene = _decode(tx["feature_name"])
-        cell = _decode(tx["cell_id"]) if "cell_id" in tx.columns else pd.Series([None] * len(tx))
+        want = ["feature_name", "cell_id", "x_location", "y_location", "z_location", "qv", "fov_name", "is_gene"]
+        if ".parquet" in tx_path.name:
+            tx = read_table(tx_path, columns=want)
+        else:
+            tx = read_table(tx_path, usecols=lambda c: c in want)
+        genes = _labels(tx["feature_name"])
         out = pd.DataFrame({
-            "x": tx["x_location"].to_numpy(float),
-            "y": tx["y_location"].to_numpy(float),
-            "gene": gene.to_numpy(),
-            "cell_id": _or_none(cell, ~cell.isin(_XENIUM_UNASSIGNED)).to_numpy(),
+            "x": tx["x_location"].to_numpy(np.float32),
+            "y": tx["y_location"].to_numpy(np.float32),
+            "gene": genes,
+            "cell_id": _labels(tx["cell_id"], _XENIUM_UNASSIGNED) if "cell_id" in tx.columns
+            else pd.Categorical([None] * len(tx)),
         })
         if "z_location" in tx.columns:
-            out["z"] = tx["z_location"].to_numpy(float)
+            out["z"] = tx["z_location"].to_numpy(np.float32)
         if "qv" in tx.columns:
-            out["qv"] = tx["qv"].to_numpy(float)
+            out["qv"] = tx["qv"].to_numpy(np.float32)
         if "fov_name" in tx.columns:
-            out["fov"] = _decode(tx["fov_name"]).to_numpy()
-        control = is_control_name(out["gene"])
+            out["fov"] = _labels(tx["fov_name"])
+        control = _control_flags(genes)
         if "is_gene" in tx.columns:
             control |= ~tx["is_gene"].astype(bool).to_numpy()
         out["is_control"] = control
@@ -269,30 +355,34 @@ def read_merfish(report) -> Sample:
 
     tx_path = _found(report, "transcripts")
     if tx_path:
-        tx = _drop_index_columns(read_table(tx_path))
-        xcol, ycol = ("global_x", "global_y") if "global_x" in tx.columns else ("x", "y")
+        header = _header(tx_path)
+        xcol, ycol = ("global_x", "global_y") if "global_x" in header else ("x", "y")
+        cols = [c for c in (xcol, ycol, "global_z", "gene", "cell_id", "fov") if c in header]
+        tx = read_table(tx_path, usecols=cols, dtype={"gene": "category"})
+        genes = _labels(tx["gene"])
         out = pd.DataFrame({
-            "x": tx[xcol].to_numpy(float),
-            "y": tx[ycol].to_numpy(float),
-            "gene": tx["gene"].astype(str).to_numpy(),
-            "cell_id": (_merfish_ids(tx["cell_id"]) if "cell_id" in tx.columns else pd.Series([None] * len(tx))).to_numpy(),
+            "x": tx[xcol].to_numpy(np.float32),
+            "y": tx[ycol].to_numpy(np.float32),
+            "gene": genes,
+            "cell_id": _labels(tx["cell_id"], {"-1", "nan", ""}) if "cell_id" in tx.columns
+            else pd.Categorical([None] * len(tx)),
         })
         if "global_z" in tx.columns:
-            out["z"] = tx["global_z"].to_numpy(float)
+            out["z"] = tx["global_z"].to_numpy(np.float32)
         if "fov" in tx.columns:
-            out["fov"] = tx["fov"].astype(str).to_numpy()
-        out["is_control"] = is_control_name(out["gene"])
+            out["fov"] = pd.Categorical(tx["fov"])
+        out["is_control"] = _control_flags(genes)
         s.transcripts, s.sources["transcripts"] = out, tx_path.name
 
     mat_path = _found(report, "expr_matrix")
     if mat_path:
-        m = read_table(mat_path)
-        id_col = m.columns[0]
-        m.index = pd.Index(_merfish_ids(m[id_col]).to_numpy(), name="cell_id")
-        m = m.drop(columns=[id_col])
-        adata = ad.AnnData(sp.csr_matrix(m.to_numpy(dtype=np.float32)))
-        adata.obs_names, adata.var_names = m.index.astype(str), m.columns.astype(str)
-        s.matrix, s.sources["matrix"] = drop_control_genes(adata), mat_path.name
+        def merfish_ids(chunk: pd.DataFrame) -> tuple[pd.DataFrame, pd.Index]:
+            id_col = chunk.columns[0]
+            ids = pd.Index(_merfish_ids(chunk[id_col]).to_numpy(), name="cell_id")
+            return chunk.drop(columns=[id_col]), ids
+
+        s.matrix = drop_control_genes(_sparse_matrix_csv(mat_path, merfish_ids))
+        s.sources["matrix"] = mat_path.name
 
     meta_path = _found(report, "cell_metadata")
     if meta_path:

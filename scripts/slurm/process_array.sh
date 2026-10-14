@@ -22,4 +22,6 @@ export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}" NUMBA_CACHE_DIR="${TMPDIR:-/t
 cd "$CODE"
 /usr/bin/time -v "$ENV/bin/python" -m src process "$SAMPLE_DIR" -o "$OUT_ROOT/$GSE/$GSM" --platform "$PLATFORM" \
   2> >(grep -E "Maximum resident|Elapsed|Error|Traceback" >&2)
-echo "[$(date -Is)] exit=$?"
+rc=$?   # capture first: $(date) inside the echo would reset $?
+echo "[$(date -Is)] exit=$rc"
+exit $rc
