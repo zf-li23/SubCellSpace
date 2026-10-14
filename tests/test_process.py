@@ -35,3 +35,12 @@ def test_process_and_report_real_sample(testdata, tmp_path):
 def test_tiny_sample_is_clustered_with_capped_pcs(testdata, tmp_path):
     summary = process_sample(testdata / "cosmx", tmp_path)  # 13 cells pass QC
     assert summary["n_cells_clustered"] == 13
+
+
+def test_cli_process_failure_writes_status(tmp_path):
+    out = tmp_path / "out"
+    res = subprocess.run([sys.executable, "-m", "src", "process", str(tmp_path / "missing"), "-o", str(out)],
+                         capture_output=True, text=True)
+    assert res.returncode != 0
+    status = json.loads((out / "subcellspace_status.json").read_text())
+    assert status["status"] == "failed" and status["error_type"]

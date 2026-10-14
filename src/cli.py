@@ -74,10 +74,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _write_status(out_dir: Path, status: dict) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "subcellspace_status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
+
+
 def _cmd_process(args: argparse.Namespace) -> None:
+    import traceback
+
     from .process import process_sample
 
-    summary = process_sample(args.sample_dir, args.output_dir, platform=args.platform)
+    try:
+        summary = process_sample(args.sample_dir, args.output_dir, platform=args.platform)
+    except Exception as exc:  # record and fail loudly: batch runs read this file instead of losing the error
+        _write_status(args.output_dir, {
+            "status": "failed", "sample_dir": str(args.sample_dir), "error_type": type(exc).__name__,
+            "error": str(exc), "traceback": traceback.format_exc(limit=5),
+        })
+        raise SystemExit(f"process failed: {type(exc).__name__}: {exc}") from exc
+    _write_status(args.output_dir, {"status": "ok", "sample_dir": str(args.sample_dir), "data_tier": summary["data_tier"]})
     keys = ("data_tier", "n_cells", "n_cells_clustered", "n_clusters", "gene_panel_size", "n_transcripts",
             "median_transcripts", "median_genes")
     print(json.dumps({k: summary.get(k) for k in keys}, indent=2))
