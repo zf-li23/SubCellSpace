@@ -48,6 +48,8 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "FOV 空间布局"},
         {"pattern": "*detected_transcripts.csv*", "required": False, "name": "transcripts_detected",
          "desc": "detected_transcripts 格式（兼容 MERFISH 命名的 CosMx 数据）"},
+        {"pattern": "*annotation*.csv*", "required": False, "name": "author_annotation",
+         "desc": "作者提供的细胞注释（细胞类型等）"},
     ],
     "xenium": [
         {"pattern": "*transcripts.csv*",    "required": True,  "name": "transcripts",
@@ -78,6 +80,8 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "MTX 格式表达矩阵 (10x 格式)"},
         {"pattern": "*gene_panel.json*",     "required": False, "name": "gene_panel",
          "desc": "基因 panel 信息"},
+        {"pattern": "*annotation*.csv*", "required": False, "name": "author_annotation",
+         "desc": "作者提供的细胞注释（细胞类型等）"},
     ],
     "merfish": [
         {"pattern": "*_detected_transcripts.csv*", "required": True,  "name": "transcripts",
@@ -88,6 +92,8 @@ MANIFEST: dict[str, list[dict]] = {
          "desc": "细胞×基因表达矩阵"},
         {"pattern": "*_cell_metadata.csv*", "required": False, "name": "cell_metadata",
          "desc": "细胞元数据"},
+        {"pattern": "*annotation*.csv*", "required": False, "name": "author_annotation",
+         "desc": "作者提供的细胞注释（细胞类型等）"},
     ],
     "generic": [
         {"pattern": "*.csv*",  "required": True, "name": "transcripts",
