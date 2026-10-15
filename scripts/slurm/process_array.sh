@@ -11,7 +11,7 @@
 #
 # 内存：本集群 Slurm 不能限制内存（CR_CORE、无 task/cgroup），--mem 也不可用。由 mem_guard.py 保护节点：
 #   预算 = 样本大小 × 平台系数 + 4 GB，上限 MEM_CAP_GB。实测（2026-10-14，933 个任务）：≤ 2 GB 的 Xenium 峰值可达
-#   大小的 17×；大样本的 data_size 含图像，比值反而低（CosMx 6.3 GB → 55 GB、Xenium 9.6 GB → 55 GB、MERFISH 11.5 GB → 62 GB）；
+#   大小的 17×；大样本的 data_size 含图像，比值反而低（CosMx 6.3 GB → 55 GB、Xenium 9.6 GB → 55 GB、MERFISH 11.5 GB → 62 GB，但 10.1 GB → 81 GB，8× 太紧，2026-10-15 改为 10×）；
 #   节点可用内存不足"预算 + 40 GB"时等待；超预算或节点可用内存 < 20 GB 时终止并写 MemoryLimitExceeded。
 set -uo pipefail
 LIST="$1"; OUT_ROOT="$2"
@@ -25,7 +25,7 @@ import re, sys
 plat, size, cap = sys.argv[1], sys.argv[2], float(sys.argv[3])
 m = re.match(r"\s*([\d.]+)\s*([KMGT]?)", size)
 gb = float(m.group(1)) * {"": 1e-9, "K": 1e-6, "M": 1e-3, "G": 1, "T": 1e3}[m.group(2)] if m else 1.0
-factor = 8 if plat == "merfish" else 20
+factor = 10 if plat == "merfish" else 20
 print(round(min(cap, gb * factor + 4), 1))
 PY
 )

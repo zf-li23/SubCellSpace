@@ -130,7 +130,7 @@ Cluster access, topology, storage, transfer rules and Slurm conventions live in 
   took gpu01 down). **Slurm cannot limit memory here** (CR_CORE, task/affinity without task/cgroup, no accounting →
   `--mem` is rejected, cgroup limits never apply), so every task runs under `scripts/slurm/mem_guard.py`: waits until
   node MemAvailable ≥ budget + 40 GB, kills its process tree above the budget or when the node drops below 20 GB,
-  and records `MemoryLimitExceeded`. Budget = size × 20 (CosMx/Xenium) or × 8 (MERFISH) + 4 GB, capped at 160 GB.
+  and records `MemoryLimitExceeded`. Budget = size × 20 (CosMx/Xenium) or × 10 (MERFISH; 8× was too tight: 10.1 GB → 81 GB) + 4 GB, capped at 160 GB.
   Check the node before submitting (`squeue -p Yangxrlab`, `srun -p Yangxrlab free -g`).
 - `/data3` is shared and nearly full; OmniSTP also downloads there. Never touch other projects' dirs.
 - GEO sample dirs: `$SUBCELLSPACE_DATA_ROOT/{CosMx,Xenium,MERFISH}_GEO/GSE*/GSM*/` (resolver default is the lab path).
