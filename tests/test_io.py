@@ -158,3 +158,108 @@ def test_misnamed_transcript_file_is_ignored(tmp_path):
     s = read_sample(tmp_path, platform="cosmx")
     assert s.transcripts is None and s.matrix.X.sum() == 3
     assert any("not a transcript table" in n for n in s.notes)
+
+
+# ── Xenium uploads with unusual packaging (regressions from the 2026-10 batch) ──
+
+
+def _write_mtx_triple(folder: Path, prefix: str = "GSM1_") -> tuple[bytes, bytes, bytes]:
+    import io as _io
+
+    import scipy.io
+    import scipy.sparse as sp
+
+    buf = _io.BytesIO()
+    scipy.io.mmwrite(buf, sp.coo_matrix(np.array([[1, 0], [2, 3], [0, 4]])))  # genes × cells
+    mtx = buf.getvalue()
+    feats = b"G1\tGENE_A\tGene Expression\nG2\tGENE_B\tGene Expression\nN1\tNegControlProbe_1\tNegative Control Probe\n"
+    bars = b"aaaaaaaa-1\naaaaaaab-1\n"
+    return mtx, feats, bars
+
+
+def _boundaries_csv(path: Path) -> None:
+    sq = [(0, 0), (1, 0), (1, 1), (0, 1)]
+    pd.DataFrame([{"cell_id": c, "vertex_x": x + 5 * i, "vertex_y": y} for i, c in enumerate(["aaaaaaaa-1", "aaaaaaab-1"])
+                  for x, y in sq]).to_csv(path, index=False)
+
+
+def test_mtx_with_raw_deflate_tsv_files(tmp_path):
+    # Regression (GSE301112): features/barcodes *.tsv.gz were bare deflate streams → BadGzipFile.
+    import gzip
+    import zlib
+
+    mtx, feats, bars = _write_mtx_triple(tmp_path)
+    (tmp_path / "GSM1_matrix.mtx.gz").write_bytes(gzip.compress(mtx))
+    for name, data in (("GSM1_features.tsv.gz", feats), ("GSM1_barcodes.tsv.gz", bars)):
+        c = zlib.compressobj(wbits=-15)
+        (tmp_path / name).write_bytes(c.compress(data) + c.flush())
+    _boundaries_csv(tmp_path / "GSM1_cell_boundaries.csv.gz")
+    s = read_sample(tmp_path, platform="xenium")
+    assert s.matrix.shape == (2, 2) and s.matrix.X.sum() == 6  # control probe row dropped
+    assert any("raw deflate" in n for n in s.notes)
+
+
+def test_matrix_inside_uploaded_tar(tmp_path):
+    # Regression (GSE303048): the whole Xenium output was uploaded as *_raw.tar.gz; outside it only boundaries.
+    import gzip
+    import io as _io
+    import tarfile
+
+    mtx, feats, bars = _write_mtx_triple(tmp_path)
+    with tarfile.open(tmp_path / "GSM1_run_raw.tar.gz", "w:gz") as tar:
+        for name, data in (("matrix.mtx.gz", mtx), ("features.tsv.gz", feats), ("barcodes.tsv.gz", bars)):
+            blob = gzip.compress(data)
+            info = tarfile.TarInfo(f"run_raw/cell_feature_matrix/{name}")
+            info.size = len(blob)
+            tar.addfile(info, _io.BytesIO(blob))
+    _boundaries_csv(tmp_path / "GSM1_cell_boundaries.csv.gz")
+    s = read_sample(tmp_path, platform="xenium")
+    assert s.matrix.X.sum() == 6 and "cell_feature_matrix" in s.sources["matrix"]
+    c = complete(s)
+    assert c.tier == "B" and "spatial" in c.table.obsm
+
+
+def test_zarr_only_xenium_upload(tmp_path):
+    # Regression (GSE297459/GSM8992213): matrix and cell table only as *.zarr.zip.
+    import zarr
+
+    from src.io.readers import _xenium_cell_ids
+
+    ids = np.array([[0, 1], [1, 1]], dtype=np.uint32)
+    assert list(_xenium_cell_ids(ids)) == ["aaaaaaaa-1", "aaaaaaab-1"]
+    with zarr.storage.ZipStore(tmp_path / "cell_feature_matrix.zarr.zip", mode="w") as store:
+        g = zarr.open_group(store, mode="w", zarr_format=2).create_group("cell_features", attributes={
+            "number_cells": 2, "number_features": 3, "feature_keys": ["GENE_A", "GENE_B", "NegCtrl"],
+            "feature_types": ["gene", "gene", "negative_control_probe"]})
+        # CSC over features: GENE_A = [1, 2], GENE_B = [0, 3], NegCtrl = [5, 0]
+        for k, v in (("data", [1, 2, 3, 5]), ("indices", [0, 1, 1, 0]), ("indptr", [0, 2, 3, 4])):
+            g.create_array(k, data=np.array(v, dtype=np.uint32))
+        g.create_array("cell_id", data=ids)
+    with zarr.storage.ZipStore(tmp_path / "cells.zarr.zip", mode="w") as store:
+        root = zarr.open_group(store, mode="w", zarr_format=2)
+        root.create_array("cell_summary", data=np.array([[1.0, 2.0, 10.0], [3.0, 4.0, 12.0]]),
+                          attributes={"column_names": ["cell_centroid_x", "cell_centroid_y", "cell_area"]})
+        root.create_array("cell_id", data=ids)
+    (tmp_path / "transcripts.zarr.zip").write_bytes(b"")
+    s = read_sample(tmp_path, platform="xenium")
+    assert s.matrix.var_names.tolist() == ["GENE_A", "GENE_B"]
+    assert s.matrix.X.toarray().tolist() == [[1, 0], [2, 3]]
+    c = complete(s)
+    assert c.tier == "B" and c.table.obsm["spatial"].tolist() == [[1.0, 2.0], [3.0, 4.0]]
+
+
+def test_corrupted_optional_file_is_skipped_with_note(tmp_path):
+    # Regression (GSE276273): a damaged cell_boundaries.csv.gz (CRC error / garbage bytes) failed the whole sample.
+    import gzip
+
+    mtx, feats, bars = _write_mtx_triple(tmp_path)
+    for name, data in (("GSM1_matrix.mtx.gz", mtx), ("GSM1_features.tsv.gz", feats), ("GSM1_barcodes.tsv.gz", bars)):
+        (tmp_path / name).write_bytes(gzip.compress(data))
+    pd.DataFrame({"cell_id": ["aaaaaaaa-1", "aaaaaaab-1"], "x_centroid": [0.0, 5.0], "y_centroid": [0.0, 0.0]}).to_csv(
+        tmp_path / "GSM1_cells.csv.gz", index=False)
+    good = gzip.compress(b"cell_id,vertex_x,vertex_y\n" + b"aaaaaaaa-1,0.0,0.0\n" * 20000)
+    (tmp_path / "GSM1_cell_boundaries.csv.gz").write_bytes(good[: len(good) // 2])  # truncated download
+    s = read_sample(tmp_path, platform="xenium")
+    assert s.boundaries is None and s.matrix.X.sum() == 6
+    assert any("unreadable cell boundaries" in n for n in s.notes)
+    assert complete(s).tier == "B"

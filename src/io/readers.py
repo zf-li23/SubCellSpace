@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import gzip
 import io
+import json
 import logging
+import tarfile
+import zipfile
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -31,7 +35,49 @@ class SampleReadError(RuntimeError):
     """A sample directory could not be turned into a :class:`Sample`."""
 
 
+# File-level problems met while reading one sample; read_sample moves them into Sample.notes.
+_READ_NOTES: list[str] = []
+
+# Errors that mean "this file is damaged" (truncated / corrupted download), not "this code is wrong".
+_CORRUPT = (OSError, EOFError, zlib.error, UnicodeDecodeError, pd.errors.ParserError)
+
+
+def _note(msg: str) -> None:
+    log.warning(msg)
+    _READ_NOTES.append(msg)
+
+
+def _try_read(what: str, path: Path, read: Callable[[], object]):
+    """read(), or None plus a note when the file is damaged (the sample is then built from what remains)."""
+    try:
+        return read()
+    except _CORRUPT as exc:
+        _note(f"unreadable {what} file {path.name} ({type(exc).__name__}: {str(exc)[:120]}); skipped — "
+              "likely a corrupted download, re-download from GEO")
+        return None
+
+
 # ── generic file helpers ─────────────────────────────────────────────
+
+
+def _gz_source(path: Path) -> Path | io.BytesIO:
+    """``path`` itself, or the decompressed bytes of a ``.gz`` that lacks its gzip header (bare deflate stream).
+
+    GSE301112 uploaded features/barcodes as raw deflate data named ``*.tsv.gz``; the content is intact.
+    """
+    if not path.name.lower().endswith(".gz"):
+        return path
+    with open(path, "rb") as f:
+        if f.read(2) == b"\x1f\x8b":
+            return path
+        f.seek(0)
+        raw = f.read()
+    try:
+        data = zlib.decompressobj(-15).decompress(raw)
+    except zlib.error as exc:
+        raise gzip.BadGzipFile(f"{path.name}: neither gzip nor a raw deflate stream ({exc})") from exc
+    _note(f"{path.name}: gzip header missing (raw deflate stream); decompressed directly")
+    return io.BytesIO(data)
 
 
 def read_table(path: str | Path, **kwargs) -> pd.DataFrame:
@@ -41,8 +87,8 @@ def read_table(path: str | Path, **kwargs) -> pd.DataFrame:
     if ".parquet" in name:
         import pyarrow.parquet as pq
 
-        src: Path | io.BytesIO = path
-        if name.endswith(".gz"):
+        src: Path | io.BytesIO = _gz_source(path)
+        if isinstance(src, Path) and name.endswith(".gz"):
             with gzip.open(path, "rb") as f:
                 src = io.BytesIO(f.read())
         columns = kwargs.pop("columns", None)
@@ -53,7 +99,7 @@ def read_table(path: str | Path, **kwargs) -> pd.DataFrame:
                 src.seek(0)
         return pd.read_parquet(src, columns=columns, **kwargs)
     sep = "\t" if ".tsv" in name else ","
-    return pd.read_csv(path, sep=sep, **kwargs)
+    return pd.read_csv(_gz_source(path), sep=sep, **kwargs)
 
 
 def _drop_index_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -138,9 +184,11 @@ def _matrix_notes(s: Sample) -> None:
 
 
 def _found(report, *names: str) -> Path | None:
-    for f in report.files:
-        if f.name in names and f.found and f.path:
-            return Path(f.path)
+    """First file found among ``names``, in the order given (callers list preferred formats first)."""
+    for name in names:
+        for f in report.files:
+            if f.name == name and f.found and f.path:
+                return Path(f.path)
     return None
 
 
@@ -260,6 +308,18 @@ def _decode(values: pd.Series) -> pd.Series:
     return values.astype(str)
 
 
+def _mtx_anndata(mtx, features: pd.DataFrame, barcodes: pd.DataFrame) -> ad.AnnData:
+    """10x MTX (genes × cells on disk, binary file object) + features/barcodes tables → cells × genes AnnData."""
+    X = sp.csr_matrix(scipy.io.mmread(mtx, spmatrix=False).T, dtype=np.float32)
+    adata = ad.AnnData(X)
+    adata.obs_names = barcodes[0].astype(str).to_numpy()
+    adata.var_names = features[1 if features.shape[1] > 1 else 0].astype(str).to_numpy()
+    if features.shape[1] > 2:  # keep "Gene Expression" only (drop controls / blank codewords)
+        adata = adata[:, (features[2] == "Gene Expression").to_numpy()].copy()
+    adata.var_names_make_unique()
+    return adata
+
+
 def _read_10x_mtx(mtx_path: Path) -> ad.AnnData:
     """10x MTX triple, tolerating GEO's prefixed names (``*_matrix.mtx.gz`` + ``*_features.tsv.gz`` + ``*_barcodes.tsv.gz``)."""
     stem = mtx_path.name.split("matrix.mtx")[0]
@@ -268,17 +328,34 @@ def _read_10x_mtx(mtx_path: Path) -> ad.AnnData:
     bars = next(iter(folder.glob(f"{stem}barcodes.tsv*")), None)
     if feats is None or bars is None:
         raise SampleReadError(f"MTX matrix {mtx_path.name} has no matching features/barcodes files")
-    with (gzip.open(mtx_path) if mtx_path.suffix == ".gz" else open(mtx_path, "rb")) as f:
-        X = sp.csr_matrix(scipy.io.mmread(f, spmatrix=False).T, dtype=np.float32)  # genes × cells on disk
-    fdf = pd.read_csv(feats, sep="\t", header=None)
-    barcodes = pd.read_csv(bars, sep="\t", header=None)[0].astype(str).to_numpy()
-    adata = ad.AnnData(X)
-    adata.obs_names = barcodes
-    adata.var_names = fdf[1 if fdf.shape[1] > 1 else 0].astype(str).to_numpy()
-    if fdf.shape[1] > 2:  # keep "Gene Expression" only (drop controls / blank codewords)
-        adata = adata[:, (fdf[2] == "Gene Expression").to_numpy()].copy()
-    adata.var_names_make_unique()
-    return adata
+    src = _gz_source(mtx_path)
+    with (gzip.open(src) if isinstance(src, Path) and src.suffix == ".gz" else
+          src if isinstance(src, io.BytesIO) else open(src, "rb")) as f:
+        return _mtx_anndata(f, read_table(feats, header=None), read_table(bars, header=None))
+
+
+_TAR_MTX = ("matrix.mtx.gz", "features.tsv.gz", "barcodes.tsv.gz")
+
+
+def _read_10x_mtx_from_tar(archive: Path) -> ad.AnnData | None:
+    """``cell_feature_matrix/`` inside a Xenium output archive, streamed (nothing is extracted to disk).
+
+    GSE303048 uploaded each run as ``*_raw.tar.gz``; outside it only boundaries and images remain.
+    """
+    found: dict[str, bytes] = {}
+    with tarfile.open(archive, mode="r|*") as tar:
+        for m in tar:
+            parts = m.name.split("/")
+            if m.isfile() and len(parts) >= 2 and parts[-2] == "cell_feature_matrix" and parts[-1] in _TAR_MTX:
+                found[parts[-1]] = tar.extractfile(m).read()
+                if len(found) == len(_TAR_MTX):
+                    break
+    if len(found) < len(_TAR_MTX):
+        return None
+    def table(name: str) -> pd.DataFrame:
+        return pd.read_csv(io.BytesIO(found[name]), sep="\t", header=None, compression="gzip")
+    with gzip.open(io.BytesIO(found["matrix.mtx.gz"])) as f:
+        return _mtx_anndata(f, table("features.tsv.gz"), table("barcodes.tsv.gz"))
 
 
 def _read_10x_h5(path: Path) -> ad.AnnData:
@@ -297,20 +374,90 @@ def _read_10x_h5(path: Path) -> ad.AnnData:
     return adata
 
 
+def _xenium_cell_ids(pairs: np.ndarray) -> np.ndarray:
+    """Xenium zarr cell ids (uint32 prefix, dataset suffix) → the "aaaabbcc-1" strings used in csv/parquet outputs."""
+    shift = str.maketrans("0123456789abcdef", "abcdefghijklmnop")
+    return np.array([f"{p:08x}".translate(shift) + f"-{d}" for p, d in pairs], dtype=object)
+
+
+def _zarr_group(path: Path, name: str):
+    import zarr
+
+    return zarr.open_group(zarr.storage.ZipStore(path, mode="r"), mode="r", path=name)
+
+
+def _read_xenium_zarr_matrix(path: Path) -> ad.AnnData:
+    """``cell_feature_matrix.zarr.zip``: CSC over features (indptr per feature, indices = cell rows)."""
+    g = _zarr_group(path, "cell_features")
+    attrs = dict(g.attrs)
+    n_cells, n_feat = int(attrs["number_cells"]), int(attrs["number_features"])
+    X = sp.csc_matrix((g["data"][:], g["indices"][:], g["indptr"][:]), shape=(n_cells, n_feat)).tocsr().astype(np.float32)
+    adata = ad.AnnData(X)
+    adata.obs_names = _xenium_cell_ids(g["cell_id"][:])
+    adata.var_names = np.asarray(attrs["feature_keys"], dtype=str)
+    if "feature_types" in attrs:  # keep genes only (drop control probes / codewords)
+        adata = adata[:, np.asarray(attrs["feature_types"]) == "gene"].copy()
+    adata.var_names_make_unique()
+    return adata
+
+
+def _read_xenium_zarr_cells(path: Path) -> pd.DataFrame:
+    """``cells.zarr.zip`` → cell table (centroids and areas in µm) from ``cell_summary``."""
+    with zipfile.ZipFile(path) as z:
+        cols = json.loads(z.read("cell_summary/.zattrs"))["column_names"]
+    root = _zarr_group(path, "")
+    summary = pd.DataFrame(root["cell_summary"][:], columns=cols)
+    cells = pd.DataFrame({"x": summary["cell_centroid_x"].to_numpy(float), "y": summary["cell_centroid_y"].to_numpy(float)},
+                         index=pd.Index(_xenium_cell_ids(root["cell_id"][:]), name="cell_id"))
+    for src, dst in (("cell_area", "area"), ("nucleus_area", "nucleus_area")):
+        if src in summary.columns:
+            cells[dst] = summary[src].to_numpy(float)
+    return cells
+
+
+def _archives(sample_dir: Path) -> list[Path]:
+    return sorted(p for p in sample_dir.iterdir()
+                  if p.is_file() and p.name.lower().endswith((".tar", ".tar.gz", ".tgz"))
+                  and not p.name.startswith("subcellspace_"))
+
+
+_XENIUM_TX = ["feature_name", "cell_id", "x_location", "y_location", "z_location", "qv", "fov_name", "is_gene"]
+
+
+def _xenium_matrix(report, s: Sample) -> None:
+    """Vendor matrix, in order of preference: MTX, h5, zarr, then an MTX inside an uploaded output archive."""
+    for name, read in (("expr_matrix_mtx", _read_10x_mtx), ("expr_matrix", _read_10x_h5),
+                       ("expr_matrix_zarr", _read_xenium_zarr_matrix)):
+        path = _found(report, name)
+        if path is None or (name == "expr_matrix" and ".h5" not in path.name):
+            continue
+        m = _try_read("matrix", path, lambda read=read, path=path: read(path))
+        if m is not None:
+            s.matrix, s.sources["matrix"] = m, path.name
+            return
+    if s.transcripts is None:
+        for archive in _archives(s.sample_dir):
+            m = _try_read("archive", archive, lambda archive=archive: _read_10x_mtx_from_tar(archive))
+            if m is not None:
+                s.matrix, s.sources["matrix"] = m, f"{archive.name}:cell_feature_matrix/"
+                s.notes.append(f"matrix read from inside {archive.name} (archive not extracted)")
+                return
+
+
 def read_xenium(report) -> Sample:
     s = Sample(platform="xenium", sample_dir=Path(report.input_path))
 
     tx_path = _found(report, "transcripts", "transcripts_parquet")
+    tx = None
     if tx_path and ".zarr" not in tx_path.name:
-        want = ["feature_name", "cell_id", "x_location", "y_location", "z_location", "qv", "fov_name", "is_gene"]
-        if ".parquet" in tx_path.name:
-            tx = read_table(tx_path, columns=want)
-        else:
-            tx = read_table(tx_path, usecols=lambda c: c in want)
-    if tx_path and ".zarr" not in tx_path.name and not {"feature_name", "x_location", "y_location"} <= set(tx.columns):
-        s.notes.append(f"{tx_path.name} is not a Xenium transcript table (columns {list(tx.columns)[:8]}); ignored")
-        tx_path = None
-    if tx_path and ".zarr" not in tx_path.name:
+        cols = {"columns": _XENIUM_TX} if ".parquet" in tx_path.name else {"usecols": lambda c: c in _XENIUM_TX}
+        tx = _try_read("transcript", tx_path, lambda: read_table(tx_path, **cols))
+        if tx is not None and not {"feature_name", "x_location", "y_location"} <= set(tx.columns):
+            s.notes.append(f"{tx_path.name} is not a Xenium transcript table (columns {list(tx.columns)[:8]}); ignored")
+            tx = None
+    elif tx_path or _found(report, "transcripts_zarr"):
+        s.notes.append(f"transcripts only as zarr ({(tx_path or _found(report, 'transcripts_zarr')).name}); not read")
+    if tx is not None:
         genes = _labels(tx["feature_name"])
         out = pd.DataFrame({
             "x": tx["x_location"].to_numpy(np.float32),
@@ -330,35 +477,31 @@ def read_xenium(report) -> Sample:
             control |= ~tx["is_gene"].astype(bool).to_numpy()
         out["is_control"] = control
         s.transcripts, s.sources["transcripts"] = out, tx_path.name
-    elif tx_path:
-        s.notes.append(f"transcripts only as zarr ({tx_path.name}); not read")
+        del tx
 
-    mat_path = _found(report, "expr_matrix", "expr_matrix_mtx", "expr_matrix_zarr")
-    if mat_path:
-        if "matrix.mtx" in mat_path.name:
-            s.matrix = _read_10x_mtx(mat_path)
-        elif ".h5" in mat_path.name:
-            s.matrix = _read_10x_h5(mat_path)
-        else:
-            s.notes.append(f"matrix only as zarr ({mat_path.name}); not read")
-        if s.matrix is not None:
-            s.matrix = drop_control_genes(s.matrix)
-            s.sources["matrix"] = mat_path.name
+    _xenium_matrix(report, s)
+    if s.matrix is not None:
+        s.matrix = drop_control_genes(s.matrix)
 
-    cells_path = _found(report, "cell_metadata", "cell_metadata_parquet")
-    if cells_path and ".zarr" not in cells_path.name:
-        c = read_table(cells_path)
-        c.index = pd.Index(_decode(c["cell_id"]).to_numpy(), name="cell_id")
-        cells = pd.DataFrame({"x": c["x_centroid"].to_numpy(float), "y": c["y_centroid"].to_numpy(float)}, index=c.index)
-        for src, dst in (("cell_area", "area"), ("nucleus_area", "nucleus_area")):
-            if src in c.columns:
-                cells[dst] = c[src].to_numpy(float)
-        s.cells, s.sources["cells"] = cells, cells_path.name
+    cells_path = _found(report, "cell_metadata", "cell_metadata_parquet", "cell_metadata_zarr")
+    if cells_path and ".zarr" in cells_path.name:
+        s.cells = _try_read("cell table", cells_path, lambda: _read_xenium_zarr_cells(cells_path))
+    elif cells_path:
+        c = _try_read("cell table", cells_path, lambda: read_table(cells_path))
+        if c is not None:
+            c.index = pd.Index(_decode(c["cell_id"]).to_numpy(), name="cell_id")
+            s.cells = pd.DataFrame({"x": c["x_centroid"].to_numpy(float), "y": c["y_centroid"].to_numpy(float)},
+                                   index=c.index)
+            for src, dst in (("cell_area", "area"), ("nucleus_area", "nucleus_area")):
+                if src in c.columns:
+                    s.cells[dst] = c[src].to_numpy(float)
+    if s.cells is not None:
+        s.sources["cells"] = cells_path.name
 
     for name, attr in (("cell_boundaries", "boundaries"), ("nucleus_boundaries", "nuclei")):
         path = _found(report, name, f"{name}_csv")
-        if path:
-            v = read_table(path)
+        v = _try_read(name.replace("_", " "), path, lambda path=path: read_table(path)) if path else None
+        if v is not None:
             v["cell_id"] = _decode(v["cell_id"])
             setattr(s, attr, _polygons_from_vertices(v, "cell_id", "vertex_x", "vertex_y"))
             s.sources[attr] = path.name
@@ -451,9 +594,13 @@ def read_sample(sample_dir: str | Path, platform: str | None = None) -> Sample:
     report = touch(str(sample_dir), normalize=False, platform_override=platform)
     if report.platform not in READERS:
         raise SampleReadError(f"{sample_dir}: unsupported or undetected platform {report.platform!r}")
+    _READ_NOTES.clear()
     s = READERS[report.platform](report)
     _read_annotations(report, s)
+    s.notes.extend(_READ_NOTES)
+    _READ_NOTES.clear()
     if s.transcripts is None and s.matrix is None:
-        raise SampleReadError(f"{sample_dir}: neither transcripts nor a cell × gene matrix could be read")
+        raise SampleReadError(f"{sample_dir}: neither transcripts nor a cell × gene matrix could be read"
+                              + (f" ({'; '.join(s.notes)})" if s.notes else ""))
     log.info("Read %s sample %s: %s", s.platform, s.sample_dir.name, ", ".join(f"{k}={v}" for k, v in s.sources.items()))
     return s
