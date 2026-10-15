@@ -206,14 +206,24 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   every row twice) — all handled, with regression tests.
 
 - 2026-10-14 SOPA ported into `src/analysis/` and removed as a dependency (local env 1.7 → 1.4 GB, still 45/45 tests);
-  `tools/sopa` deleted. **Cluster env / code switch over after the running batch finishes** (batch uses the sopa build).
+  `tools/sopa` deleted.
+- 2026-10-15 Small batch done (sopa build e9cef6d): 911 ok / 22 failed of 933 (930 + 3 large pilots); no
+  `MemoryLimitExceeded`. Pilot peaks: MERFISH 11.5 GB → 62 GB (19 min), Xenium 9.6 GB → 55 GB (2 h 16 min),
+  CosMx 6.3 GB → 55 GB (52 min); small Xenium samples peak at up to 17× data_size, so the budget formula stays.
+  Failures, all fixed with regression tests (f801a76): CosMx misnamed tx_file (GSE299786) and NaN matrix (GSE289194);
+  Xenium raw-deflate `.tsv.gz` without gzip header (GSE301112, 12), matrix only inside `*_raw.tar.gz` (GSE303048, 5),
+  zarr-only upload (GSE297459), corrupted downloads (GSE276273 — `cell_boundaries` / `nucleus_boundaries` /
+  `transcripts` CRC errors; skipped with a note, files dated 2024-09, not touched by dedup → **re-download**).
+  Cluster switched to the sopa-free env + code 2d07c6d (old env kept as `envs/subcellspace_sopa_20261014`);
+  retry 313763 (22) then large 313764 (86 samples > 2 GB, `%3`, 8 CPU; replaces the held 311796).
 
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
 
 **Next**
 1. Clarify `pending` / `error` in the registries; reconcile registry vs disk (more GSEs registered than downloaded).
-2. Collect the batch: success / failure counts by reason (incl. `MemoryLimitExceeded`), fix and re-run failures.
+2. Collect retry 313763 + large 313764; fix any new failures. Outputs of the first 911 carry the sopa build
+   (`summary.software.subcellspace` = e9cef6d); only boundary-route samples could differ (overlap counting).
 3. Refill registry stats from the new summaries — the old values are unreliable (e.g. MERFISH GSE275954 has
    `n_cells == gene_panel_size`; CosMx GSM8554642 recorded 2,100 cells vs 283,682 in the vendor matrix).
 4. Report rework on SOPA outputs (current full reports are 27–37 MB for ~800 MB samples); lightweight web bundle; measure size on a few dozen samples → Pages budget
@@ -222,7 +232,8 @@ S transcripts without cell info (needs segmentation) · D unreadable.
 5. Registry completion (LLM label spot-check with accuracy, missing-value reasons) + completion report.
 6. Data-organisation issues to review: 3 zero-byte morphology images (2 Xenium samples) to re-download; dirs mixing two
    samples (e.g. Xenium GSE277463/GSM8522750) or deep vendor paths (GSE283497); old pipeline outputs
-   (`subcellspace_results.h5ad`, …) inside some CosMx raw dirs.
+   (`subcellspace_results.h5ad`, …) inside some CosMx raw dirs; corrupted GSE276273 files (above); consider a
+   registry-wide `gzip -t` integrity scan (reading never fails on them now, so they only show up as notes).
 7. `scripts/update/` manual update flow + Chinese runbook; desensitise; English README/About; tag `v1.0`.
 
 **Open owner questions**: storage for new downloads (`/data3` vs `/Share`); full-report location on the cluster;
