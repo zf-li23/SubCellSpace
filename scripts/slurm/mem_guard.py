@@ -7,7 +7,9 @@ accounting, so neither --mem nor OverMemoryKill works. This wrapper (stdlib only
 2. watchdog: every few seconds sum the RSS of the whole process tree; kill it if it exceeds the budget;
 3. node floor: kill it if the node's MemAvailable drops below the floor, whoever is using the memory.
 
-On a kill, a ``subcellspace_status.json`` with ``error_type: MemoryLimitExceeded`` is written to --status-dir.
+On a kill, a ``subcellspace_status.json`` with ``error_type: MemoryLimitExceeded`` is written to --status-dir; when the
+command itself dies from a signal (e.g. a segfault in native code, which leaves Python no chance to write its own
+status), ``error_type: Crashed`` is written.
 
     python mem_guard.py --budget-gb 40 --status-dir OUT -- python -m src process ...
 """
@@ -118,6 +120,10 @@ def main() -> int:
         write_status(args.status_dir, {"status": "failed", "error_type": "MemoryLimitExceeded", "error": reason,
                                        "peak_rss_gb": round(peak, 1), "budget_gb": args.budget_gb})
         return 137
+    if proc.returncode < 0:
+        sig = signal.Signals(-proc.returncode).name
+        write_status(args.status_dir, {"status": "failed", "error_type": "Crashed",
+                                       "error": f"process killed by {sig} (native crash)", "peak_rss_gb": round(peak, 1)})
     return proc.returncode
 
 
