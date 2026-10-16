@@ -9,11 +9,15 @@ LEIDEN_RESOLUTION = 1.0
 N_MARKERS = 10
 
 
-def preprocess(adata: ad.AnnData, resolution: float = LEIDEN_RESOLUTION) -> ad.AnnData:
+def preprocess(adata: ad.AnnData, resolution: float = LEIDEN_RESOLUTION, umap_init: str = "spectral") -> ad.AnnData:
     """``sopa scanpy-preprocess`` (sopa/cli/app.py) on an AnnData, without SOPA's image requirement.
 
     Changes vs upstream: no ``read_zarr_standardized`` image sanity check; explicit PCA so the number of PCs and
     neighbours can be capped for very small samples (upstream defaults otherwise: 50 PCs, 15 neighbours).
+
+    ``umap_init="pca"`` starts UMAP from the first two PCs instead of the spectral layout: on some large graphs with
+    many components ARPACK (``eigsh`` in umap's ``multi_component_layout``) segfaults (GSE301112/GSM9075556,
+    GSE293144/GSM8877284). The default stays spectral so other samples are unchanged.
     """
     import scanpy as sc
 
@@ -28,7 +32,10 @@ def preprocess(adata: ad.AnnData, resolution: float = LEIDEN_RESOLUTION) -> ad.A
     n_pcs = min(50, adata.n_obs - 1, adata.n_vars - 1)
     sc.pp.pca(adata, n_comps=n_pcs, mask_var="highly_variable" if use_hvg else None)
     sc.pp.neighbors(adata, n_neighbors=min(15, adata.n_obs - 1))
-    sc.tl.umap(adata)
+    if umap_init == "pca":
+        sc.tl.umap(adata, init_pos=adata.obsm["X_pca"][:, :2].copy())
+    else:
+        sc.tl.umap(adata)
     sc.tl.leiden(adata, resolution=resolution, flavor="igraph")
     if not use_hvg:
         adata.var["highly_variable"] = hvg

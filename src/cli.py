@@ -33,6 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
     process_parser.add_argument("-o", "--output-dir", type=Path, required=True, help="Output directory (not the raw dir)")
     process_parser.add_argument("--platform", choices=PLATFORMS, default=None, help="Skip auto-detection")
     process_parser.add_argument("--no-report", action="store_true", help="Skip the HTML report")
+    process_parser.add_argument("--umap-init", choices=("spectral", "pca"), default="spectral",
+                                help="UMAP initialisation; pca avoids ARPACK segfaults on some large graphs")
 
     report_parser = subparsers.add_parser("report", help="Render the Xenium-style HTML report from process outputs")
     report_parser.add_argument("output_dir", type=Path, help="Directory written by `subcellspace process`")
@@ -84,7 +86,8 @@ def _cmd_process(args: argparse.Namespace) -> None:
     from .process import process_sample
 
     try:
-        summary = process_sample(args.sample_dir, args.output_dir, platform=args.platform)
+        summary = process_sample(args.sample_dir, args.output_dir, platform=args.platform,
+                                 umap_init=args.umap_init)
     except Exception as exc:  # record and fail loudly: batch runs read this file instead of losing the error
         _write_status(args.output_dir, {
             "status": "failed", "sample_dir": str(args.sample_dir), "error_type": type(exc).__name__,

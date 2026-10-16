@@ -18,6 +18,7 @@ LIST="$1"; OUT_ROOT="$2"
 ENV="${SUBCELLSPACE_ENV:-$HOME/zf-li23/envs/subcellspace}"   # conda-pack 解包的环境，无需 conda
 CODE="${SUBCELLSPACE_CODE:-$HOME/zf-li23/subcellspace}"
 MEM_CAP_GB="${MEM_CAP_GB:-160}"
+# UMAP_INIT=pca（可选）：UMAP 用 PCA 初始化，绕开个别大样本上 ARPACK 的段错误（见 src/analysis/preprocess.py）
 
 IFS=$'\t' read -r PLATFORM SAMPLE_DIR GSE GSM SIZE < <(sed -n "${SLURM_ARRAY_TASK_ID}p" "$LIST")
 BUDGET=$("$ENV/bin/python" - "$PLATFORM" "$SIZE" "$MEM_CAP_GB" <<'PY'
@@ -35,7 +36,7 @@ echo "[$(date -Is)] task ${SLURM_ARRAY_TASK_ID}: $PLATFORM $GSE/$GSM ($SIZE) bud
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}" NUMBA_CACHE_DIR="${TMPDIR:-/tmp}/numba_$SLURM_JOB_ID"
 cd "$CODE"
 /usr/bin/time -v "$ENV/bin/python" scripts/slurm/mem_guard.py --budget-gb "$BUDGET" --status-dir "$OUT" -- \
-  "$ENV/bin/python" -m src process "$SAMPLE_DIR" -o "$OUT" --platform "$PLATFORM" \
+  "$ENV/bin/python" -m src process "$SAMPLE_DIR" -o "$OUT" --platform "$PLATFORM" ${UMAP_INIT:+--umap-init "$UMAP_INIT"} \
   2> >(grep -E "Maximum resident|Elapsed|Error|Traceback" >&2)
 rc=$?   # capture first: $(date) inside the echo would reset $?
 echo "[$(date -Is)] exit=$rc"

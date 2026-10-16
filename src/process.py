@@ -92,7 +92,8 @@ def _h5ad_safe(adata: ad.AnnData) -> ad.AnnData:
     return adata
 
 
-def process_sample(sample_dir: str | Path, out_dir: str | Path, platform: str | None = None) -> dict:
+def process_sample(sample_dir: str | Path, out_dir: str | Path, platform: str | None = None,
+                   umap_init: str = "spectral") -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     s = read_sample(sample_dir, platform=platform)
@@ -105,7 +106,8 @@ def process_sample(sample_dir: str | Path, out_dir: str | Path, platform: str | 
     summary["min_transcripts_for_clustering"] = MIN_TRANSCRIPTS_PER_CELL
 
     if keep.sum() >= 3:
-        processed = preprocess(_h5ad_safe(table[keep].copy()))
+        processed = preprocess(_h5ad_safe(table[keep].copy()), umap_init=umap_init)
+        summary["umap_init"] = umap_init
         add_markers(processed)
         summary["n_clusters"] = int(processed.obs["leiden"].nunique()) if "leiden" in processed.obs else 0
     else:

@@ -44,3 +44,13 @@ def test_cli_process_failure_writes_status(tmp_path):
     assert res.returncode != 0
     status = json.loads((out / "subcellspace_status.json").read_text())
     assert status["status"] == "failed" and status["error_type"]
+
+
+def test_umap_pca_init(testdata, tmp_path):
+    # Regression (GSE301112/GSM9075556, GSE293144/GSM8877284): ARPACK segfaulted in UMAP's spectral init;
+    # --umap-init pca skips it and is recorded in the summary.
+    import anndata as ad
+
+    summary = process_sample(testdata / "xenium", tmp_path, umap_init="pca")
+    assert summary["umap_init"] == "pca" and summary["n_clusters"] >= 2
+    assert ad.read_h5ad(tmp_path / "subcellspace_cells.h5ad").obsm["X_umap"].shape == (summary["n_cells_clustered"], 2)
