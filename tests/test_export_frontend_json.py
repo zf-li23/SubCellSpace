@@ -27,3 +27,15 @@ def test_xenium_gsm_column_unchanged():
     assert export_frontend_json.output_columns(cols, "GSM") == ["GSE", "GSM"]
     rows = export_frontend_json.build_rows([{"GSE": "GSE2", "GSM": "GSM9"}], cols, "GSM", {})
     assert rows[0]["GSM"] == "GSM9"
+
+
+def test_only_usable_rows_go_on_the_website():
+    rows = [
+        {"GSE": "GSE1", "GSM": "GSM1", "status": "ready", "stats_source": "subcellspace abc 2026-10-16"},
+        {"GSE": "GSE1", "GSM": "GSM2", "status": "pending", "stats_source": ""},
+        {"GSE": "GSE1", "GSM": "GSM3", "status": "ready", "stats_source": ""},  # not processed
+        {"GSE": "GSE276273", "GSM": "GSM8494455", "status": "ready", "stats_source": "subcellspace abc"},
+        {"GSE": "GSE2", "GSM": "GSM9", "status": "ready", "stats_source": "subcellspace abc"},
+    ]
+    keep = export_frontend_json.web_rows(rows, "GSM", {("GSE276273", "*"), ("GSE2", "GSM9")})
+    assert [r["GSM"] for r in keep] == ["GSM1"]

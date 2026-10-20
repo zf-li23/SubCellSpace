@@ -4,6 +4,9 @@
 读取 data/{platform}_geo.csv，生成 frontend/public/{platform}.json，
 包含完整的列元数据和行数据。
 
+网页只收录可用的数据（owner, 2026-10-20）：status=ready、已成功处理（stats_source 非空），
+且不在 data/web_exclude.tsv 中（GSE + 样本名，样本名 * 表示整个 GSE）。
+
 用法:
     python3 scripts/export_frontend_json.py                    # 全部平台
     python3 scripts/export_frontend_json.py --cosmx-only       # 单个平台
@@ -68,6 +71,22 @@ PLATFORM_CONFIG = {
 }
 
 SAMPLE_KEY = {"cosmx": "sample_name", "xenium": "GSM", "merfish": "GSM"}
+
+WEB_EXCLUDE = DATA_DIR / "web_exclude.tsv"
+
+
+def load_exclusions(path: Path = WEB_EXCLUDE) -> set[tuple[str, str]]:
+    if not path.exists():
+        return set()
+    with open(path, encoding="utf-8") as f:
+        return {(r["GSE"], r["sample"]) for r in csv.DictReader(f, delimiter="\t")}
+
+
+def web_rows(rows: list, key_col: str, exclude: set[tuple[str, str]]) -> list:
+    """Rows that go on the website: ready, processed, not excluded."""
+    return [r for r in rows
+            if r.get("status") == "ready" and (r.get("stats_source") or "").strip()
+            and (r["GSE"], "*") not in exclude and (r["GSE"], r[key_col]) not in exclude]
 
 # 前端统一使用 GSM 列名；CosMx 登记表里叫 sample_name
 OUTPUT_SAMPLE_COL = "GSM"
@@ -142,6 +161,9 @@ def export_platform(platform: str) -> None:
         reader = csv.DictReader(f)
         csv_cols = reader.fieldnames or []
         rows = list(reader)
+    n_all = len(rows)
+    rows = web_rows(rows, key_col, load_exclusions())
+    logger.info(f"  {platform}: {len(rows)}/{n_all} rows are usable for the website")
 
     meta = build_meta(output_columns(csv_cols, key_col))
     col_types = {c["name"]: c["type"] for c in meta["columns"]}
