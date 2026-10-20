@@ -216,16 +216,21 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   `transcripts` CRC errors; skipped with a note, files dated 2024-09, not touched by dedup → **re-download**).
   Cluster switched to the sopa-free env + code 2d07c6d (old env kept as `envs/subcellspace_sopa_20261014`);
   retry 313763 (22) then large 313764 (86 samples > 2 GB, `%3`, 8 CPU; replaces the held 311796).
+- 2026-10-16 **All 1019 ready samples processed** (0 memory kills). Retry 22/22 ok; large 84/86 ok, 2 segfaults in
+  ARPACK (`eigsh` in UMAP's spectral init on multi-component graphs: GSE301112/GSM9075556, GSE293144/GSM8877284) →
+  rerun with `--umap-init pca` (bb152ed; recorded as `summary.umap_init`), both ok. `mem_guard` now writes a
+  `Crashed` status on signal deaths (6ee3391). MERFISH budget 8× → 10× (a 10.1 GB sample peaked at 81 GB).
+  Registry stats refilled from all 1019 summaries (`scripts/fill_registry_stats.py`, new `stats_source` column);
+  tiers after processing: CosMx 185 A / 1 B; Xenium 710 A / 6 B / 1 C; MERFISH 103 A / 8 B / 5 C.
 
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
 
 **Next**
 1. Clarify `pending` / `error` in the registries; reconcile registry vs disk (more GSEs registered than downloaded).
-2. Collect retry 313763 + large 313764; fix any new failures. Outputs of the first 911 carry the sopa build
-   (`summary.software.subcellspace` = e9cef6d); only boundary-route samples could differ (overlap counting).
-3. Refill registry stats from the new summaries — the old values are unreliable (e.g. MERFISH GSE275954 has
-   `n_cells == gene_panel_size`; CosMx GSM8554642 recorded 2,100 cells vs 283,682 in the vendor matrix).
+2. (done 2026-10-16) Outputs of the first 911 carry the sopa build (`summary.software.subcellspace` = e9cef6d);
+   only boundary-route samples could differ (overlap counting) — rerun them only if the report needs it.
+3. (done 2026-10-16) Registry stats refilled; rerun `fill_registry_stats.py` after any reprocessing.
 4. Report rework on SOPA outputs (current full reports are 27–37 MB for ~800 MB samples); lightweight web bundle; measure size on a few dozen samples → Pages budget
    (1 GB / site, ≈400–450 KB per sample) → single vs split site (owner decides). Rebuild the frontend as the
    static site and add its GitHub Pages build/deploy workflow then.
