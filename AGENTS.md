@@ -172,6 +172,7 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
 | D9 | GEO-only: vendor data, `datasets.csv` and vendor rows are gone; the site has no vendor data. |
 | D10 | Not a distributable tool: no GitHub CI; run ruff + pytest locally. |
 | D11 | (2026-10-20) The website lists **usable data only**: status `ready`, processed (`stats_source` set), not in `data/web_exclude.tsv` (GSE276273 excluded: corrupted downloads, not re-downloaded). Refines D6. |
+| D12 | (2026-10-20) Site lives in **this repo**: source on `main`; built site (incl. ~170 MB of per-sample web bundles, never committed to `main`) force-pushed to an orphan `gh-pages` branch, so `main` history stays small. Owner publishes manually. |
 
 **Data completion rules** (cell_id and cell boundaries are equivalent at cell level):
 - boundaries → cell_id: yes, point-in-polygon in partitions, ported from `sopa.spatial.join` (replaces the old `polygon_intersect`).
@@ -246,8 +247,7 @@ S transcripts without cell info (needs segmentation) · D unreadable.
    registry-wide `gzip -t` integrity scan (reading never fails on them now, so they only show up as notes).
 7. `scripts/update/` manual update flow + Chinese runbook; desensitise; English README/About; tag `v1.0`.
 
-**Open owner questions**: storage for new downloads (`/data3` vs `/Share`); full-report location on the cluster;
-site repo (this repo vs separate, naming if split); GSE310392 overlaps OmniSTP OS0030 — who downloads.
+**Open owner questions**: storage for new downloads (`/data3` vs `/Share`); full-report location on the cluster; GSE310392 overlaps OmniSTP OS0030 — who downloads.
 
 ---
 
