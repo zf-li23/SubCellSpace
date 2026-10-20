@@ -25,6 +25,16 @@ def test_classifies_ok_corrupt_and_headerless(tmp_path):
     (tmp_path / "raw.tsv.gz").write_bytes(c.compress(data) + c.flush())  # GSE301112-like
     with zipfile.ZipFile(tmp_path / "x.zarr.zip", "w") as z:
         z.writestr("a/.zarray", "{}")
+    zipped = (tmp_path / "x.zarr.zip").read_bytes()
+    (tmp_path / "cut.zarr.zip").write_bytes(zipped[:-30])  # no central directory (GSE310433 transcripts.zarr.zip)
+    import io
+    import tarfile
+
+    with tarfile.open(tmp_path / "run.tar.gz", "w") as tar:  # plain tar named .tar.gz (GSE310433)
+        info = tarfile.TarInfo("run/data.csv")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
     got = {p.name: scan.check(p)[0] for p in scan.archives(tmp_path)}
     assert got == {"ok.csv.gz": "ok", "trunc.csv.gz": "corrupt", "flip.csv.gz": "corrupt",
-                   "raw.tsv.gz": "no_gzip_header", "x.zarr.zip": "ok"}
+                   "raw.tsv.gz": "no_gzip_header", "x.zarr.zip": "ok", "cut.zarr.zip": "corrupt",
+                   "run.tar.gz": "uncompressed"}
