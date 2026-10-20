@@ -2216,3 +2216,56 @@ select {
 .btn-export { background: #1f8a70; color: #fff; }
 .btn-outline { background: transparent; border: 1px solid var(--btn-border); color: var(--text-primary); }
 .btn-danger { background: #e74c3c; color: #fff; }
+
+/* ── Sample report page: chart tokens (dataviz reference palette; dark mode has its own steps) ── */
+:root {
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
+  --chart-other: #cfcec8;
+  --chart-bar: #2a78d6;
+  --chart-grid: rgba(22, 50, 63, 0.10);
+  --chart-surface: #fcfcfb;
+}
+[data-theme="dark"] {
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+  --chart-other: #4a4a46;
+  --chart-bar: #3987e5;
+  --chart-grid: rgba(240, 239, 236, 0.12);
+  --chart-surface: #1a1a19;
+}
+.sample-page { max-width: 1400px; margin: 0 auto; padding: 16px; }
+.sample-page h3 { margin: 28px 0 8px; }
+.sample-subtitle { color: var(--text-secondary); font-size: 14px; margin: 0 0 16px; }
+.sample-note { color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.tier-badge { border: 1px solid var(--text-secondary); border-radius: 4px; padding: 0 6px; font-size: 12px; cursor: help; }
+.kpi-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin: 12px 0; }
+.kpi-tile { background: var(--card-bg); border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 3px var(--card-shadow); text-align: left; }
+.kpi-value { font-size: 24px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.kpi-label { font-size: 12px; color: var(--text-secondary); margin-top: 2px; line-height: 1.3; }
+.cluster-table-wrap { max-height: 520px; overflow-y: auto; border: 1px solid var(--table-border); border-radius: 8px; }
+.cluster-table thead th { position: sticky; top: 0; background: var(--chart-surface); }
+.chart-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin: 16px 0; }
+.chart-card { margin: 0; background: var(--chart-surface); border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px var(--card-shadow);
+  flex: 1 1 300px; max-width: 460px; min-width: 0; }
+.chart-card svg, .scatter-canvas { width: 100%; height: auto; display: block; }
+.chart-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.chart-axis { stroke: var(--text-secondary); stroke-width: 1; }
+.chart-grid { stroke: var(--chart-grid); stroke-width: 1; }
+.chart-tick, .chart-label { fill: var(--text-secondary); font-size: 10px; }
+.chart-bar { fill: var(--chart-bar); }
+.chart-bar-hover { opacity: 0.75; }
+.chart-tooltip-line { font-size: 12px; color: var(--text-secondary); min-height: 18px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.chart-legend { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-primary); padding-top: 28px; }
+.legend-item i, .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.cluster-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.cluster-table th, .cluster-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--table-border); }
+.cluster-table td:nth-child(2) { font-variant-numeric: tabular-nums; }
+.cluster-table tbody tr { cursor: pointer; }
+.cluster-table tbody tr:hover { background: var(--table-hover); }
+.cluster-table .row-selected { background: var(--table-hover); font-weight: 600; }
+.cluster-table .markers { font-family: ui-monospace, monospace; font-size: 12px; color: var(--text-secondary); }
+.provenance div { display: grid; grid-template-columns: 140px 1fr; gap: 8px; font-size: 13px; padding: 3px 0; }
+.provenance dt { color: var(--text-secondary); }
+.provenance dd { margin: 0; word-break: break-word; }
+@media (max-width: 640px) { .chart-card { max-width: none; } .provenance div { grid-template-columns: 1fr; } }

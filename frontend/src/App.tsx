@@ -4,12 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ErrorBoundary from './components/ErrorBoundary'
 import LoadingSkeleton from './components/LoadingSkeleton'
 
-const ReportPage = lazy(() => import('./pages/ReportPage'))
+const SamplePage = lazy(() => import('./pages/SamplePage'))
 const DataBrowser = lazy(() => import('./pages/DataBrowser'))
 
 const NAV_ITEMS = [
   { path: '/',         label: 'Browser',   icon: '📊' },
-  { path: '/report',   label: 'Report',    icon: '📋' },
 ]
 
 const queryClient = new QueryClient({
@@ -58,8 +57,7 @@ function AppContent() {
           <Suspense fallback={<PageLoading />}>
             <Routes>
               <Route path="/" element={<DataBrowser />} />
-              <Route path="/report" element={<ReportPage />} />
-              <Route path="/report/:gseId" element={<ReportPage />} />
+              <Route path="/sample/:platform/:gse/:gsm" element={<SamplePage />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>

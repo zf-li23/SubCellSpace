@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import type { GeoJSON, GeoRow, ColumnMeta } from '../types/datasets'
 import { PLATFORMS } from '../constants/platforms'
 import { fetchPlatformData } from '../services/geoData'
@@ -92,12 +93,17 @@ function renderDetailValue(row: GeoRow, colName: string): React.ReactNode {
   return <span>{s}</span>
 }
 
-function RowDetailView({ row, columns, onBack }: { row: GeoRow; columns: ColumnMeta[]; onBack: () => void }) {
+function RowDetailView({ row, columns, platform, onBack }: { row: GeoRow; columns: ColumnMeta[]; platform: string; onBack: () => void }) {
   return (
     <div className="detail-page">
       <div className="detail-topbar">
         <button className="back-btn" onClick={onBack}>← Back to results</button>
         <div className="detail-topbar-links">
+          {row.GSE && row.GSM && (
+            <Link to={`/sample/${platform}/${encodeURIComponent(row.GSE)}/${encodeURIComponent(row.GSM)}`} className="geo-btn">
+              Sample report →
+            </Link>
+          )}
           {row.GSE && (
             <a href={`${GEO_URL}${row.GSE}`}
               target="_blank" rel="noopener noreferrer" className="geo-btn">
@@ -241,7 +247,7 @@ export default function DataBrowser() {
   if (expandedRow) {
     return (
       <div className="container">
-        <RowDetailView row={expandedRow} columns={columns} onBack={() => setExpandedRow(null)} />
+        <RowDetailView row={expandedRow} columns={columns} platform={platform} onBack={() => setExpandedRow(null)} />
       </div>
     )
   }
