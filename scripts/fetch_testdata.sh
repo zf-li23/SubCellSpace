@@ -7,6 +7,8 @@ T="${1:-$HOME/SubCellSpace_testdata}"
 R="${SUBCELLSPACE_DATA_ROOT:-/data3/yangxr002}"
 mkdir -p "$T/cosmx" "$T/xenium" "$T/merfish"
 scp -q "a-cluster:$R/CosMx_GEO/GSE253474/GSM8021244/GSM8021244_*" "$T/cosmx/"
-scp -q "a-cluster:$R/Xenium_GEO/GSE302502/GSM9105225/GSM9105225_PAT-565_TLS_*" "$T/xenium/"
+# 规则先匹配先生效：先排除图像。2026-10-14 去重后，transcripts / boundaries 只剩解压的 GSM9105225_*.parquet（不带 PAT-565_TLS_ 前缀）
+rsync -a --exclude "*.tif" --include "GSM9105225_*" --exclude "*" \
+  "a-cluster:$R/Xenium_GEO/GSE302502/GSM9105225/" "$T/xenium/"
 scp -q "a-cluster:$R/MERFISH_GEO/GSE275954/GSM8488522/GSM8488522_*" "$T/merfish/"
 du -sh "$T"
