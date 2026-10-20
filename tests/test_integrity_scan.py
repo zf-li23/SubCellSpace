@@ -34,6 +34,7 @@ def test_classifies_ok_corrupt_and_headerless(tmp_path):
         info = tarfile.TarInfo("run/data.csv")
         info.size = len(data)
         tar.addfile(info, io.BytesIO(data))
+    (tmp_path / "._features.tsv.gz").write_bytes(b"\x00\x05\x16\x07")  # macOS AppleDouble (GSE302473): skipped
     got = {p.name: scan.check(p)[0] for p in scan.archives(tmp_path)}
     assert got == {"ok.csv.gz": "ok", "trunc.csv.gz": "corrupt", "flip.csv.gz": "corrupt",
                    "raw.tsv.gz": "no_gzip_header", "x.zarr.zip": "ok", "cut.zarr.zip": "corrupt",

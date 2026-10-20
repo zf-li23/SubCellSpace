@@ -92,7 +92,8 @@ def archives(sample_dir: Path):
     for root, _dirs, files in os.walk(sample_dir):
         for name in sorted(files):
             p = Path(root) / name
-            if name.lower().endswith(SUFFIXES) and not name.startswith("subcellspace_") and not p.is_symlink():
+            if (name.lower().endswith(SUFFIXES) and not name.startswith(("subcellspace_", "._"))  # ._*: macOS AppleDouble
+                    and not p.is_symlink()):
                 yield p
 
 
