@@ -152,12 +152,16 @@ def _header(path: Path) -> list[str]:
 
 
 def _sparse_matrix_csv(path: Path, id_columns: Callable[[pd.DataFrame], tuple[pd.DataFrame, pd.Index]],
-                       chunksize: int = 20_000) -> ad.AnnData:
-    """Dense cell × gene CSV (one row per cell) → sparse AnnData, read in chunks to bound memory."""
+                       chunksize: int = 20_000, drop_index: bool = True, **read_kwargs) -> ad.AnnData:
+    """Dense cell × gene CSV (one row per cell) → sparse AnnData, read in chunks to bound memory.
+
+    ``drop_index`` removes pandas "Unnamed: N" columns (CosMx index dumps); MERFISH keeps them, because there the
+    unnamed first column is the cell id (GSE202623, GSE325769: dropping it made a gene's counts the cell ids).
+    """
     blocks, ids, genes = [], [], None
     nan_entries, nan_genes = 0, None
-    for chunk in read_table(path, chunksize=chunksize):
-        chunk, idx = id_columns(_drop_index_columns(chunk))
+    for chunk in read_table(path, chunksize=chunksize, **read_kwargs):
+        chunk, idx = id_columns(_drop_index_columns(chunk) if drop_index else chunk)
         if genes is None:
             genes = [c for c in chunk.columns if c not in _COSMX_META and pd.api.types.is_numeric_dtype(chunk[c])]
             nan_genes = np.zeros(len(genes), dtype=bool)
@@ -511,12 +515,32 @@ def read_xenium(report) -> Sample:
 # ── MERFISH (Vizgen) ─────────────────────────────────────────────────
 
 
+_MERFISH_NULL = {"-1", "nan", "", "None", "<NA>"}
+
+
 def _merfish_ids(values: pd.Series) -> pd.Series:
-    """EntityIDs are large integers; keep them as exact strings. -1 / NaN → None."""
-    num = pd.to_numeric(values, errors="coerce")
-    if num.notna().all():
-        return _or_none(num.astype("int64").astype(str), num >= 0)
-    return _or_none(values.astype(str), values.notna())
+    """EntityIDs as exact strings, normalised as text only. -1 / empty / NaN → None.
+
+    Never convert through numbers: some uploads use 128-bit ids (39 digits, GSE202623 / GSE269617 / GSE325769) that
+    overflowed int64 into one shared value. Read the id columns as strings (``_id_dtype``) so floats never round them.
+    """
+    s = pd.Series(values, dtype="string").str.strip().str.replace(r"\.0+$", "", regex=True)
+    keep = (s.notna() & ~s.isin(_MERFISH_NULL) & ~s.str.startswith("-")).fillna(False)
+    return _or_none(s.astype(object), keep.to_numpy(bool))
+
+
+def _id_dtype(path: Path, *names: str) -> dict:
+    """dtype mapping that reads the first column (and any of ``names``) as text."""
+    header = _header(path)
+    return {c: "string" for c in header[:1] + [n for n in names if n in header]}
+
+
+def _merfish_labels(values: pd.Series) -> pd.Categorical:
+    """Per-transcript cell ids → categorical, normalising each distinct id once."""
+    cat = pd.Categorical(values)
+    names = _merfish_ids(pd.Series(cat.categories.astype(str))).to_numpy(object)
+    out = np.where(cat.codes < 0, None, names[np.maximum(cat.codes, 0)])
+    return pd.Categorical(out)
 
 
 def read_merfish(report) -> Sample:
@@ -531,13 +555,13 @@ def read_merfish(report) -> Sample:
             tx_path = None
     if tx_path:
         cols = [c for c in (xcol, ycol, "global_z", "gene", "cell_id", "fov") if c in header]
-        tx = read_table(tx_path, usecols=cols, dtype={"gene": "string[pyarrow]"})
+        tx = read_table(tx_path, usecols=cols, dtype={"gene": "string[pyarrow]", "cell_id": "string[pyarrow]"})
         genes = _labels(tx["gene"])
         out = pd.DataFrame({
             "x": tx[xcol].to_numpy(np.float32),
             "y": tx[ycol].to_numpy(np.float32),
             "gene": genes,
-            "cell_id": _labels(tx["cell_id"], {"-1", "nan", ""}) if "cell_id" in tx.columns
+            "cell_id": _merfish_labels(tx["cell_id"]) if "cell_id" in tx.columns
             else pd.Categorical([None] * len(tx)),
         })
         if "global_z" in tx.columns:
@@ -554,13 +578,14 @@ def read_merfish(report) -> Sample:
             ids = pd.Index(_merfish_ids(chunk[id_col]).to_numpy(), name="cell_id")
             return chunk.drop(columns=[id_col]), ids
 
-        s.matrix = drop_control_genes(_sparse_matrix_csv(mat_path, merfish_ids))
+        s.matrix = drop_control_genes(_sparse_matrix_csv(mat_path, merfish_ids, drop_index=False,
+                                                           dtype=_id_dtype(mat_path)))
         s.sources["matrix"] = mat_path.name
         _matrix_notes(s)
 
     meta_path = _found(report, "cell_metadata")
     if meta_path:
-        md = read_table(meta_path)
+        md = read_table(meta_path, dtype=_id_dtype(meta_path))
         id_col = md.columns[0]
         md.index = pd.Index(_merfish_ids(md[id_col]).to_numpy(), name="cell_id")
         cells = pd.DataFrame({"x": md["center_x"].to_numpy(float), "y": md["center_y"].to_numpy(float)}, index=md.index)

@@ -263,3 +263,21 @@ def test_corrupted_optional_file_is_skipped_with_note(tmp_path):
     assert s.boundaries is None and s.matrix.X.sum() == 6
     assert any("unreadable cell boundaries" in n for n in s.notes)
     assert complete(s).tier == "B"
+
+
+def test_merfish_128bit_cell_ids_stay_distinct(tmp_path):
+    # Regression (GSE202623, GSE269617, GSE325769): 39-digit EntityIDs overflowed int64 into one shared id,
+    # so matrix rows collapsed and the cell table no longer matched (no coordinates, tier C).
+    big = ["122110923492219782084843234718981031047", "172715562918738697060991971076811474022"]
+    pd.DataFrame({"": big, "GENE_A": [1.0, 2.0], "Blank-1": [0.0, 1.0]}).to_csv(
+        tmp_path / "GSM1_cell_by_gene.csv.gz", index=False)
+    pd.DataFrame({"": big, "fov": 0, "volume": 1.0, "center_x": [1.0, 2.0], "center_y": [3.0, 4.0]}).to_csv(
+        tmp_path / "GSM1_cell_metadata.csv.gz", index=False)
+    pd.DataFrame({"global_x": [1.0, 2.0, 9.0], "global_y": [3.0, 4.0, 9.0], "gene": "GENE_A",
+                  "cell_id": [big[0], big[1], "-1"]}).to_csv(tmp_path / "GSM1_detected_transcripts.csv.gz", index=False)
+    s = read_sample(tmp_path, platform="merfish")
+    assert s.matrix.obs_names.tolist() == big and s.cells.index.tolist() == big
+    tx_ids = s.transcripts["cell_id"]
+    assert tx_ids[:2].tolist() == big and tx_ids.isna().tolist() == [False, False, True]
+    c = complete(s)
+    assert c.tier == "A" and c.table.obsm["spatial"].tolist() == [[1.0, 3.0], [2.0, 4.0]]
