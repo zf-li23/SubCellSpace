@@ -281,3 +281,19 @@ def test_merfish_128bit_cell_ids_stay_distinct(tmp_path):
     assert tx_ids[:2].tolist() == big and tx_ids.isna().tolist() == [False, False, True]
     c = complete(s)
     assert c.tier == "A" and c.table.obsm["spatial"].tolist() == [[1.0, 3.0], [2.0, 4.0]]
+
+
+def test_normalised_vendor_matrix_is_replaced_by_transcript_counts():
+    # Regression (GSE269617, 35 MERFISH samples): cell_by_gene held normalised values (1.02–1.97× the assigned
+    # transcripts) with ids that did not match the cell table; raw counts come from the transcripts instead.
+    import anndata as ad
+    import scipy.sparse as sp
+
+    m = ad.AnnData(sp.csr_matrix(np.array([[8.84, 0.0], [0.0, 17.67]], dtype=np.float32)))
+    m.obs_names, m.var_names = ["AbxF_1", "AbxF_2"], ["A", "B"]
+    tx = pd.DataFrame({"x": [0.0, 1.0, 2.0], "y": 0.0, "gene": pd.Categorical(["A", "B", "B"]),
+                       "cell_id": pd.Categorical(["1", "2", "2"]), "is_control": False})
+    cells = pd.DataFrame({"x": [5.0, 6.0], "y": [7.0, 8.0]}, index=pd.Index(["1", "2"], name="cell_id"))
+    c = complete(Sample("merfish", Path("norm"), transcripts=tx, matrix=m, cells=cells))
+    assert c.table.X.sum() == 3 and sorted(c.table.obs_names) == ["1", "2"]
+    assert "normalised" in c.provenance["vendor_matrix"] and c.provenance["coordinates"].startswith("vendor cell table")

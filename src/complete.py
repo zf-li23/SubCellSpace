@@ -2,7 +2,8 @@
 
 Rules (owner, 2026-09-29 — AGENTS.md §6 Phase 7):
 
-1. A vendor cell × gene matrix is used as-is.
+1. A vendor cell × gene matrix is used as-is — unless it holds non-integer (normalised) values and transcripts
+   with a cell_id exist; then the transcripts are counted instead (GSE269617).
 2. Otherwise, transcripts with a cell_id are counted per cell.
 3. Otherwise, transcripts + cell boundaries: transcripts are assigned to cells and counted by SOPA.
 4. Transcripts without any cell information would need segmentation — not done here (tier S).
@@ -100,6 +101,13 @@ def drop_duplicate_transcripts(s: Sample) -> tuple[float, int]:
     return frac, int(dup.sum())
 
 
+def is_raw_counts(matrix: ad.AnnData, n: int = 100_000) -> bool:
+    """True when the (first ``n``) stored values are whole numbers; normalised author matrices are not."""
+    data = matrix.X.data if hasattr(matrix.X, "data") else np.asarray(matrix.X).ravel()
+    data = np.asarray(data[:n], dtype=float)
+    return bool(np.all(np.abs(data - np.rint(data)) < 1e-6))
+
+
 def complete(s: Sample) -> Completion:
     tier = assess_tier(s)
     prov: dict[str, str] = {"files": ", ".join(f"{k}={v}" for k, v in s.sources.items())}
@@ -110,6 +118,10 @@ def complete(s: Sample) -> Completion:
     if removed:
         prov["transcripts"] = f"derived: {removed:,} exact duplicate rows removed ({dup_frac:.1%} of the upload)"
 
+    if s.matrix is not None and not is_raw_counts(s.matrix) and s.transcripts is not None and s.has_cell_ids:
+        prov["vendor_matrix"] = (f"not used: {s.sources.get('matrix')} holds non-integer (normalised) values, "
+                                 "so counts are derived from the transcripts")
+        s.matrix = None
     if s.matrix is not None:
         table = s.matrix.copy()
         prov["matrix"] = f"vendor ({s.sources.get('matrix')})"
