@@ -54,3 +54,24 @@ def test_umap_pca_init(testdata, tmp_path):
     summary = process_sample(testdata / "xenium", tmp_path, umap_init="pca")
     assert summary["umap_init"] == "pca" and summary["n_clusters"] >= 2
     assert ad.read_h5ad(tmp_path / "subcellspace_cells.h5ad").obsm["X_umap"].shape == (summary["n_cells_clustered"], 2)
+
+
+def test_web_bundle_is_small_and_complete(testdata, tmp_path):
+    from src.web_bundle import build_web_bundle, sample_cells
+
+    process_sample(testdata / "xenium", tmp_path)
+    path = build_web_bundle(tmp_path)
+    b = json.loads(path.read_text())
+    assert b["summary"]["n_cells"] == 419 and b["summary"]["data_tier"] == "A"
+    assert sum(c["n"] for c in b["clusters"]) == b["points"]["n_total"]
+    p = b["points"]
+    assert p["n_shown"] == p["n_total"] == len(p["x"]) == len(p["u1"]) == len(p["c"])
+    assert sum(b["qc"]["n_transcripts"]["counts"]) + b["qc"]["n_transcripts"]["n_above"] == p["n_total"]
+    assert path.stat().st_size < 100_000
+
+    import numpy as np
+
+    clusters = np.array(["0"] * 9000 + ["1"] * 2990 + ["2"] * 10)
+    idx = sample_cells(clusters, max_points=1000)
+    picked = clusters[idx]
+    assert (picked == "2").sum() == 10 and (picked == "1").sum() == 249 and len(set(idx)) == len(idx)

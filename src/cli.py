@@ -39,6 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser = subparsers.add_parser("report", help="Render the Xenium-style HTML report from process outputs")
     report_parser.add_argument("output_dir", type=Path, help="Directory written by `subcellspace process`")
 
+    web_parser = subparsers.add_parser("web", help="Write the lightweight web bundle (subcellspace_web.json)")
+    web_parser.add_argument("output_dir", type=Path, help="Directory written by `subcellspace process`")
+    web_parser.add_argument("--max-points", type=int, default=None, help="Cells kept for the scatter plots")
+
     # ── Stats (lightweight streaming statistics) ────────────────────
     stats_parser = subparsers.add_parser("stats", help="Streaming statistics: count transcripts, cells, genes (no I/O load)")
     stats_parser.add_argument("input_path", type=str,
@@ -108,6 +112,13 @@ def _cmd_report(args: argparse.Namespace) -> None:
     from .html_report import generate_html_report
 
     print(generate_html_report(args.output_dir))
+
+
+def _cmd_web(args: argparse.Namespace) -> None:
+    from .web_bundle import MAX_POINTS, build_web_bundle
+
+    path = build_web_bundle(args.output_dir, max_points=args.max_points or MAX_POINTS)
+    print(f"{path} ({path.stat().st_size / 1024:.0f} KB)")
 
 
 def _cmd_lookup(args: argparse.Namespace) -> None:
@@ -315,6 +326,7 @@ def _cmd_stats(args: argparse.Namespace) -> None:
 _COMMANDS = {
     "process": _cmd_process,
     "report": _cmd_report,
+    "web": _cmd_web,
     "lookup": _cmd_lookup,
     "touch": _cmd_touch,
     "stats": _cmd_stats,
