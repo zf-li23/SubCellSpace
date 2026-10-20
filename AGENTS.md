@@ -228,6 +228,16 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   conda env `~/miniconda3/envs/subcellspace` on the cluster is kept — OmniSTP's `scripts/inventory/run_inventory.slurm`
   calls its python. Registry-wide integrity scan submitted (Slurm 316381, `scripts/integrity/scan_archives.py`,
   7075 compressed files, 4.5 TB) → `logs/integrity/part_*.tsv`.
+- 2026-10-20 Integrity scan done: 7076 files; non-ok rows in `cleanup/integrity_2026-10-20.tsv` (local). 11 damaged, and
+  only GSE276273 (5 files, excluded from the site) touches processed data; the rest are unused images
+  (0-byte morphology `.tif.gz` in GSE300147/GSM9054480 and GSE308148/GSM9238736; GSE293144/GSM8877285 `.ome.tif.gz`),
+  a 22.9 GB output archive (GSE293144/GSM8877284, loose files intact) and two unused `transcripts.zarr.zip`
+  (GSE310433/GSM9301061, GSE290041/GSM8804264). Benign: 26 raw-deflate `.gz` (GSE301112, GSE269354), 8 plain tars
+  named `.tar.gz` (GSE310433).
+- 2026-10-20 Two MERFISH reader/completion bugs found while checking the site: (1) cell ids parsed as numbers
+  (128-bit ids overflowed int64) and the unnamed id column dropped → ids collapsed in GSE202623, GSE269617,
+  GSE325769 (ad6bea6); (2) GSE269617's 35 `cell_by_gene` matrices are normalised, not counts → counts now come from
+  the transcripts when a vendor matrix is non-integer (288cd3f). Affected samples rerun.
 
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
