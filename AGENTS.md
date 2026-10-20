@@ -171,6 +171,7 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
 | D8 | The site shows derived results only; raw data is cited (GSE/GSM + PMID). |
 | D9 | GEO-only: vendor data, `datasets.csv` and vendor rows are gone; the site has no vendor data. |
 | D10 | Not a distributable tool: no GitHub CI; run ruff + pytest locally. |
+| D11 | (2026-10-20) The website lists **usable data only**: status `ready`, processed (`stats_source` set), not in `data/web_exclude.tsv` (GSE276273 excluded: corrupted downloads, not re-downloaded). Refines D6. |
 
 **Data completion rules** (cell_id and cell boundaries are equivalent at cell level):
 - boundaries → cell_id: yes, point-in-polygon in partitions, ported from `sopa.spatial.join` (replaces the old `polygon_intersect`).
@@ -222,6 +223,10 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   `Crashed` status on signal deaths (6ee3391). MERFISH budget 8× → 10× (a 10.1 GB sample peaked at 81 GB).
   Registry stats refilled from all 1019 summaries (`scripts/fill_registry_stats.py`, new `stats_source` column);
   tiers after processing: CosMx 185 A / 1 B; Xenium 710 A / 6 B / 1 C; MERFISH 103 A / 8 B / 5 C.
+- 2026-10-20 Website scope (D11): 1017 samples (CosMx 186, Xenium 715, MERFISH 116). Old sopa env deleted; the old
+  conda env `~/miniconda3/envs/subcellspace` on the cluster is kept — OmniSTP's `scripts/inventory/run_inventory.slurm`
+  calls its python. Registry-wide integrity scan submitted (Slurm 316381, `scripts/integrity/scan_archives.py`,
+  7075 compressed files, 4.5 TB) → `logs/integrity/part_*.tsv`.
 
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
