@@ -75,7 +75,8 @@ export default function SamplePage() {
         Statistics are computed on all cells. Distributions and clusters use the {num(s.n_cells_clustered)} cells with
         ≥ {s.min_transcripts_for_clustering ?? 10} transcripts{p.n_shown < p.n_total
           ? `; scatter plots show a cluster-stratified sample of ${num(p.n_shown)} of them` : ''}.
-        {s.fraction_transcripts_in_cells != null && ` ${pct(s.fraction_transcripts_in_cells)} of gene transcripts are assigned to cells.`}
+        {/* 0 means the transcript table has no cell assignment (tier B), not a measured 0% */}
+        {!!s.fraction_transcripts_in_cells && ` ${pct(s.fraction_transcripts_in_cells)} of gene transcripts are assigned to cells.`}
       </p>
 
       <section className="chart-row">
