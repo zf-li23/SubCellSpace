@@ -26,3 +26,10 @@ def test_collects_only_listed_samples_and_prunes_stale(tmp_path):
     assert r["copied"] == 1 and r["missing"] == ["GSE2/GSM5"] and r["removed"] == 1
     assert (public / "samples" / "GSE1" / "GSM1-GSM3.json").exists()
     assert not (public / "samples" / "GSE276273").exists()
+
+
+def test_missing_source_dir_is_an_error(tmp_path):
+    import pytest
+
+    with pytest.raises(SystemExit):
+        collect_web_bundles.collect(tmp_path / "nope", tmp_path)

@@ -28,6 +28,8 @@ def wanted_samples(public: Path = PUBLIC) -> set[tuple[str, str]]:
 
 
 def collect(source: Path, public: Path = PUBLIC) -> dict:
+    if not source.is_dir():  # otherwise the previous public/samples would be published silently
+        raise SystemExit(f"bundle directory not found: {source}")
     dest = public / "samples"
     want = wanted_samples(public)
     copied, missing = 0, []
