@@ -5,13 +5,13 @@ export interface ColumnMeta {
   name: string
   type: string
   category: string
-  label_zh: string
+  label: string
   priority: boolean
 }
 
 export interface CategoryMeta {
   key: string
-  label_zh: string
+  label: string
   columns: string[]
 }
 
@@ -20,6 +20,7 @@ export interface GeoRow {
   GSM: string | null  // GSM accession, or a GSM range for merged CosMx samples
   platform: string | null
   status: string | null
+  data_tier?: string | null
 
   name: string | null
   tissue: string | null

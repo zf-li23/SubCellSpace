@@ -2269,3 +2269,4 @@ select {
 .provenance dt { color: var(--text-secondary); }
 .provenance dd { margin: 0; word-break: break-word; }
 @media (max-width: 640px) { .chart-card { max-width: none; } .provenance div { grid-template-columns: 1fr; } }
+.browser-intro { color: var(--text-secondary); font-size: 13px; line-height: 1.55; max-width: 980px; margin: 0 0 12px; }

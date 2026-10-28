@@ -28,40 +28,38 @@ OUTPUT_DIR = Path(__file__).resolve().parent.parent / "frontend" / "public"
 # 每列的展示信息
 
 COLUMN_META = {
-    "GSE":             {"type": "string", "category": "id",      "label_zh": "GSE 编号",    "priority": True},
-    "GSM":             {"type": "string", "category": "id",      "label_zh": "GSM/样本名",  "priority": True},
-    "platform":        {"type": "string", "category": "id",      "label_zh": "平台",        "priority": True},
-    "status":          {"type": "string", "category": "status",  "label_zh": "状态",        "priority": True},
+    "GSE":             {"type": "string", "category": "id",      "label": "GSE",                    "priority": True},
+    "GSM":             {"type": "string", "category": "id",      "label": "Sample (GSM)",           "priority": True},
+    "data_tier":       {"type": "string", "category": "id",      "label": "Data tier",              "priority": True},
 
-    "name":            {"type": "string", "category": "meta",    "label_zh": "数据集名称",  "priority": True},
-    "tissue":          {"type": "string", "category": "biology", "label_zh": "组织",        "priority": True},
-    "disease_state":   {"type": "string", "category": "biology", "label_zh": "疾病状态",    "priority": True},
-    "species":         {"type": "string", "category": "biology", "label_zh": "物种",        "priority": False},
+    "name":            {"type": "string", "category": "meta",    "label": "Dataset",                "priority": True},
+    "tissue":          {"type": "string", "category": "biology", "label": "Tissue",                 "priority": True},
+    "disease_state":   {"type": "string", "category": "biology", "label": "Condition",              "priority": True},
 
-    "n_transcripts":   {"type": "number", "category": "stats",   "label_zh": "转录本数",    "priority": True},
-    "n_cells":         {"type": "number", "category": "stats",   "label_zh": "细胞数",      "priority": True},
-    "n_genes":         {"type": "number", "category": "stats",   "label_zh": "基因数",      "priority": True},
-    "n_fovs":          {"type": "number", "category": "stats",   "label_zh": "FOV 数",      "priority": False},
-    "gene_panel_size": {"type": "number", "category": "stats",   "label_zh": "基因 Panel",  "priority": False},
-    "median_transcripts": {"type": "number", "category": "stats","label_zh": "中位转录本/细胞","priority": False},
-    "median_genes":    {"type": "number", "category": "stats",   "label_zh": "中位基因/细胞","priority": False},
+    "n_cells":         {"type": "number", "category": "stats",   "label": "Cells",                  "priority": True},
+    "n_transcripts":   {"type": "number", "category": "stats",   "label": "Transcripts",            "priority": True},
+    "gene_panel_size": {"type": "number", "category": "stats",   "label": "Genes (panel)",          "priority": True},
+    "n_genes":         {"type": "number", "category": "stats",   "label": "Genes detected",         "priority": False},
+    "n_fovs":          {"type": "number", "category": "stats",   "label": "FOVs",                   "priority": False},
+    "median_transcripts": {"type": "number", "category": "stats","label": "Median transcripts / cell", "priority": False},
+    "median_genes":    {"type": "number", "category": "stats",   "label": "Median genes / cell",    "priority": False},
 
-    "data_size":       {"type": "string", "category": "file",    "label_zh": "数据大小",    "priority": True},
-    "available_files": {"type": "string", "category": "file",    "label_zh": "可用文件",    "priority": False},
+    "data_size":       {"type": "string", "category": "file",    "label": "Raw data size",          "priority": False},
 
-    "pdat":            {"type": "string", "category": "geo",     "label_zh": "提交日期",    "priority": False},
-    "pubmedids":       {"type": "string", "category": "geo",     "label_zh": "文献 PMID",   "priority": False},
-    "taxon":           {"type": "string", "category": "geo",     "label_zh": "物种分类",    "priority": False},
-    "title":           {"type": "string", "category": "geo",     "label_zh": "GSM 标题",    "priority": False},
+    "pdat":            {"type": "string", "category": "geo",     "label": "GEO release date",       "priority": False},
+    "pubmedids":       {"type": "string", "category": "geo",     "label": "PubMed",                 "priority": False},
+    "taxon":           {"type": "string", "category": "geo",     "label": "Species",                "priority": False},
+    "title":           {"type": "string", "category": "geo",     "label": "GSM title",              "priority": False},
 }
 
 CATEGORIES = [
-    {"key": "id",      "label_zh": "标识",      "columns": ["GSE", "GSM", "platform", "status"]},
-    {"key": "meta",    "label_zh": "元数据",     "columns": ["name", "tissue", "disease_state", "species"]},
-    {"key": "stats",   "label_zh": "统计数据",    "columns": ["n_transcripts", "n_cells", "n_genes", "n_fovs",
-                                                            "gene_panel_size", "median_transcripts", "median_genes"]},
-    {"key": "file",    "label_zh": "文件信息",    "columns": ["data_size", "available_files"]},
-    {"key": "geo",     "label_zh": "GEO 元数据",  "columns": ["pdat", "pubmedids", "taxon", "title"]},
+    {"key": "id",      "label": "Identifiers", "columns": ["GSE", "GSM", "data_tier"]},
+    {"key": "meta",    "label": "Dataset",     "columns": ["name"]},
+    {"key": "biology", "label": "Biology",     "columns": ["tissue", "disease_state"]},
+    {"key": "stats",   "label": "Statistics",  "columns": ["n_cells", "n_transcripts", "gene_panel_size", "n_genes",
+                                                           "n_fovs", "median_transcripts", "median_genes"]},
+    {"key": "file",    "label": "Files",       "columns": ["data_size"]},
+    {"key": "geo",     "label": "GEO",         "columns": ["pdat", "pubmedids", "taxon", "title"]},
 ]
 
 PLATFORM_CONFIG = {
@@ -112,14 +110,15 @@ def build_meta(platform_cols: list) -> dict:
     """构建列元数据 + 分类信息。"""
     # 只包含当前 CSV 中实际有的列
     cols = []
-    for col_name in platform_cols:
-        if col_name in COLUMN_META:
+    present = set(platform_cols)
+    for col_name in COLUMN_META:
+        if col_name in present:
             m = COLUMN_META[col_name]
             cols.append({
                 "name": col_name,
                 "type": m["type"],
                 "category": m["category"],
-                "label_zh": m["label_zh"],
+                "label": m["label"],
                 "priority": m["priority"],
             })
     priority = [c["name"] for c in cols if c["priority"]]

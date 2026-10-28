@@ -125,7 +125,7 @@ function RowDetailView({ row, columns, platform, onBack }: { row: GeoRow; column
       <div className="detail-grid">
         {columns.map(col => (
           <div key={col.name} className="detail-item">
-            <span className="detail-label">{col.label_zh}</span>
+            <span className="detail-label">{col.label}</span>
             <span className="detail-value">{renderDetailValue(row, col.name)}</span>
           </div>
         ))}
@@ -176,7 +176,7 @@ const PAGE_SIZE = 40
 export default function DataBrowser() {
   const [platform, setPlatform] = useState('cosmx')
   const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterTier, setFilterTier] = useState('all')
   const [sortKey, setSortKey] = useState('GSE')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [showAllColumns, setShowAllColumns] = useState(false)
@@ -208,7 +208,7 @@ export default function DataBrowser() {
         return v !== '—' && v.toLowerCase().includes(q)
       }))
     }
-    if (filterStatus !== 'all') rows = rows.filter(r => r.status === filterStatus)
+    if (filterTier !== 'all') rows = rows.filter(r => r.data_tier === filterTier)
     return [...rows].sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
       const va = getCellValue(a, sortKey), vb = getCellValue(b, sortKey)
@@ -216,7 +216,7 @@ export default function DataBrowser() {
       if (!isNaN(na) && !isNaN(nb) && va !== '—' && vb !== '—') return dir * (na - nb)
       return dir * va.localeCompare(vb)
     })
-  }, [data, search, filterStatus, sortKey, sortDir, columns])
+  }, [data, search, filterTier, sortKey, sortDir, columns])
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -255,14 +255,20 @@ export default function DataBrowser() {
   if (isLoading && !data) return <div className="container"><div className="empty-state">Loading {platform} database...</div></div>
   if (error) return <div className="container"><div className="empty-state" style={{ color: '#e74c3c' }}>Failed to load {platform}.<br/><small>Run <code>python3 scripts/export_frontend_json.py</code> to regenerate.</small></div></div>
 
-  const hasFilters = search || filterStatus !== 'all'
+  const hasFilters = search || filterTier !== 'all'
 
   return (
     <div className="container">
       <section className="section-header">
         <h2>📊 Data Browser</h2>
-        <span className="eyebrow">{filteredRows.length} of {data?.meta.total_rows ?? 0} datasets</span>
+        <span className="eyebrow">{filteredRows.length} of {data?.meta.total_rows ?? 0} samples</span>
       </section>
+      <p className="browser-intro">
+        Imaging spatial transcriptomics samples (CosMx, Xenium, MERFISH) deposited in GEO, each processed into a
+        cell-level report: cell × gene counts, QC distributions, spatial and UMAP views, clusters and marker genes.
+        Click a row, then <b>Sample report</b>. Raw data belong to the original authors — cite the GEO accession and
+        the publication linked on each page.
+      </p>
 
       {/* Platform Tabs + Filters */}
       <div className="card filter-card" style={{ marginBottom: 12, padding: '8px 18px' }}>
@@ -281,15 +287,15 @@ export default function DataBrowser() {
           ))}
           <span style={{ width: 1 }} />
           <div className="filter-item"><span>🔍</span><input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search..." style={{ padding: '5px 10px', borderRadius: 10, border: '1px solid rgba(22,50,63,0.15)', fontSize: 13, width: 180 }} /></div>
-          <div className="filter-item"><span>Status</span>
-            <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
+          <div className="filter-item"><span title="A: transcripts assigned to cells · B: cell × gene matrix with coordinates · C: matrix only">Data tier</span>
+            <select value={filterTier} onChange={e => { setFilterTier(e.target.value); setPage(1) }}>
               <option value="all">All</option>
-              <option value="ready">🟢 Ready</option>
-              <option value="pending">🟡 Pending</option>
-              <option value="error">🔴 Error</option>
+              <option value="A">A · transcripts in cells</option>
+              <option value="B">B · matrix + coordinates</option>
+              <option value="C">C · matrix only</option>
             </select>
           </div>
-          {hasFilters && <button className="filter-reset" onClick={() => { setSearch(''); setFilterStatus('all'); setPage(1) }}>Clear</button>}
+          {hasFilters && <button className="filter-reset" onClick={() => { setSearch(''); setFilterTier('all'); setPage(1) }}>Clear</button>}
           <span style={{ flex: 1 }} />
           <label style={{ fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
             <input type="checkbox" checked={showAllColumns} onChange={e => setShowAllColumns(e.target.checked)} />
@@ -312,7 +318,7 @@ export default function DataBrowser() {
                     <th key={col.name}
                       className={`col-${col.name} ${col.name === sortKey ? 'sorted' : ''}`}
                       onClick={() => toggleSort(col.name)}>
-                      {col.label_zh} {col.name === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                      {col.label} {col.name === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                     </th>
                   ))}
                 </tr>
