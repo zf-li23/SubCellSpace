@@ -7,7 +7,9 @@ while true; do
   ok=$(grep -l '"status": "ok"' "$OUT"/*/*/subcellspace_status.json 2>/dev/null | wc -l)
   failed_files=$(grep -l '"status": "failed"' "$OUT"/*/*/subcellspace_status.json 2>/dev/null)
   fail=$(echo -n "$failed_files" | grep -c .)
-  run=$(squeue -h -j "$JOBS" -t R 2>/dev/null | wc -l); pend=$(squeue -h -j "$JOBS" -t PD 2>/dev/null | wc -l)
+  # squeue -j A,B prints nothing once either job has left the queue, so list the user's jobs and filter
+  ids="^($(echo "$JOBS" | tr ',' '|'))_"
+  run=$(squeue -h -u "$USER" -t R -o %i 2>/dev/null | grep -cE "$ids"); pend=$(squeue -h -u "$USER" -t PD -o %i 2>/dev/null | grep -cE "$ids")
   mem=$(srun -p Yangxrlab -c 1 --time=0:01:00 awk '/MemAvailable/{print int($2/1048576)}' /proc/meminfo 2>/dev/null)
   echo "$(date -Is) ok=$ok failed=$fail running=$run pending_lines=$pend node_avail_gb=${mem:-?}" >> "$LOG"
   for f in $failed_files; do
