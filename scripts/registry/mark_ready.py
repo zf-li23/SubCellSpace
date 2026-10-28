@@ -13,7 +13,7 @@ import csv
 from pathlib import Path
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
-REGISTRIES = (("cosmx_geo.csv", "sample_name"), ("xenium_geo.csv", "GSM"), ("merfish_geo.csv", "GSM"))
+REGISTRIES = ("cosmx_geo.csv", "xenium_geo.csv", "merfish_geo.csv")
 
 
 def mark(rows: list[dict]) -> list[tuple[str, str]]:
@@ -29,7 +29,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
-    for fname, key in REGISTRIES:
+    for fname in REGISTRIES:
         path = DATA / fname
         with open(path, encoding="utf-8", newline="") as f:
             reader = csv.DictReader(f)
