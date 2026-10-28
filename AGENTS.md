@@ -239,6 +239,10 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   GSE325769 (ad6bea6); (2) GSE269617's 35 `cell_by_gene` matrices are normalised, not counts → counts now come from
   the transcripts when a vendor matrix is non-integer (288cd3f). Affected samples rerun.
 
+- 2026-10-21 **Site live** at https://zf-li23.github.io/SubCellSpace/ (gh-pages 88d4764, built from main@200a0af):
+  1017 sample pages, 181 MB. Web bundles via `subcellspace web` (median 207 KB); static SamplePage (stats, QC, spatial /
+  UMAP of ≤ 10k stratified cells, clusters + markers, provenance); publish with `scripts/update/publish_site.sh`.
+
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
 
@@ -247,9 +251,8 @@ S transcripts without cell info (needs segmentation) · D unreadable.
 2. (done 2026-10-16) Outputs of the first 911 carry the sopa build (`summary.software.subcellspace` = e9cef6d);
    only boundary-route samples could differ (overlap counting) — rerun them only if the report needs it.
 3. (done 2026-10-16) Registry stats refilled; rerun `fill_registry_stats.py` after any reprocessing.
-4. Report rework on SOPA outputs (current full reports are 27–37 MB for ~800 MB samples); lightweight web bundle; measure size on a few dozen samples → Pages budget
-   (1 GB / site, ≈400–450 KB per sample) → single vs split site (owner decides). Rebuild the frontend as the
-   static site and add its GitHub Pages build/deploy workflow then.
+4. (done 2026-10-21) Web bundles + static site published. Left: English copy in the DataBrowser (labels are Chinese);
+   full HTML reports (median 15.9 MB, cluster-only) are not reworked — decide whether they are still needed.
 5. Registry completion (LLM label spot-check with accuracy, missing-value reasons) + completion report.
 6. Data-organisation issues to review: 3 zero-byte morphology images (2 Xenium samples) to re-download; dirs mixing two
    samples (e.g. Xenium GSE277463/GSM8522750) or deep vendor paths (GSE283497); old pipeline outputs
