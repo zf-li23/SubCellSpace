@@ -243,17 +243,33 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   1017 sample pages, 181 MB. Web bundles via `subcellspace web` (median 207 KB); static SamplePage (stats, QC, spatial /
   UMAP of ≤ 10k stratified cells, clusters + markers, provenance); publish with `scripts/update/publish_site.sh`.
 
+- 2026-10-28 Registry audit (`scripts/registry/disk_state.py` → cluster `logs/registry_disk_state.tsv`):
+  `status` is not written by any current code. On disk: all 1019 `ready` rows have data; 955 `pending` rows have no
+  directory (not downloaded); **100 `pending` rows (CosMx 85, Xenium 15) and all 57 `error` rows (Xenium) do have
+  data** — `error` = downloaded but the old touch found no transcript file (data only in tar / zarr / matrix:
+  GSE303048, GSE307404, GSE296053, GSE285341, GSE294466, GSE308699). Fast tiering of these 157
+  (`logs/tiers_unregistered_20261028.tsv`): 86 A, 59 B, 4 S (GSE308146), 8 D (7 are 0-byte GSE284717 files) →
+  145 processable samples, 912 GB (`lists/new_processable_20261028.tsv`), awaiting the owner's go-ahead.
+- 2026-10-28 LLM label spot-check (60 website rows, stratified 15/30/15, seed 20261028; judged against the GEO
+  name / GSM title / summary in the registry): tissue 55 correct, 1 questionable, 0 wrong, 4 "Unknown" (STAMP);
+  disease 54 correct, 4 questionable (GSE-level labels on per-sample controls, e.g. GSE275954 aging), 0 wrong,
+  2 "Unknown". Labels are GSE-level, so controls inside a disease series can be mislabelled. Missing values on the
+  1017 website rows: PMID 199 (after `scripts/registry/refresh_pmids.py` added 33 GSEs / 358 rows on 2026-10-28; the
+  rest have no paper linked on GEO), tissue Unknown 69 (GSE301112 STAMP = dissociated cells / cell lines: 63),
+  disease Unknown 17, `n_transcripts` 7 (tier B: no transcripts uploaded), `n_fovs` 9 (no FOV column).
+
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
 
 **Next**
-1. Clarify `pending` / `error` in the registries; reconcile registry vs disk (more GSEs registered than downloaded).
+1. (audited 2026-10-28, see Done) Process the 145 downloaded-but-not-ready samples (owner OK needed), then set their
+   `status` to `ready`; decide whether `pending`/`error` should be redefined (OmniSTP reads this column).
 2. (done 2026-10-16) Outputs of the first 911 carry the sopa build (`summary.software.subcellspace` = e9cef6d);
    only boundary-route samples could differ (overlap counting) — rerun them only if the report needs it.
 3. (done 2026-10-16) Registry stats refilled; rerun `fill_registry_stats.py` after any reprocessing.
 4. (done 2026-10-21) Web bundles + static site published. Left: English copy in the DataBrowser (labels are Chinese);
    full HTML reports (median 15.9 MB, cluster-only) are not reworked — decide whether they are still needed.
-5. Registry completion (LLM label spot-check with accuracy, missing-value reasons) + completion report.
+5. (done 2026-10-28) LLM label spot-check, missing-value reasons, PMID refresh — see Done.
 6. Data-organisation issues to review: 3 zero-byte morphology images (2 Xenium samples) to re-download; dirs mixing two
    samples (e.g. Xenium GSE277463/GSM8522750) or deep vendor paths (GSE283497); old pipeline outputs
    (`subcellspace_results.h5ad`, …) inside some CosMx raw dirs; corrupted GSE276273 files (above); consider a
