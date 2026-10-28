@@ -60,17 +60,27 @@ def _try_read(what: str, path: Path, read: Callable[[], object]):
 # ── generic file helpers ─────────────────────────────────────────────
 
 
-def _gz_source(path: Path) -> Path | io.BytesIO:
-    """``path`` itself, or the decompressed bytes of a ``.gz`` that lacks its gzip header (bare deflate stream).
+def _gz_source(path: Path) -> Path | io.IOBase:
+    """``path`` itself, or a readable stream for ``.gz`` files that are not a plain gzipped table:
 
-    GSE301112 uploaded features/barcodes as raw deflate data named ``*.tsv.gz``; the content is intact.
+    - no gzip header (bare deflate stream): GSE301112 features/barcodes ``*.tsv.gz``;
+    - a gzipped **tar** holding the table: GSE318590 ``*_tx_file.csv.gz`` etc. (the tar header would otherwise be
+      glued onto the CSV header row and mangle the first column name). The single member is streamed, not extracted.
     """
     if not path.name.lower().endswith(".gz"):
         return path
     with open(path, "rb") as f:
-        if f.read(2) == b"\x1f\x8b":
-            return path
-        f.seek(0)
+        is_gzip = f.read(2) == b"\x1f\x8b"
+    if is_gzip:
+        with gzip.open(path, "rb") as g:
+            head = g.read(512)
+        if len(head) >= 262 and head[257:262] == b"ustar":
+            tar = tarfile.open(path, mode="r:gz")  # noqa: SIM115 - the member stream is returned to the caller
+            member = next(m for m in tar if m.isfile())
+            _note(f"{path.name}: a gzipped tar holding {member.name}; read from the archive")
+            return tar.extractfile(member)
+        return path
+    with open(path, "rb") as f:
         raw = f.read()
     try:
         data = zlib.decompressobj(-15).decompress(raw)
@@ -87,10 +97,12 @@ def read_table(path: str | Path, **kwargs) -> pd.DataFrame:
     if ".parquet" in name:
         import pyarrow.parquet as pq
 
-        src: Path | io.BytesIO = _gz_source(path)
+        src = _gz_source(path)
         if isinstance(src, Path) and name.endswith(".gz"):
             with gzip.open(path, "rb") as f:
                 src = io.BytesIO(f.read())
+        elif not isinstance(src, (Path, io.BytesIO)):  # tar member stream: parquet needs a seekable buffer
+            src = io.BytesIO(src.read())
         columns = kwargs.pop("columns", None)
         if columns is not None:  # keep only the requested columns that exist
             available = set(pq.read_schema(src).names)
@@ -333,8 +345,7 @@ def _read_10x_mtx(mtx_path: Path) -> ad.AnnData:
     if feats is None or bars is None:
         raise SampleReadError(f"MTX matrix {mtx_path.name} has no matching features/barcodes files")
     src = _gz_source(mtx_path)
-    with (gzip.open(src) if isinstance(src, Path) and src.suffix == ".gz" else
-          src if isinstance(src, io.BytesIO) else open(src, "rb")) as f:
+    with (src if not isinstance(src, Path) else gzip.open(src) if src.suffix == ".gz" else open(src, "rb")) as f:
         return _mtx_anndata(f, read_table(feats, header=None), read_table(bars, header=None))
 
 

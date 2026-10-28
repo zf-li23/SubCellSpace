@@ -297,3 +297,24 @@ def test_normalised_vendor_matrix_is_replaced_by_transcript_counts():
     c = complete(Sample("merfish", Path("norm"), transcripts=tx, matrix=m, cells=cells))
     assert c.table.X.sum() == 3 and sorted(c.table.obs_names) == ["1", "2"]
     assert "normalised" in c.provenance["vendor_matrix"] and c.provenance["coordinates"].startswith("vendor cell table")
+
+
+def test_cosmx_tables_inside_gzipped_tar(tmp_path):
+    # Regression (GSE318590): every *_file.csv.gz was a gzipped tar of one CSV; the tar header was glued onto the
+    # CSV header row, so "fov" vanished and the reader failed ("CosMx table without cell_ID / cellID ...").
+    import io as _io
+    import tarfile
+
+    def tar_gz(name: str, df: pd.DataFrame) -> None:
+        data = df.to_csv(index=False).encode()
+        with tarfile.open(tmp_path / f"GSM1_{name}.csv.gz", "w:gz") as tar:
+            info = tarfile.TarInfo(f"Run1_{name}.csv")
+            info.size = len(data)
+            tar.addfile(info, _io.BytesIO(data))
+
+    tar_gz("tx_file", pd.DataFrame({"fov": [1, 1, 1], "cell_ID": [1, 1, 2], "x_global_px": [0.0, 1.0, 2.0],
+                                    "y_global_px": 0.0, "z": 0, "target": ["A", "B", "A"]}))
+    tar_gz("exprMat_file", pd.DataFrame({"fov": [1, 1], "cell_ID": [1, 2], "A": [1, 1], "B": [1, 0]}))
+    s = read_sample(tmp_path, platform="cosmx")
+    assert len(s.transcripts) == 3 and s.matrix.X.sum() == 3
+    assert any("gzipped tar" in n for n in s.notes)
