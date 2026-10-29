@@ -258,12 +258,20 @@ cluster `{Platform}_GEO/GSE*/GSM*/` layout; CosMx merged samples named by GSM ra
   rest have no paper linked on GEO), tissue Unknown 69 (GSE301112 STAMP = dissociated cells / cell lines: 63),
   disease Unknown 17, `n_transcripts` 7 (tier B: no transcripts uploaded), `n_fovs` 9 (no FOV column).
 
+- 2026-10-29 The 145 downloaded-but-not-ready samples processed (owner OK; small 321846 + large 321847, 0 memory
+  kills): all ok after one new reader fix — GSE318590 tables were a gzipped tar of one CSV (f61603d). Stats refilled,
+  `status` → `ready` for processed rows (`scripts/registry/mark_ready.py`, owner option A: CosMx 81 pending, Xenium
+  56 error + 8 pending; remaining `error` row GSE308699 is unreadable). GSE301112 tissue for 20 STAMP samples from
+  file names (`data/label_overrides.tsv` + `scripts/registry/apply_label_overrides.py`; 43 letter-coded stay Unknown).
+  Site rebuilt locally: 1162 sample pages (CosMx 267, Xenium 779, MERFISH 116), 206 MB; bundles mirrored in
+  `~/subcellspace_web_bundles` (not the scratchpad, which gets wiped).
+
 **Data tiers** (`src/complete.py`): A transcripts assigned to cells · B matrix + coordinates · C matrix only ·
 S transcripts without cell info (needs segmentation) · D unreadable.
 
 **Next**
-1. (audited 2026-10-28, see Done) Process the 145 downloaded-but-not-ready samples (owner OK needed), then set their
-   `status` to `ready`; decide whether `pending`/`error` should be redefined (OmniSTP reads this column).
+1. (done 2026-10-29) 145 extra samples processed and marked `ready`. `pending` now means "not downloaded"; the 4
+   tier-S samples (GSE308146, need segmentation) and 8 unreadable ones stay `pending` / `error`.
 2. (done 2026-10-16) Outputs of the first 911 carry the sopa build (`summary.software.subcellspace` = e9cef6d);
    only boundary-route samples could differ (overlap counting) — rerun them only if the report needs it.
 3. (done 2026-10-16) Registry stats refilled; rerun `fill_registry_stats.py` after any reprocessing.
